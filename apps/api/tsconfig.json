@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strictPropertyInitialization": false,
+    "paths": {
+      "@grupometalicoemf/database": ["../../packages/database/src/generated/client"],
+      "@grupometalicoemf/shared": ["../../packages/shared/dist"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+}

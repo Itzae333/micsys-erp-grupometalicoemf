@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 60" fill="none">
+  <!-- Isotipo: láminas horizontales apiladas (rollos de lámina, vista lateral) -->
+  <g transform="translate(4, 8)">
+    <!-- Rollo de lámina: rectángulos horizontales apilados con perspectiva -->
+    <rect x="0"  y="28" width="44" height="8"  rx="1" fill="#1E8449"/>
+    <rect x="0"  y="19" width="44" height="8"  rx="1" fill="#239B56"/>
+    <rect x="0"  y="10" width="44" height="8"  rx="1" fill="#27AE60"/>
+    <rect x="0"  y="1"  width="44" height="8"  rx="1" fill="#ABEBC6" opacity="0.7"/>
+    <!-- Borde derecho que da grosor -->
+    <rect x="44" y="1"  width="5"  height="35" rx="1" fill="#145A32"/>
+    <!-- Brillo superior (reflejo metálico) -->
+    <rect x="2"  y="1"  width="40" height="2"  rx="1" fill="rgba(255,255,255,0.3)"/>
+    <rect x="2"  y="10" width="40" height="2"  rx="1" fill="rgba(255,255,255,0.2)"/>
+    <rect x="2"  y="19" width="40" height="2"  rx="1" fill="rgba(255,255,255,0.15)"/>
+  </g>
+  <!-- Nombre empresa -->
+  <text x="64" y="20" font-family="Inter, -apple-system, sans-serif" font-size="9" font-weight="300" letter-spacing="2" fill="#888888">COMERCIALIZADORA</text>
+  <text x="63" y="42" font-family="Inter, -apple-system, sans-serif" font-size="19" font-weight="700" letter-spacing="-0.3" fill="#1A1A1A">Láminas <tspan fill="#1E8449">Monterrey</tspan></text>
+  <text x="63" y="56" font-family="Inter, -apple-system, sans-serif" font-size="8.5" font-weight="400" letter-spacing="0.5" fill="#AAAAAA">Fabricación y venta de lámina</text>
+</svg>

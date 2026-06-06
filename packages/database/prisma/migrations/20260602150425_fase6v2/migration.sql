@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "movimientos_cuenta_proveedor_empresa_id_proveedor_id_created_at" RENAME TO "movimientos_cuenta_proveedor_empresa_id_proveedor_id_create_idx";

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 60" fill="none">
+  <!-- Isotipo: misma forma de láminas pero en azul acero -->
+  <g transform="translate(4, 6)">
+    <polygon points="22,0 44,12 44,32 22,44" fill="#1A5276"/>
+    <polygon points="22,0  0,12  0,32 22,44" fill="#0E3460"/>
+    <polygon points=" 0,32 22,44 44,32 22,20" fill="#2E86C1"/>
+    <polygon points="22,-10 44, 2 44,12 22,22" fill="#D6EAF8" opacity="0.75"/>
+    <polygon points="22,-10  0, 2  0,12 22,22" fill="#AED6F1" opacity="0.75"/>
+  </g>
+  <!-- Nombre empresa -->
+  <text x="60" y="20" font-family="Inter, -apple-system, sans-serif" font-size="9" font-weight="300" letter-spacing="2" fill="#888888">MANUFACTURA INDUSTRIAL</text>
+  <text x="59" y="42" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="700" letter-spacing="-0.3" fill="#1A1A1A">Metálicos <tspan fill="#1A5276">Lyeva</tspan></text>
+  <text x="59" y="56" font-family="Inter, -apple-system, sans-serif" font-size="8.5" font-weight="400" letter-spacing="0.5" fill="#AAAAAA">Anaqueles · Góndolas · Estantería</text>
+</svg>

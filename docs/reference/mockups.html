@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GrupoMetalicoEMF — Mockups de referencia</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    background: #f0eeea;
+    color: #1c1c1c;
+    font-size: 13px;
+  }
+
+  /* ── Navegación del documento ── */
+  .doc-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #1c1c1c;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #333;
+  }
+  .doc-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 16px;
+  }
+  .doc-nav-iso {
+    width: 24px; height: 24px;
+    background: #C0392B;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 9px;
+  }
+  .doc-nav-name { color: #fff; font-weight: 600; font-size: 13px; }
+  .doc-nav-sep { color: #444; }
+  .doc-nav-label { color: #888; font-size: 12px; }
+  .nav-link {
+    color: #aaa;
+    font-size: 12px;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 5px;
+    transition: all 0.15s;
+  }
+  .nav-link:hover { background: #2c2c2c; color: #fff; }
+
+  /* ── Secciones de mockup ── */
+  .mockup-section {
+    padding: 40px 24px 0;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .mockup-section:last-child { padding-bottom: 60px; }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .section-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: #C0392B;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1c1c1c;
+  }
+  .section-route {
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 11px;
+    color: #888;
+    background: #e8e8e4;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .section-notes {
+    margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .note-chip {
+    font-size: 11px;
+    background: #fff;
+    border: 0.5px solid #d8d8d4;
+    border-radius: 5px;
+    padding: 3px 10px;
+    color: #555;
+  }
+  .note-chip.important {
+    background: #fff0ef;
+    border-color: #f5c6be;
+    color: #C0392B;
+    font-weight: 500;
+  }
+
+  /* ── Frame del mockup ── */
+  .mockup-frame {
+    border-radius: 10px;
+    border: 1px solid #d0cec8;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  /* ════════════════════════════════════
+     Estilos de la app (compartidos)
+  ════════════════════════════════════ */
+  .app {
+    display: flex;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 180px;
+    background: #1c1c1c;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sb-brand {
+    padding: 14px 12px 12px;
+    border-bottom: 1px solid #2e2e2e;
+  }
+  .sb-logo { display: flex; align-items: center; gap: 8px; }
+  .sb-iso {
+    width: 26px; height: 26px;
+    background: #C0392B;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 10px; flex-shrink: 0;
+  }
+  .sb-name { color: #fff; font-weight: 600; font-size: 12px; line-height: 1.2; }
+  .sb-sub { color: #666; font-size: 10px; margin-top: 1px; }
+  .sb-nav { flex: 1; padding: 8px 6px; overflow: hidden; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 6px;
+    color: #888; font-size: 12px; margin-bottom: 1px;
+  }
+  .nav-item.active { background: #C0392B; color: #fff; }
+  .nav-item i { font-size: 14px; flex-shrink: 0; }
+  .sb-user {
+    padding: 10px 12px;
+    border-top: 1px solid #2e2e2e;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sb-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #C0392B;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 10px; font-weight: 600; flex-shrink: 0;
+  }
+  .sb-avatar.gray { background: #555; }
+  .sb-uname { color: #ccc; font-size: 11px; }
+  .sb-urole { color: #555; font-size: 10px; }
+
+  /* Main area */
+  .main { flex: 1; display: flex; flex-direction: column; background: #f8f7f3; overflow: hidden; }
+
+  .topbar {
+    background: #fff;
+    border-bottom: 1px solid #e8e8e4;
+    padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .page-title { font-size: 15px; font-weight: 600; color: #1c1c1c; }
+  .page-sub { font-size: 11px; color: #888; margin-top: 1px; }
+  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* Buttons */
+  .btn-primary {
+    background: #C0392B; color: #fff;
+    border: none; padding: 5px 12px;
+    border-radius: 6px; font-size: 12px; font-weight: 500;
+  }
+  .btn-sec {
+    background: #fff; border: 0.5px solid #d8d8d4;
+    color: #1c1c1c; padding: 5px 10px;
+    border-radius: 6px; font-size: 12px;
+  }
+  .btn-confirm {
+    background: #166534; color: #fff;
+    border: none; padding: 7px 16px;
+    border-radius: 7px; font-size: 12px; font-weight: 500;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 500;
+  }
+  .b-green  { background: #f0fdf4; color: #166534; border: 0.5px solid #bbf7d0; }
+  .b-amber  { background: #fffbeb; color: #92400e; border: 0.5px solid #fde68a; }
+  .b-blue   { background: #eff6ff; color: #1e3a5f; border: 0.5px solid #bfdbfe; }
+  .b-purple { background: #faf5ff; color: #6b21a8; border: 0.5px solid #e9d5ff; }
+  .b-gray   { background: #f2f2f0; color: #5a5a58; border: 0.5px solid #e0e0de; }
+  .b-red    { background: #fff0ef; color: #C0392B; border: 0.5px solid #f5c6be; }
+
+  /* Tables shared */
+  .table-wrap {
+    background: #fff;
+    border: 0.5px solid #e8e8e4;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { background: #f2f2f0; }
+  th {
+    padding: 6px 10px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: #888; white-space: nowrap; text-align: left;
+  }
+  th.r { text-align: right; }
+  th.c { text-align: center; }
+  td {
+    padding: 5px 10px;
+    font-size: 12px; color: #1c1c1c;
+    border-bottom: 0.5px solid #f0f0ec;
+  }
+  td.mono { font-family: 'Menlo', 'Consolas', monospace; font-size: 11px; color: #888; }
+  td.r { text-align: right; font-family: 'Menlo', 'Consolas', monospace; }
+  td.c { text-align: center; }
+  tr:last-child td { border-bottom: none; }
+
+  .tfoot-row {
+    padding: 6px 10px;
+    border-top: 0.5px solid #e8e8e4;
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fff;
+  }
+  .pg-info { font-size: 11px; color: #888; }
+  .pg-btns { display: flex; gap: 3px; }
+  .pg-btn {
+    padding: 2px 8px; border-radius: 4px; font-size: 11px;
+    border: 0.5px solid #d8d8d4; background: #fff; color: #888;
+  }
+  .pg-btn.active { background: #C0392B; color: #fff; border-color: #C0392B; }
+
+  .content { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+
+  /* Stat cards */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .stat {
+    background: #fff; border: 0.5px solid #e8e8e4;
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .stat.accent { background: #C0392B; border-color: #C0392B; }
+  .stat-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #888; }
+  .stat.accent .stat-label { color: #f5c6be; }
+  .stat-val { font-size: 22px; font-weight: 700; color: #1c1c1c; margin-top: 3px; line-height: 1; }
+  .stat.accent .stat-val { color: #fff; }
+  .stat-meta { font-size: 10px; color: #888; margin-top: 3px; }
+  .stat.accent .stat-meta { color: #f5c6be; }
+  .section-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 8px;
+  }
+
+  /* Folio tag */
+  .folio-tag {
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 11px; background: #f2f2f0; color: #888;
+    padding: 2px 7px; border-radius: 4px; margin-left: 8px;
+  }
+
+  /* Search box */
+  .search-box {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    background: #fff; border: 0.5px solid #d8d8d4;
+    border-radius: 6px; padding: 0 10px; height: 30px;
+  }
+  .search-box input { border: none; background: transparent; font-size: 12px; color: #1c1c1c; outline: none; flex: 1; }
+
+  /* ═══════════════════
+     MOCKUP 1 - Dashboard
+  ═══════════════════ */
+  #mockup1 .app { height: 580px; }
+
+  /* ═══════════════════
+     MOCKUP 2 - Nueva venta
+  ═══════════════════ */
+  #mockup2 .app { height: 620px; }
+  #mockup2 .body { flex: 1; display: flex; overflow: hidden; }
+  #mockup2 .left { flex: 1; padding: 14px 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  #mockup2 .right {
+    width: 220px; border-left: 0.5px solid #e8e8e4;
+    background: #fff; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    flex-shrink: 0;
+  }
+  .client-tag {
+    background: #f8f7f3; border: 0.5px solid #e8e8e4;
+    border-radius: 6px; padding: 4px 10px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: #888;
+  }
+  .client-tag span { color: #1c1c1c; font-weight: 500; }
+  .right-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #888; }
+  .client-block {
+    background: #f8f7f3; border-radius: 8px; padding: 10px;
+    border: 0.5px solid #e8e8e4;
+  }
+  .client-name { font-size: 13px; font-weight: 600; color: #1c1c1c; }
+  .client-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .price-tag {
+    display: inline-block; font-size: 10px;
+    background: #eff6ff; color: #1e3a5f;
+    border: 0.5px solid #bfdbfe; border-radius: 4px;
+    padding: 1px 6px; margin-top: 4px;
+  }
+  .total-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+  .total-row.main-total {
+    padding-top: 8px; margin-top: 4px;
+    border-top: 0.5px solid #e8e8e4;
+  }
+  .total-label { font-size: 12px; color: #888; }
+  .total-val { font-family: 'Menlo', monospace; font-size: 12px; color: #1c1c1c; }
+  .total-row.main-total .total-label { font-size: 13px; font-weight: 600; color: #1c1c1c; }
+  .total-row.main-total .total-val { font-size: 16px; font-weight: 700; }
+  .pay-row { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
+  .pay-label { font-size: 11px; color: #888; width: 70px; flex-shrink: 0; }
+  .pay-input {
+    flex: 1; background: #f8f7f3; border: 0.5px solid #d8d8d4;
+    border-radius: 5px; padding: 3px 7px;
+    font-size: 12px; font-family: 'Menlo', monospace;
+    color: #1c1c1c; text-align: right;
+  }
+  .cobrar-btn {
+    background: #C0392B; color: #fff; border: none;
+    padding: 9px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; width: 100%; text-align: center;
+    margin-top: 4px;
+  }
+  .cambio-row {
+    background: #f0fdf4; border-radius: 6px; padding: 7px 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .cambio-label { font-size: 11px; color: #166534; font-weight: 500; }
+  .cambio-val { font-family: 'Menlo', monospace; font-size: 13px; font-weight: 700; color: #166534; }
+  .qty-ctrl { display: flex; align-items: center; gap: 4px; justify-content: center; }
+  .qty-btn {
+    width: 18px; height: 18px; border-radius: 4px;
+    background: #f2f2f0; border: 0.5px solid #e8e8e4;
+    color: #888; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qty-val { font-family: 'Menlo', monospace; font-size: 12px; min-width: 20px; text-align: center; }
+  .del-btn {
+    width: 18px; height: 18px; border-radius: 4px;
+    background: #fff0ef; color: #C0392B; border: none;
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ═══════════════════
+     MOCKUP 3 - Inventario
+  ═══════════════════ */
+  #mockup3 .app { height: 580px; }
+  .filters { display: flex; gap: 8px; align-items: center; }
+  .filter-chip {
+    background: #fff; border: 0.5px solid #d8d8d4;
+    border-radius: 6px; padding: 4px 10px;
+    font-size: 11px; color: #888; white-space: nowrap;
+  }
+  .filter-chip.active { background: #fff0ef; border-color: #f5c6be; color: #C0392B; }
+  .config-note {
+    background: #eff6ff; border: 0.5px solid #bfdbfe;
+    border-radius: 6px; padding: 5px 10px;
+    font-size: 11px; color: #1e3a5f;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ex-ok { color: #1c1c1c; }
+  .ex-low { color: #b45309; font-weight: 500; }
+  .ex-zero { color: #C0392B; font-weight: 600; }
+
+  /* ═══════════════════
+     MOCKUP 4 - Cliente
+  ═══════════════════ */
+  #mockup4 .app { height: 600px; }
+  #mockup4 .content { flex-direction: row; }
+  .left-col { flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .right-col { width: 200px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+  .card {
+    background: #fff; border: 0.5px solid #e8e8e4;
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .client-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .client-avatar-lg {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: #fff0ef; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; color: #C0392B; flex-shrink: 0;
+  }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .info-item { display: flex; flex-direction: column; gap: 1px; }
+  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; }
+  .info-val { font-size: 12px; color: #1c1c1c; }
+  .balance-card { background: #C0392B; border-radius: 10px; padding: 14px; }
+  .balance-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: #f5c6be; }
+  .balance-val { font-size: 24px; font-weight: 700; color: #fff; font-family: 'Menlo', monospace; margin-top: 4px; }
+  .balance-sub { font-size: 11px; color: #f5c6be; margin-top: 3px; }
+  .limit-bar { height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .limit-fill { height: 100%; background: #fff; border-radius: 3px; width: 63%; }
+
+  /* ═══════════════════
+     MOCKUP 5 - Almacenista
+  ═══════════════════ */
+  #mockup5 .app { height: 580px; }
+  .list-panel {
+    width: 220px; border-right: 0.5px solid #e8e8e4;
+    background: #fff; display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .list-header { padding: 10px 12px; border-bottom: 0.5px solid #e8e8e4; }
+  .list-search {
+    display: flex; align-items: center; gap: 6px;
+    background: #f8f7f3; border: 0.5px solid #d8d8d4;
+    border-radius: 6px; padding: 5px 8px;
+  }
+  .list-search input { border: none; background: transparent; font-size: 11px; outline: none; color: #1c1c1c; width: 100%; }
+  .list-items { flex: 1; overflow-y: auto; }
+  .list-item { padding: 9px 12px; border-bottom: 0.5px solid #f0f0ec; border-left: 2px solid transparent; }
+  .list-item.selected { background: #fff0ef; border-left-color: #C0392B; }
+  .li-folio { font-family: 'Menlo', monospace; font-size: 11px; color: #888; }
+  .li-client { font-size: 12px; font-weight: 500; color: #1c1c1c; margin-top: 1px; }
+  .li-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; }
+  .li-time { font-size: 10px; color: #888; }
+  .detail-panel { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .dh-row { display: flex; align-items: center; justify-content: space-between; }
+  .dh-folio { font-family: 'Menlo', monospace; font-size: 12px; color: #888; }
+  .dh-client { font-size: 14px; font-weight: 600; color: #1c1c1c; margin-top: 2px; }
+  .dh-meta { font-size: 11px; color: #888; margin-top: 1px; }
+  .dh-total-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; text-align: right; }
+  .dh-total-val { font-family: 'Menlo', monospace; font-size: 18px; font-weight: 700; color: #1c1c1c; margin-top: 2px; text-align: right; }
+  .qty-input {
+    width: 52px; background: #f8f7f3; border: 0.5px solid #d8d8d4;
+    border-radius: 5px; padding: 3px 6px;
+    font-size: 12px; font-family: 'Menlo', monospace; text-align: right; color: #1c1c1c;
+  }
+  .qty-input.ok { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+  .qty-input.zero { border-color: #f5c6be; background: #fff0ef; color: #C0392B; }
+  .alert-bar {
+    background: #fffbeb; border: 0.5px solid #fde68a;
+    border-radius: 8px; padding: 8px 12px;
+    font-size: 11px; color: #92400e;
+  }
+  .confirm-bar { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+
+  /* Breadcrumb */
+  .breadcrumb { font-size: 11px; color: #888; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<nav class="doc-nav">
+  <div class="doc-nav-brand">
+    <div class="doc-nav-iso">EMF</div>
+    <span class="doc-nav-name">GrupoMetalicoEMF</span>
+    <span class="doc-nav-sep">·</span>
+    <span class="doc-nav-label">Mockups de referencia</span>
+  </div>
+  <a href="#mockup1" class="nav-link">1 · Dashboard</a>
+  <a href="#mockup2" class="nav-link">2 · Nueva venta</a>
+  <a href="#mockup3" class="nav-link">3 · Inventario</a>
+  <a href="#mockup4" class="nav-link">4 · Cliente / Cuenta</a>
+  <a href="#mockup5" class="nav-link">5 · Almacenista</a>
+</nav>
+
+<!-- ══════════════════════════════════════
+     MOCKUP 1 — Dashboard del encargado
+══════════════════════════════════════ -->
+<section class="mockup-section" id="mockup1">
+  <div class="section-header">
+    <span class="section-num">Mockup 01</span>
+    <span class="section-title">Dashboard del encargado</span>
+    <span class="section-route">/dashboard</span>
+  </div>
+  <div class="section-notes">
+    <span class="note-chip">Rol: Encargado (también Admin y Super Usuario)</span>
+    <span class="note-chip">Sidebar: bg-steel-900 (#1c1c1c)</span>
+    <span class="note-chip">4 stat cards: cobrado / ventas / crédito / sin cargar</span>
+    <span class="note-chip important">Stat card principal: bg-brand-600</span>
+    <span class="note-chip">Tabla compacta: py-1.5 px-3, paginada</span>
+  </div>
+  <div class="mockup-frame">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sb-brand">
+          <div class="sb-logo">
+            <div class="sb-iso">EMF</div>
+            <div><div class="sb-name">EMFIMIFAR</div><div class="sb-sub">Matriz Monterrey</div></div>
+          </div>
+        </div>
+        <nav class="sb-nav">
+          <div class="nav-item active"><span>&#8962;</span>&nbsp; Dashboard</div>
+          <div class="nav-item"><span>&#128722;</span>&nbsp; Ventas</div>
+          <div class="nav-item"><span>&#9744;</span>&nbsp; Inventario</div>
+          <div class="nav-item"><span>&#128666;</span>&nbsp; Entradas</div>
+          <div class="nav-item"><span>&#8679;</span>&nbsp; Salidas</div>
+          <div class="nav-item"><span>&#128101;</span>&nbsp; Clientes</div>
+          <div class="nav-item"><span>&#128203;</span>&nbsp; Compras</div>
+          <div class="nav-item"><span>&#128202;</span>&nbsp; Reportes</div>
+          <div class="nav-item"><span>&#9881;</span>&nbsp; Configuración</div>
+        </nav>
+        <div class="sb-user">
+          <div class="sb-avatar">JG</div>
+          <div><div class="sb-uname">Juan García</div><div class="sb-urole">Encargado</div></div>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="page-title">Dashboard</div>
+            <div class="page-sub">lunes 01 jun 2026 · Matriz Monterrey</div>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn-sec">Corte de caja</button>
+            <button class="btn-primary">+ Nueva venta</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="stat-row">
+            <div class="stat accent">
+              <div class="stat-label">Total cobrado</div>
+              <div class="stat-val">$41,050</div>
+              <div class="stat-meta">Hoy · todas las formas</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Ventas cerradas</div>
+              <div class="stat-val">23</div>
+              <div class="stat-meta">8 finalizadas · 15 pend.</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">A crédito hoy</div>
+              <div class="stat-val">$8,200</div>
+              <div class="stat-meta">4 ventas · 3 clientes</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Sin cargar</div>
+              <div class="stat-val" style="color:#C0392B">5</div>
+              <div class="stat-meta">En espera almacén</div>
+            </div>
+          </div>
+          <div>
+            <div class="section-label">Ventas del día</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th style="width:90px">Folio</th>
+                  <th>Cliente</th>
+                  <th style="width:72px" class="r">Total</th>
+                  <th style="width:72px" class="r">Pagado</th>
+                  <th style="width:96px" class="c">Estatus</th>
+                  <th style="width:52px" class="r">Hora</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td class="mono">MX-000431</td><td>Distribuidora Norte SA</td><td class="r">$12,650</td><td class="r">$12,650</td><td class="c"><span class="badge b-green">Finalizada</span></td><td class="r mono" style="font-size:11px;color:#888">14:32</td></tr>
+                  <tr><td class="mono">MX-000430</td><td>Mostrador</td><td class="r">$3,400</td><td class="r">$3,400</td><td class="c"><span class="badge b-green">Finalizada</span></td><td class="r mono" style="font-size:11px;color:#888">13:58</td></tr>
+                  <tr><td class="mono">MX-000429</td><td>Ferremat del Norte</td><td class="r">$7,200</td><td class="r">$3,200</td><td class="c"><span class="badge b-amber">A crédito</span></td><td class="r mono" style="font-size:11px;color:#888">13:11</td></tr>
+                  <tr><td class="mono">MX-000428</td><td>Grupo Construcciones RM</td><td class="r">$18,900</td><td class="r">$18,900</td><td class="c"><span class="badge b-purple">C. incompleta</span></td><td class="r mono" style="font-size:11px;color:#888">12:44</td></tr>
+                  <tr><td class="mono">MX-000427</td><td>Mostrador</td><td class="r">$1,850</td><td class="r">$0</td><td class="c"><span class="badge b-blue">Nota prov.</span></td><td class="r mono" style="font-size:11px;color:#888">12:20</td></tr>
+                  <tr><td class="mono">MX-000426</td><td>Estructuras Acero MX</td><td class="r">$9,500</td><td class="r">$9,500</td><td class="c"><span class="badge b-gray">Cargada</span></td><td class="r mono" style="font-size:11px;color:#888">11:05</td></tr>
+                </tbody>
+              </table>
+              <div class="tfoot-row">
+                <span class="pg-info">Mostrando 1–6 de 23 ventas</span>
+                <div class="pg-btns">
+                  <span class="pg-btn">Anterior</span><span class="pg-btn active">1</span><span class="pg-btn">2</span><span class="pg-btn">3</span><span class="pg-btn">Siguiente</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     MOCKUP 2 — Nueva venta
+══════════════════════════════════════ -->
+<section class="mockup-section" id="mockup2">
+  <div class="section-header">
+    <span class="section-num">Mockup 02</span>
+    <span class="section-title">Nueva venta — Carrito y cobro</span>
+    <span class="section-route">/ventas/nueva</span>
+  </div>
+  <div class="section-notes">
+    <span class="note-chip">Layout: 60% carrito + 40% panel de cobro</span>
+    <span class="note-chip">Folio generado al guardar (MX-XXXXXX)</span>
+    <span class="note-chip important">Múltiples métodos de pago en una misma venta</span>
+    <span class="note-chip">Panel derecho muestra cambio o crédito restante</span>
+    <span class="note-chip">Botón cobrar → imprime automático si print-bridge activo</span>
+  </div>
+  <div class="mockup-frame">
+    <div class="app" style="height:620px">
+      <aside class="sidebar">
+        <div class="sb-brand"><div class="sb-logo"><div class="sb-iso">EMF</div><div><div class="sb-name">EMFIMIFAR</div><div class="sb-sub">Matriz Monterrey</div></div></div></div>
+        <nav class="sb-nav">
+          <div class="nav-item"><span>&#8962;</span>&nbsp; Dashboard</div>
+          <div class="nav-item active"><span>&#128722;</span>&nbsp; Ventas</div>
+          <div class="nav-item"><span>&#9744;</span>&nbsp; Inventario</div>
+          <div class="nav-item"><span>&#128101;</span>&nbsp; Clientes</div>
+          <div class="nav-item"><span>&#128202;</span>&nbsp; Reportes</div>
+        </nav>
+        <div class="sb-user"><div class="sb-avatar">JG</div><div><div class="sb-uname">Juan García</div><div class="sb-urole">Encargado</div></div></div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div style="display:flex;align-items:center">
+            <div class="page-title">Nueva venta</div>
+            <span class="folio-tag">MX-000432</span>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn-sec">Guardar en proceso</button>
+            <button class="btn-sec">Imprimir ticket</button>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;overflow:hidden">
+          <div style="flex:1;padding:14px 12px 14px 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+            <div style="display:flex;gap:8px;align-items:center">
+              <div class="search-box"><span style="color:#888;font-size:13px">&#128269;</span><input placeholder="Buscar producto por código o descripción…" readonly></div>
+              <div class="client-tag"><span>&#128100;</span>&nbsp;<span>Distribuidora Norte SA</span>&nbsp;&#8964;</div>
+            </div>
+            <div>
+              <div class="section-label">Carrito</div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th style="width:80px">Código</th><th>Descripción</th>
+                    <th style="width:60px">Lista</th>
+                    <th style="width:58px" class="r">Precio</th>
+                    <th style="width:76px" class="c">Cant.</th>
+                    <th style="width:66px" class="r">Total</th>
+                    <th style="width:28px"></th>
+                  </tr></thead>
+                  <tbody>
+                    <tr>
+                      <td class="mono">ANA-001</td><td>Anaquel 5 niveles gris</td>
+                      <td style="font-size:11px;color:#888">Mayoreo</td>
+                      <td class="r">$1,850</td>
+                      <td class="c"><div class="qty-ctrl"><div class="qty-btn">−</div><div class="qty-val">5</div><div class="qty-btn">+</div></div></td>
+                      <td class="r">$9,250</td>
+                      <td style="text-align:center"><div class="del-btn">✕</div></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">GON-003</td><td>Góndola doble cara 1.8m</td>
+                      <td style="font-size:11px;color:#888">Mayoreo</td>
+                      <td class="r">$1,700</td>
+                      <td class="c"><div class="qty-ctrl"><div class="qty-btn">−</div><div class="qty-val">2</div><div class="qty-btn">+</div></div></td>
+                      <td class="r">$3,400</td>
+                      <td style="text-align:center"><div class="del-btn">✕</div></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">LAM-012</td><td>Lámina galvanizada 1.5mm 4×8</td>
+                      <td style="font-size:11px;color:#888">Mayoreo</td>
+                      <td class="r">$680</td>
+                      <td class="c"><div class="qty-ctrl"><div class="qty-btn">−</div><div class="qty-val">1</div><div class="qty-btn">+</div></div></td>
+                      <td class="r" style="color:#C0392B">$680</td>
+                      <td style="text-align:center"><div class="del-btn">✕</div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div style="width:220px;border-left:0.5px solid #e8e8e4;background:#fff;padding:14px;display:flex;flex-direction:column;gap:10px;flex-shrink:0">
+            <div>
+              <div class="right-label" style="margin-bottom:6px">Cliente</div>
+              <div class="client-block">
+                <div class="client-name">Distribuidora Norte SA</div>
+                <div class="client-meta">RFC: DINO800101XX3</div>
+                <span class="price-tag">Cuenta Mayoreo</span>
+              </div>
+            </div>
+            <div>
+              <div class="right-label" style="margin-bottom:6px">Resumen</div>
+              <div class="total-row"><span class="total-label">Subtotal</span><span class="total-val">$13,330</span></div>
+              <div class="total-row"><span class="total-label">Descuento</span><span class="total-val">$0.00</span></div>
+              <div class="total-row main-total"><span class="total-label">Total</span><span class="total-val">$13,330</span></div>
+            </div>
+            <div>
+              <div class="right-label" style="margin-bottom:6px">Forma de pago</div>
+              <div class="pay-row"><span class="pay-label">Efectivo</span><div class="pay-input">$10,000</div></div>
+              <div class="pay-row"><span class="pay-label">Depósito</span><div class="pay-input">$3,330</div></div>
+              <div style="font-size:11px;color:#888;cursor:default">+ Agregar método</div>
+            </div>
+            <div class="cambio-row">
+              <span class="cambio-label">✓ Pago completo</span>
+              <span class="cambio-val">$0.00</span>
+            </div>
+            <button class="cobrar-btn">&#128424; Cobrar e imprimir</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     MOCKUP 3 — Inventario parametrizable
+══════════════════════════════════════ -->
+<section class="mockup-section" id="mockup3">
+  <div class="section-header">
+    <span class="section-num">Mockup 03</span>
+    <span class="section-title">Inventario parametrizable</span>
+    <span class="section-route">/inventario</span>
+  </div>
+  <div class="section-notes">
+    <span class="note-chip important">Columnas dinámicas según ConfigColumnasUbicacion</span>
+    <span class="note-chip">Labels de columna vienen del Admin, no son fijos</span>
+    <span class="note-chip">Existencia = 0 → rojo. Existencia &lt; 5 → ámbar</span>
+    <span class="note-chip">Precio editable con tap inline (input aparece en la celda)</span>
+    <span class="note-chip">Paginación server-side: 25 por página</span>
+  </div>
+  <div class="mockup-frame">
+    <div class="app" style="height:560px">
+      <aside class="sidebar">
+        <div class="sb-brand"><div class="sb-logo"><div class="sb-iso">EMF</div><div><div class="sb-name">EMFIMIFAR</div><div class="sb-sub">Matriz Monterrey</div></div></div></div>
+        <nav class="sb-nav">
+          <div class="nav-item"><span>&#8962;</span>&nbsp; Dashboard</div>
+          <div class="nav-item"><span>&#128722;</span>&nbsp; Ventas</div>
+          <div class="nav-item active"><span>&#9744;</span>&nbsp; Inventario</div>
+          <div class="nav-item"><span>&#128666;</span>&nbsp; Entradas</div>
+          <div class="nav-item"><span>&#128101;</span>&nbsp; Clientes</div>
+          <div class="nav-item"><span>&#128202;</span>&nbsp; Reportes</div>
+        </nav>
+        <div class="sb-user"><div class="sb-avatar">JG</div><div><div class="sb-uname">Juan García</div><div class="sb-urole">Encargado</div></div></div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div><div class="page-title">Inventario</div><div class="page-sub">Matriz Monterrey · 312 productos</div></div>
+          <div class="topbar-actions">
+            <button class="btn-sec">Importar</button>
+            <button class="btn-sec">Exportar</button>
+            <button class="btn-primary">+ Nuevo producto</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="filters">
+            <div class="search-box"><span style="color:#888">&#128269;</span><input placeholder="Buscar por código, nombre…" readonly></div>
+            <span class="filter-chip">Todos</span>
+            <span class="filter-chip active">Sin existencia</span>
+            <span class="filter-chip">Exist. baja</span>
+          </div>
+          <div class="config-note">&#9881; Columnas activas en Matriz Monterrey: 4 precios · 2 existencias · configurar</div>
+          <div class="table-wrap" style="flex:1;display:flex;flex-direction:column">
+            <div style="overflow:auto;flex:1">
+              <table style="min-width:560px">
+                <thead><tr>
+                  <th style="width:80px">Código</th>
+                  <th>Descripción</th>
+                  <th style="width:70px" class="r">Mayoreo</th>
+                  <th style="width:66px" class="r">Crédito</th>
+                  <th style="width:66px" class="r">Público</th>
+                  <th style="width:72px" class="r">No crédito</th>
+                  <th style="width:56px" class="r">Exist.</th>
+                  <th style="width:62px" class="r">Tránsito</th>
+                  <th style="width:28px"></th>
+                </tr></thead>
+                <tbody>
+                  <tr><td class="mono">ANA-001</td><td>Anaquel 5 niveles gris</td><td class="r">$1,850</td><td class="r">$1,950</td><td class="r">$2,100</td><td class="r">$1,750</td><td class="r ex-ok">24</td><td class="r ex-ok">3</td><td class="c" style="color:#888">···</td></tr>
+                  <tr><td class="mono">ANA-002</td><td>Anaquel 4 niveles negro</td><td class="r">$1,620</td><td class="r">$1,720</td><td class="r">$1,850</td><td class="r">$1,540</td><td class="r ex-low">4</td><td class="r">0</td><td class="c" style="color:#888">···</td></tr>
+                  <tr><td class="mono">GON-001</td><td>Góndola simple 1.5m</td><td class="r">$1,200</td><td class="r">$1,280</td><td class="r">$1,400</td><td class="r">$1,150</td><td class="r ex-zero">0</td><td class="r ex-ok">6</td><td class="c" style="color:#888">···</td></tr>
+                  <tr><td class="mono">GON-003</td><td>Góndola doble cara 1.8m</td><td class="r">$1,700</td><td class="r">$1,800</td><td class="r">$1,950</td><td class="r">$1,620</td><td class="r ex-ok">11</td><td class="r ex-ok">2</td><td class="c" style="color:#888">···</td></tr>
+                  <tr><td class="mono">LAM-008</td><td>Lámina CR 0.9mm 4×8</td><td class="r">$520</td><td class="r">$560</td><td class="r">$620</td><td class="r">$500</td><td class="r ex-low">2</td><td class="r ex-zero">0</td><td class="c" style="color:#888">···</td></tr>
+                  <tr><td class="mono">LAM-012</td><td>Lámina galvanizada 1.5mm 4×8</td><td class="r">$680</td><td class="r">$720</td><td class="r">$800</td><td class="r">$650</td><td class="r ex-ok">38</td><td class="r ex-ok">10</td><td class="c" style="color:#888">···</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="tfoot-row">
+              <span class="pg-info">Mostrando 1–25 de 312 productos</span>
+              <div class="pg-btns"><span class="pg-btn">Anterior</span><span class="pg-btn active">1</span><span class="pg-btn">2</span><span class="pg-btn">3</span><span class="pg-btn">···</span><span class="pg-btn">13</span><span class="pg-btn">Siguiente</span></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     MOCKUP 4 — Ficha de cliente / cuenta corriente
+══════════════════════════════════════ -->
+<section class="mockup-section" id="mockup4">
+  <div class="section-header">
+    <span class="section-num">Mockup 04</span>
+    <span class="section-title">Ficha de cliente y cuenta corriente</span>
+    <span class="section-route">/clientes/[id]</span>
+  </div>
+  <div class="section-notes">
+    <span class="note-chip">Balance card: bg-brand-600 con saldo en blanco</span>
+    <span class="note-chip important">Barra de crédito usado vs límite</span>
+    <span class="note-chip">Cargos más antiguos primero (FIFO de abonos)</span>
+    <span class="note-chip">Botón "Registrar abono" siempre visible arriba</span>
+  </div>
+  <div class="mockup-frame">
+    <div class="app" style="height:600px">
+      <aside class="sidebar">
+        <div class="sb-brand"><div class="sb-logo"><div class="sb-iso">EMF</div><div><div class="sb-name">EMFIMIFAR</div><div class="sb-sub">Matriz Monterrey</div></div></div></div>
+        <nav class="sb-nav">
+          <div class="nav-item"><span>&#8962;</span>&nbsp; Dashboard</div>
+          <div class="nav-item"><span>&#128722;</span>&nbsp; Ventas</div>
+          <div class="nav-item"><span>&#9744;</span>&nbsp; Inventario</div>
+          <div class="nav-item active"><span>&#128101;</span>&nbsp; Clientes</div>
+          <div class="nav-item"><span>&#128202;</span>&nbsp; Reportes</div>
+        </nav>
+        <div class="sb-user"><div class="sb-avatar">JG</div><div><div class="sb-uname">Juan García</div><div class="sb-urole">Encargado</div></div></div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div>
+            <div class="breadcrumb">Clientes → Ficha de cliente</div>
+            <div class="page-title">Distribuidora Norte SA</div>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn-sec">Registrar abono</button>
+            <button class="btn-primary">+ Nueva venta</button>
+          </div>
+        </div>
+        <div style="flex:1;padding:14px 16px;display:flex;gap:12px;overflow:hidden">
+          <div class="left-col">
+            <div class="card">
+              <div class="client-header">
+                <div class="client-avatar-lg">DN</div>
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:#1c1c1c">Distribuidora Norte SA de CV</div>
+                  <div style="font-size:11px;color:#888;margin-top:1px">RFC: DINO800101XX3 · Tel: 81 2345 6789</div>
+                </div>
+              </div>
+              <div class="info-grid">
+                <div class="info-item"><span class="info-label">Dirección</span><span class="info-val">Av. Industria 450, Monterrey</span></div>
+                <div class="info-item"><span class="info-label">Email</span><span class="info-val">compras@dnorte.mx</span></div>
+                <div class="info-item"><span class="info-label">Cuenta activa</span><span class="info-val">Cuenta Mayoreo</span></div>
+                <div class="info-item"><span class="info-label">Lista precios</span><span class="info-val">Mayoreo (precio 1)</span></div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column">
+              <div class="section-label">Cargos pendientes</div>
+              <div class="table-wrap" style="flex:1;display:flex;flex-direction:column">
+                <table>
+                  <thead><tr>
+                    <th style="width:88px">Folio</th>
+                    <th style="width:80px">Fecha</th>
+                    <th style="width:80px" class="r">Original</th>
+                    <th style="width:80px" class="r">Pendiente</th>
+                    <th style="width:80px" class="c">Estatus</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr><td class="mono">MX-000429</td><td style="font-size:11px;color:#888">01/06/2026</td><td class="r">$7,200</td><td class="r" style="color:#C0392B;font-weight:600">$4,000</td><td class="c"><span class="badge b-amber">A crédito</span></td></tr>
+                    <tr><td class="mono">MX-000411</td><td style="font-size:11px;color:#888">28/05/2026</td><td class="r">$15,400</td><td class="r" style="color:#C0392B;font-weight:600">$5,400</td><td class="c"><span class="badge b-amber">A crédito</span></td></tr>
+                    <tr><td class="mono">MX-000398</td><td style="font-size:11px;color:#888">22/05/2026</td><td class="r">$9,800</td><td class="r" style="color:#166534;font-weight:500">$0</td><td class="c"><span class="badge b-green">Saldada</span></td></tr>
+                    <tr><td class="mono">MX-000381</td><td style="font-size:11px;color:#888">15/05/2026</td><td class="r">$4,200</td><td class="r" style="color:#166534;font-weight:500">$0</td><td class="c"><span class="badge b-green">Saldada</span></td></tr>
+                  </tbody>
+                </table>
+                <div class="tfoot-row">
+                  <span class="pg-info">Mostrando 1–4 de 14 movimientos</span>
+                  <div class="pg-btns"><span class="pg-btn active">1</span><span class="pg-btn">2</span><span class="pg-btn">Siguiente</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="right-col">
+            <div class="balance-card">
+              <div class="balance-label">Saldo pendiente</div>
+              <div class="balance-val">$9,400</div>
+              <div class="balance-sub">2 ventas a crédito</div>
+              <div style="margin-top:8px">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#f5c6be;margin-bottom:4px"><span>Usado</span><span>Límite $15,000</span></div>
+                <div class="limit-bar"><div class="limit-fill"></div></div>
+              </div>
+            </div>
+            <div class="card" style="padding:10px 12px">
+              <div class="section-label" style="margin-bottom:6px">Cuenta activa</div>
+              <div style="background:#f8f7f3;border-radius:6px;padding:8px 10px;border:0.5px solid #e8e8e4">
+                <div style="font-size:12px;font-weight:600;color:#1c1c1c">Cuenta Mayoreo</div>
+                <div style="font-size:10px;color:#888;margin-top:1px">Precio 1 · Con crédito</div>
+              </div>
+              <div style="font-size:11px;color:#888;margin-top:6px">+ Ver todas las cuentas (2)</div>
+            </div>
+            <div class="card" style="padding:10px 12px">
+              <div class="section-label" style="margin-bottom:6px">Resumen del mes</div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:#888">Compras jun</span><span style="font-family:monospace;font-size:11px">$22,350</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:#888">Abonado jun</span><span style="font-family:monospace;font-size:11px;color:#166534">$12,950</span></div>
+                <div style="display:flex;justify-content:space-between;padding-top:5px;border-top:0.5px solid #e8e8e4"><span style="font-size:11px;font-weight:600;color:#1c1c1c">Saldo</span><span style="font-family:monospace;font-size:12px;font-weight:700;color:#C0392B">$9,400</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     MOCKUP 5 — Vista del almacenista
+══════════════════════════════════════ -->
+<section class="mockup-section" id="mockup5">
+  <div class="section-header">
+    <span class="section-num">Mockup 05</span>
+    <span class="section-title">Carga de ventas — Vista del almacenista</span>
+    <span class="section-route">/inventario/carga</span>
+  </div>
+  <div class="section-notes">
+    <span class="note-chip">Panel izquierdo: lista de ventas pendientes de entregar</span>
+    <span class="note-chip">Panel derecho: detalle con input de cantidad entregada por producto</span>
+    <span class="note-chip important">Input verde = OK · Ámbar = parcial · Rojo = sin existencia</span>
+    <span class="note-chip">Alerta cuando hay productos sin existencia antes de confirmar</span>
+    <span class="note-chip">Carga incompleta → genera ticket sin precios con lo entregado</span>
+  </div>
+  <div class="mockup-frame">
+    <div class="app" style="height:560px">
+      <aside class="sidebar">
+        <div class="sb-brand"><div class="sb-logo"><div class="sb-iso">EMF</div><div><div class="sb-name">EMFIMIFAR</div><div class="sb-sub">Matriz Monterrey</div></div></div></div>
+        <nav class="sb-nav">
+          <div class="nav-item"><span>&#8962;</span>&nbsp; Dashboard</div>
+          <div class="nav-item"><span>&#128722;</span>&nbsp; Ventas</div>
+          <div class="nav-item active"><span>&#9744;</span>&nbsp; Inventario</div>
+          <div class="nav-item"><span>&#128666;</span>&nbsp; Entradas</div>
+          <div class="nav-item"><span>&#8679;</span>&nbsp; Salidas</div>
+        </nav>
+        <div class="sb-user"><div class="sb-avatar gray">RM</div><div><div class="sb-uname">Roberto Méndez</div><div class="sb-urole">Almacenista</div></div></div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div><div class="page-title">Carga de ventas</div><div class="page-sub">5 ventas pendientes de entregar</div></div>
+          <button class="btn-sec">Actualizar</button>
+        </div>
+        <div style="flex:1;display:flex;overflow:hidden">
+          <div class="list-panel">
+            <div class="list-header">
+              <div class="list-search"><span style="color:#888;font-size:13px">&#128269;</span><input placeholder="Buscar folio…" readonly></div>
+            </div>
+            <div class="list-items">
+              <div class="list-item selected"><div class="li-folio">MX-000431</div><div class="li-client">Distribuidora Norte SA</div><div class="li-meta"><span class="li-time">14:32</span><span class="badge b-blue">Pagada</span></div></div>
+              <div class="list-item"><div class="li-folio">MX-000429</div><div class="li-client">Ferremat del Norte</div><div class="li-meta"><span class="li-time">13:11</span><span class="badge b-amber">A crédito</span></div></div>
+              <div class="list-item"><div class="li-folio">MX-000428</div><div class="li-client">Grupo Construcciones RM</div><div class="li-meta"><span class="li-time">12:44</span><span class="badge b-blue">Pagada</span></div></div>
+              <div class="list-item"><div class="li-folio">MX-000425</div><div class="li-client">Mostrador</div><div class="li-meta"><span class="li-time">11:30</span><span class="badge b-blue">Pagada</span></div></div>
+              <div class="list-item"><div class="li-folio">MX-000423</div><div class="li-client">Estructuras Acero MX</div><div class="li-meta"><span class="li-time">10:15</span><span class="badge b-amber">A crédito</span></div></div>
+            </div>
+          </div>
+          <div class="detail-panel">
+            <div class="card">
+              <div class="dh-row">
+                <div>
+                  <div class="dh-folio">MX-000431</div>
+                  <div class="dh-client">Distribuidora Norte SA</div>
+                  <div class="dh-meta">01/06/2026 · 14:32 · Cajero: Juan García</div>
+                </div>
+                <div>
+                  <div class="dh-total-label">Total venta</div>
+                  <div class="dh-total-val">$13,330</div>
+                </div>
+              </div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column">
+              <div class="section-label">Artículos a entregar — ingresa la cantidad real entregada</div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th style="width:80px">Código</th>
+                    <th>Descripción</th>
+                    <th style="width:68px" class="r">Solicitado</th>
+                    <th style="width:64px" class="r">Exist.</th>
+                    <th style="width:80px" class="c">Entregado</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr><td class="mono">ANA-001</td><td>Anaquel 5 niveles gris</td><td class="r">5</td><td class="r" style="color:#166534">24</td><td class="c"><div class="qty-input ok" style="display:inline-block;text-align:right">5</div></td></tr>
+                    <tr><td class="mono">GON-003</td><td>Góndola doble cara 1.8m</td><td class="r">2</td><td class="r" style="color:#166534">11</td><td class="c"><div class="qty-input ok" style="display:inline-block;text-align:right">2</div></td></tr>
+                    <tr><td class="mono">LAM-012</td><td>Lámina galvanizada 1.5mm 4×8</td><td class="r">1</td><td class="r" style="color:#C0392B">0</td><td class="c"><div class="qty-input zero" style="display:inline-block;text-align:right">0</div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="alert-bar">⚠ LAM-012 sin existencia. Si confirmas se generará un ticket de carga incompleta.</div>
+            <div class="confirm-bar">
+              <button class="btn-sec">&#128424; Carga incompleta</button>
+              <button class="btn-confirm">✓ Confirmar carga completa</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

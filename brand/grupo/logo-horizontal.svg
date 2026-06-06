@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none">
+  <!-- Isotipo: láminas en perspectiva isométrica -->
+  <g transform="translate(8, 10)">
+    <!-- Lámina principal -->
+    <polygon points="22,0 44,12 44,32 22,44" fill="#C0392B"/>
+    <polygon points="22,0  0,12  0,32 22,44" fill="#922B21"/>
+    <polygon points=" 0,32 22,44 44,32 22,20" fill="#E74C3C"/>
+    <!-- Lámina segunda (arriba) -->
+    <polygon points="22,-12 44, 0 44,12 22,24" fill="#DDDDD8" opacity="0.75"/>
+    <polygon points="22,-12  0, 0  0,12 22,24" fill="#BBBBBA" opacity="0.75"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="64" y="22" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="300" letter-spacing="2.5" fill="#888888">GRUPO</text>
+  <text x="63" y="46" font-family="Inter, -apple-system, sans-serif" font-size="26" font-weight="700" letter-spacing="-0.5" fill="#1A1A1A">Metálico</text>
+  <text x="207" y="46" font-family="Inter, -apple-system, sans-serif" font-size="26" font-weight="700" letter-spacing="1" fill="#C0392B">EMF</text>
+  <!-- Tagline -->
+  <text x="64" y="59" font-family="Inter, -apple-system, sans-serif" font-size="9" font-weight="400" letter-spacing="1.8" fill="#AAAAAA">SISTEMA DE GESTIÓN INDUSTRIAL</text>
+</svg>

@@ -1,0 +1,40 @@
+{
+  "name": "micsys-erp-grupometalicoemf",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:lan": "turbo run dev:lan",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @grupometalicoemf/database run generate",
+    "db:migrate": "pnpm --filter @grupometalicoemf/database run migrate",
+    "db:studio": "pnpm --filter @grupometalicoemf/database run studio",
+    "db:seed": "pnpm --filter @grupometalicoemf/database run seed"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "eslint": "^9.27.0",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.34.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma"
+    ]
+  }
+}

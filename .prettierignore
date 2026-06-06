@@ -1,0 +1,6 @@
+**/dist/**
+**/node_modules/**
+**/.next/**
+**/src/generated/**
+**/coverage/**
+pnpm-lock.yaml

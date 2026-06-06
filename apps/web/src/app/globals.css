@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-steel-50 text-steel-900;
+  }
+
+  /* Scrollbar sutil para tablas largas */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-steel-100; }
+  ::-webkit-scrollbar-thumb { @apply bg-steel-300 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-steel-400; }
+}
+
+@layer utilities {
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}

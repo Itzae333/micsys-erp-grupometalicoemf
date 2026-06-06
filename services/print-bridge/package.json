@@ -1,0 +1,30 @@
+{
+  "name": "@grupometalicoemf/print-bridge",
+  "version": "2.0.0",
+  "description": "Servicio local Windows para impresión térmica ESC/POS",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "install-service": "node scripts/install-service.js",
+    "uninstall-service": "node scripts/uninstall-service.js",
+    "build:exe": "pkg setup.js --target node18-win-x64 --output dist/PrintBridge-Setup.exe"
+  },
+  "pkg": {
+    "assets": [
+      "send-raw.ps1",
+      "printer.config.json"
+    ]
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}

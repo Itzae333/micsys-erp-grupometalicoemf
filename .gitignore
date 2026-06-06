@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+coverage/
+
+# Environment — cualquier .env* queda ignorado; solo se permite .env.example
+.env*
+!.env.example
+!**/.env.example
+
+# Prisma generated
+packages/database/src/generated/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# PWA
+**/public/sw.js
+**/public/workbox-*.js
+**/public/sw.js.map
+**/public/workbox-*.js.map
+
+# Playwright
+playwright-report/
+test-results/
+e2e/.auth/*.json

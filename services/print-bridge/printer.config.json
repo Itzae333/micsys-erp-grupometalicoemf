@@ -1,0 +1,24 @@
+{
+  "_comentario": "Configura tu impresora aquí. Reinicia el servicio tras cambiar este archivo.",
+
+  "transport": "windows-printer",
+  "_comentario_transport": "Opciones: 'windows-printer' (USB con nombre Windows), 'network' (IP:puerto), 'windows-port' (COM3/LPT1)",
+
+  "printerName": "Ticketera",
+  "_comentario_printerName": "Nombre exacto como aparece en Panel de Control > Dispositivos e Impresoras",
+
+  "network": {
+    "_comentario": "Solo se usa si transport = 'network'",
+    "ip": "192.168.1.100",
+    "port": 9100
+  },
+
+  "windowsPort": "COM3",
+  "_comentario_windowsPort": "Solo se usa si transport = 'windows-port'",
+
+  "columns": 48,
+  "_comentario_cols": "Caracteres por línea. 80mm estándar = 48. Algunos modelos usan 42.",
+
+  "cutFeedLines": 5,
+  "_comentario_cut": "Líneas de avance antes del corte automático"
+}
