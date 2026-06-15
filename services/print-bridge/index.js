@@ -66,7 +66,14 @@ if (fs.existsSync(CONFIG_PATH)) {
 
 // ── Middleware ─────────────────────────────────────────────
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: (origin, cb) => {
+    // Permite: sin origin (curl/Postman), localhost cualquier puerto, y Vercel
+    if (!origin) return cb(null, true);
+    const allowed = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      || /\.vercel\.app$/.test(origin);
+    cb(null, allowed);
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
 }));
 app.use(express.json({ limit: '100kb' }));
