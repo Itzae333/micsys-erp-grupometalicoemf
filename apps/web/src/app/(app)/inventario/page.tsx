@@ -282,7 +282,7 @@ export default function InventarioPage() {
           <table className="w-full text-left">
             <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
               <tr>
-                <th className="px-4 py-2.5 text-eyebrow text-steel-500 tracking-widest uppercase w-32">Clave</th>
+                <th className="hidden" />
                 {activeDescripciones.map((d) => (
                   <th key={d.numero} className="px-4 py-2.5 text-eyebrow text-steel-500 tracking-widest uppercase">
                     {d.label}
@@ -311,9 +311,7 @@ export default function InventarioPage() {
                   )}
                   onDoubleClick={() => canWrite ? openEdit(art) : router.push(`/inventario/${art.id}`)}
                 >
-                  <td className="px-4 py-2.5">
-                    <span className="text-table font-mono text-steel-700 font-medium">{art.clave}</span>
-                  </td>
+                  <td className="hidden" />
                   {activeDescripciones.map((d) => (
                     <td key={d.numero} className="px-4 py-2.5">
                       <span className="text-table text-steel-900 truncate block max-w-[200px]">

@@ -235,6 +235,12 @@ export default function ConfigColumnasPage() {
         </p>
       </div>
 
+      {saved && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+          <p className="text-body-sm text-green-700 font-medium">✓ Configuración guardada exitosamente</p>
+        </div>
+      )}
+
       {error && (
         <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3">
           <p className="text-body-sm text-brand-600">{error}</p>
