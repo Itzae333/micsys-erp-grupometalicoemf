@@ -47,7 +47,7 @@ export const useAuthStore = create<AuthState>()(
       name: 'emf-auth',
       partialize: (state) => ({
         usuario: state.usuario,
-        // No persistimos el token — lo refrescamos al cargar
+        accessToken: state.accessToken,
       }),
     },
   ),
