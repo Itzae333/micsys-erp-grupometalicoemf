@@ -35,8 +35,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
-  // Swagger — solo en desarrollo
-  if (process.env.NODE_ENV !== 'production') {
+  // Swagger — desactivar con SWAGGER_DISABLED=true
+  if (process.env.SWAGGER_DISABLED !== 'true') {
     const config = new DocumentBuilder()
       .setTitle('GrupoMetalicoEMF ERP API')
       .setDescription('API del ERP industrial GrupoMetalicoEMF v1.0.0')
