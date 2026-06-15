@@ -299,8 +299,8 @@ function buildEscPosBuffer(ticket) {
 
   // ── Productos ──────────────────────────────────────────
   for (const linea of (ticket.lineas ?? [])) {
-    push(CMD.BOLD_ON, ln(linea.clave), CMD.BOLD_OFF);
-    if (linea.descripcion) push(ln('  ' + linea.descripcion));
+    const nombre = linea.descripcion || linea.clave;
+    push(CMD.BOLD_ON, ln(nombre), CMD.BOLD_OFF);
     const qtyPrecio = '  ' + linea.cantidad + ' x $' + Number(linea.precio).toFixed(2);
     push(row(qtyPrecio, '$' + Number(linea.subtotal).toFixed(2)));
   }

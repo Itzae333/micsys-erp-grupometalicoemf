@@ -1063,11 +1063,11 @@ export default function VentasPage() {
                   {notaActiva.lineas.map((l) => (
                     <tr key={l.id} className={cn('border-b border-steel-50 last:border-b-0', savingLinea === l.id && 'opacity-60')}>
                       <td className="px-3 py-2">
-                        <p className="text-body-sm font-semibold text-steel-900">{l.clave}</p>
                         {(() => {
                           const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
-                          return d.length > 0 ? <p className="text-meta text-steel-500 truncate max-w-[220px]">{d.join(' · ')}</p> : null;
+                          return <p className="text-body-sm font-semibold text-steel-900">{d.length > 0 ? d.join(' · ') : l.clave}</p>;
                         })()}
+                        <p className="text-meta text-steel-400">{l.clave}</p>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <input
@@ -1171,10 +1171,7 @@ export default function VentasPage() {
                         return (
                           <tr key={l.id} className="border-b border-steel-50">
                             <td className="px-4 py-1.5 text-steel-800">
-                              <span className="font-semibold">{l.clave}</span>
-                              {descs.length > 0 && (
-                                <span className="text-steel-500 block truncate max-w-[160px]">{descs.join(' · ')}</span>
-                              )}
+                              <span className="font-semibold">{descs.length > 0 ? descs.join(' · ') : l.clave}</span>
                             </td>
                             <td className="px-2 py-1.5 text-right text-steel-700">{l.cantidad}</td>
                             <td className="px-2 py-1.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
@@ -1544,10 +1541,7 @@ export default function VentasPage() {
                         return (
                           <tr key={l.id} className="border-b border-steel-50">
                             <td className="px-4 py-1.5 text-steel-800">
-                              <span className="font-semibold">{l.clave}</span>
-                              {descs.length > 0 && (
-                                <span className="text-steel-500 block truncate max-w-[160px]">{descs.join(' · ')}</span>
-                              )}
+                              <span className="font-semibold">{descs.length > 0 ? descs.join(' · ') : l.clave}</span>
                             </td>
                             <td className="px-2 py-1.5 text-right text-steel-700">{l.cantidad}</td>
                             <td className="px-2 py-1.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
