@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import {
   Controller,
   Post,
@@ -9,7 +10,6 @@ import {
   UploadedFile,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -41,10 +41,7 @@ export class MigracionController {
     @Headers('x-empresa-id') empresaId: string,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE }),
-          new FileTypeValidator({ fileType: /text\/(csv|plain)/ }),
-        ],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE })],
       }),
     )
     archivo: Express.Multer.File,
@@ -61,10 +58,7 @@ export class MigracionController {
     @Headers('x-empresa-id') empresaId: string,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE }),
-          new FileTypeValidator({ fileType: /text\/(csv|plain)/ }),
-        ],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE })],
       }),
     )
     archivo: Express.Multer.File,
@@ -81,10 +75,7 @@ export class MigracionController {
     @Headers('x-empresa-id') empresaId: string,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE }),
-          new FileTypeValidator({ fileType: /text\/(csv|plain)/ }),
-        ],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE })],
       }),
     )
     archivo: Express.Multer.File,
