@@ -18,6 +18,7 @@ import { MovimientosModule } from './movimientos/movimientos.module';
 import { ComprasModule } from './compras/compras.module';
 import { RhModule } from './rh/rh.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { MigracionModule } from './migracion/migracion.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ReportesModule } from './reportes/reportes.module';
     ComprasModule,
     RhModule,
     ReportesModule,
+    MigracionModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

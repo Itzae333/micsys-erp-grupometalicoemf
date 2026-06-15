@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronsUpDown,
   Calculator,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Wordmark } from '@/components/brand/Logo';
@@ -88,6 +89,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/reportes',
     label: 'Reportes',
     icon: <BarChart3 className="h-4 w-4" />,
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
+  },
+  {
+    href: '/historial-legacy',
+    label: 'Historial Legacy',
+    icon: <History className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
   },
   // Configuración: exclusivo ADMIN (usuarios, inventario parametrizable, precios)

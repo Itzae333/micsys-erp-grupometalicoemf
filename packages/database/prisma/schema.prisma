@@ -42,6 +42,7 @@ model Empresa {
   ordenes_produccion       OrdenProduccion[]
   solicitudes_edicion      SolicitudEdicionNota[]
   evidencias_nota          EvidenciaNota[]
+  legacy_ventas            LegacyVenta[]
 
   @@map("empresas")
 }
@@ -738,4 +739,50 @@ model EvidenciaNota {
 
   @@index([nota_id])
   @@map("evidencias_nota")
+}
+
+// ─────────────────────────────────────────────────────────────
+// LEGACY — Histórico MetalAlpha (solo lectura, no se modifica)
+// ─────────────────────────────────────────────────────────────
+
+model LegacyVenta {
+  id             String   @id @default(cuid())
+  empresa_id     String
+  legacy_id      Int
+  sucursal       String
+  cliente_nombre String?
+  nota           String?
+  incidencia     String?
+  recibido       Decimal? @db.Decimal(12, 2)
+  cambio         Decimal? @db.Decimal(12, 2)
+  restan         Decimal? @db.Decimal(12, 2)
+  total          Decimal  @db.Decimal(12, 2)
+  estatus        String
+  tipo_pago      String
+  fecha_hora     DateTime
+  created_at     DateTime @default(now())
+
+  empresa Empresa            @relation(fields: [empresa_id], references: [id])
+  lineas  LegacyVentaLinea[]
+
+  @@unique([empresa_id, sucursal, legacy_id])
+  @@index([empresa_id, fecha_hora])
+  @@map("legacy_ventas")
+}
+
+model LegacyVentaLinea {
+  id            String  @id @default(cuid())
+  venta_id      String
+  descripcion_1 String?
+  descripcion_2 String?
+  descripcion_3 String?
+  color         String?
+  material      String?
+  cantidad      Decimal @db.Decimal(12, 3)
+  precio_neto   Decimal @db.Decimal(12, 2)
+  total         Decimal @db.Decimal(12, 2)
+
+  venta LegacyVenta @relation(fields: [venta_id], references: [id], onDelete: Cascade)
+
+  @@map("legacy_venta_lineas")
 }
