@@ -38,11 +38,17 @@ export class ArticulosService {
     if (activo !== undefined) where['activo'] = activo;
     if (proveedorId) where['proveedor_id'] = proveedorId;
     if (q) {
-      where['OR'] = [
-        { clave: { contains: q, mode: 'insensitive' } },
-        { descripcion_1: { contains: q, mode: 'insensitive' } },
-        { descripcion_2: { contains: q, mode: 'insensitive' } },
-      ];
+      const words = q.trim().split(/\s+/).filter(Boolean);
+      where['AND'] = words.map((word) => ({
+        OR: [
+          { clave:         { contains: word, mode: 'insensitive' } },
+          { descripcion_1: { contains: word, mode: 'insensitive' } },
+          { descripcion_2: { contains: word, mode: 'insensitive' } },
+          { descripcion_3: { contains: word, mode: 'insensitive' } },
+          { descripcion_4: { contains: word, mode: 'insensitive' } },
+          { descripcion_5: { contains: word, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     const [total, data] = await Promise.all([
