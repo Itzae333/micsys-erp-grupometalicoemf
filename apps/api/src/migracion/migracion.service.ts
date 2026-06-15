@@ -32,6 +32,19 @@ function buildClave(row: Record<string, string>): string {
   return `LEGACY-${String(row['id'] ?? '0').padStart(6, '0')}`;
 }
 
+// Corrige mojibake (UTF-8 bytes almacenados como Latin-1: "AraÃ±a" → "Araña")
+// y descarta strings vacíos o el literal "null" que vienen del CSV legacy.
+function cleanStr(val: string | undefined): string | null {
+  if (!val) return null;
+  const s = val.trim();
+  if (!s || s.toLowerCase() === 'null') return null;
+  try {
+    return Buffer.from(s, 'latin1').toString('utf8');
+  } catch {
+    return s;
+  }
+}
+
 @Injectable()
 export class MigracionService {
   constructor(private prisma: PrismaService) {}
@@ -52,13 +65,13 @@ export class MigracionService {
         const data = {
           clave,
           empresa_id: empresaId,
-          descripcion_1: row['descripcion1'] || null,
-          descripcion_2: row['descripcion2'] || null,
-          descripcion_3: row['descripcion3'] || null,
+          descripcion_1: cleanStr(row['descripcion1']),
+          descripcion_2: cleanStr(row['descripcion2']),
+          descripcion_3: cleanStr(row['descripcion3']),
           // inventario_virgen: descripcion4 = color resuelto vía JOIN
           // inventario_punto_venta: descripcion4/5 son columnas directas
-          descripcion_4: row['descripcion4'] || null,
-          descripcion_5: row['descripcion5'] || null,
+          descripcion_4: cleanStr(row['descripcion4']),
+          descripcion_5: cleanStr(row['descripcion5']),
           existencia_1: toNum(row['existencias1']),
           existencia_2: toNum(row['existencias2']),
           existencia_3: toNum(row['existencias3']),
@@ -100,6 +113,7 @@ export class MigracionService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const nombreCompleto = [row['nombre'], row['apellidoPaterno'], row['apellidoMaterno']]
+        .map((p) => cleanStr(p) ?? '')
         .filter(Boolean)
         .join(' ')
         .trim();
@@ -111,7 +125,7 @@ export class MigracionService {
 
       try {
         const saldo = toNum(row['saldo']);
-        const email = row['correo'] || null;
+        const email = cleanStr(row['correo']);
 
         // Busca duplicado por nombre dentro de la empresa
         const existing = await this.prisma.cliente.findFirst({
@@ -128,7 +142,7 @@ export class MigracionService {
           data: {
             empresa_id: empresaId,
             nombre: nombreCompleto,
-            telefono: row['telefono'] || null,
+            telefono: cleanStr(row['telefono']),
             email,
             saldo_pendiente: saldo,
           },
@@ -190,9 +204,9 @@ export class MigracionService {
             empresa_id: empresaId,
             legacy_id: legacyId,
             sucursal,
-            cliente_nombre: header['cliente_nombre'] || null,
-            nota: header['nota'] || null,
-            incidencia: header['incidencia'] || null,
+            cliente_nombre: cleanStr(header['cliente_nombre']),
+            nota: cleanStr(header['nota']),
+            incidencia: cleanStr(header['incidencia']),
             recibido: toNum(header['recibido']),
             cambio: toNum(header['cambio']),
             restan: toNum(header['restan']),
@@ -202,13 +216,13 @@ export class MigracionService {
             fecha_hora: fechaHora,
             lineas: {
               create: lineas.map((l) => ({
-                descripcion_1: l['descripcion1'] || null,
-                descripcion_2: l['descripcion2'] || null,
-                descripcion_3: l['descripcion3'] || null,
+                descripcion_1: cleanStr(l['descripcion1']),
+                descripcion_2: cleanStr(l['descripcion2']),
+                descripcion_3: cleanStr(l['descripcion3']),
                 // virgen: columnas color/material resueltas como descripcion4/5 en el CSV
                 // punto_venta: descripcion4/5 directas desde la tabla
-                color: l['descripcion4'] || null,
-                material: l['descripcion5'] || null,
+                color: cleanStr(l['descripcion4']),
+                material: cleanStr(l['descripcion5']),
                 cantidad: toNum(l['cantidad'], 1),
                 precio_neto: toNum(l['precioNeto']),
                 total: toNum(l['linea_total']),
