@@ -78,7 +78,7 @@ function ArticuloSearch({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (value) setQ(`${value.clave} — ${value.nombre}`);
+    if (value) setQ(`${value.clave} — ${value.descripcion_1 ?? ''}`);
     else setQ('');
   }, [value]);
 
@@ -98,7 +98,7 @@ function ArticuloSearch({
 
   function select(a: Articulo) {
     onChange(a);
-    setQ(`${a.clave} — ${a.nombre}`);
+    setQ(`${a.clave} — ${a.descripcion_1 ?? ''}`);
     setItems([]);
     setOpen(false);
   }
@@ -121,8 +121,7 @@ function ArticuloSearch({
               className="px-3 py-2 hover:bg-steel-50 cursor-pointer text-body-sm"
             >
               <span className="font-mono text-brand-700 mr-2">{a.clave}</span>
-              {a.nombre}
-              <span className="ml-2 text-steel-400 text-meta">{a.unidad_medida}</span>
+              {a.descripcion_1 ?? ''}
             </li>
           ))}
         </ul>
@@ -973,7 +972,7 @@ export default function RhPage() {
                   </span>
                   <div>
                     <p className="font-medium text-body-sm text-steel-900">
-                      {op.articulo?.nombre ?? op.articulo_id}
+                      {op.articulo?.descripcion_1 ?? op.articulo_id}
                     </p>
                     <p className="text-meta text-steel-500 font-mono">
                       {op.articulo?.clave} · Exist.{op.existencia_num}
@@ -1420,14 +1419,14 @@ export default function RhPage() {
           <div className="space-y-4">
             <div className="px-3 py-3 bg-steel-50 rounded-lg space-y-2">
               <p className="text-body-sm font-medium text-steel-900">
-                OP-{String(opSeleccionada.folio).padStart(4, '0')} — {opSeleccionada.articulo?.nombre}
+                OP-{String(opSeleccionada.folio).padStart(4, '0')} — {opSeleccionada.articulo?.descripcion_1 ?? ''}
               </p>
               <ProgressBar
                 producida={opSeleccionada.cantidad_producida}
                 objetivo={opSeleccionada.cantidad_objetivo}
               />
               <p className="text-meta text-steel-500">
-                Pendiente: {(opSeleccionada.cantidad_objetivo - opSeleccionada.cantidad_producida).toFixed(3)} {opSeleccionada.articulo?.unidad_medida}
+                Pendiente: {(opSeleccionada.cantidad_objetivo - opSeleccionada.cantidad_producida).toFixed(3)}
               </p>
             </div>
             <div>
@@ -1473,7 +1472,7 @@ export default function RhPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-meta text-steel-500 mb-0.5">Artículo</p>
-                <p className="text-body-sm font-medium text-steel-900">{opDetalle.articulo?.nombre}</p>
+                <p className="text-body-sm font-medium text-steel-900">{opDetalle.articulo?.descripcion_1 ?? ''}</p>
                 <p className="text-meta text-steel-500 font-mono">{opDetalle.articulo?.clave}</p>
               </div>
               <div>
@@ -1484,11 +1483,11 @@ export default function RhPage() {
               </div>
               <div>
                 <p className="text-meta text-steel-500 mb-0.5">Objetivo</p>
-                <p className="text-body-sm font-medium">{opDetalle.cantidad_objetivo} {opDetalle.articulo?.unidad_medida}</p>
+                <p className="text-body-sm font-medium">{opDetalle.cantidad_objetivo}</p>
               </div>
               <div>
                 <p className="text-meta text-steel-500 mb-0.5">Producido</p>
-                <p className="text-body-sm font-medium">{opDetalle.cantidad_producida} {opDetalle.articulo?.unidad_medida}</p>
+                <p className="text-body-sm font-medium">{opDetalle.cantidad_producida}</p>
               </div>
               <div>
                 <p className="text-meta text-steel-500 mb-0.5">Slot existencia</p>

@@ -179,7 +179,7 @@ describe('retryItem', () => {
       ...CTX,
     });
 
-    const success = await retryItem(id);
+    const success = await retryItem(id!);
     expect(success).toBe(true);
 
     const item = await emfDb.syncQueue.get(id);

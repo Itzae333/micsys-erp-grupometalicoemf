@@ -11,6 +11,16 @@ export interface UbicacionContexto {
   id: string;
   nombre: string;
   tipo: 'MATRIZ' | 'FABRICA' | 'PUNTO_VENTA';
+  razon_social?: string | null;
+  rfc?: string | null;
+  telefono?: string | null;
+  calle?: string | null;
+  num_ext?: string | null;
+  num_int?: string | null;
+  colonia?: string | null;
+  municipio?: string | null;
+  estado?: string | null;
+  cp?: string | null;
 }
 
 interface ContextoState {

@@ -95,9 +95,9 @@ export default function ArticuloDetailPage() {
   function openInfo() {
     if (!articulo) return;
     infoForm.reset({
-      nombre: articulo.nombre,
-      descripcion: articulo.descripcion ?? '',
-      unidad_medida: articulo.unidad_medida,
+      nombre: articulo.descripcion_1 ?? '',
+      descripcion: articulo.descripcion_2 ?? '',
+      unidad_medida: '',
       proveedor_id: articulo.proveedor_id ?? '',
     });
     setSaveError(null);
@@ -208,11 +208,11 @@ export default function ArticuloDetailPage() {
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <h1 className="text-display-sm font-bold text-steel-900">{articulo.clave}</h1>
-              <Badge variant={articulo.activo ? 'success' : 'inactive'}>
+              <Badge variant={articulo.activo ? 'paid' : 'default'}>
                 {articulo.activo ? 'Activo' : 'Inactivo'}
               </Badge>
             </div>
-            <p className="text-body text-steel-600">{articulo.nombre}</p>
+            <p className="text-body text-steel-600">{articulo.descripcion_1 ?? ''}</p>
             {articulo.proveedor && (
               <p className="text-body-sm text-steel-400 mt-0.5">{articulo.proveedor.nombre}</p>
             )}
@@ -309,7 +309,7 @@ export default function ArticuloDetailPage() {
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <dt className="text-meta text-steel-500 mb-0.5">Unidad de medida</dt>
-              <dd className="text-body text-steel-900 font-medium">{articulo.unidad_medida}</dd>
+              <dd className="text-body text-steel-900 font-medium">—</dd>
             </div>
             <div>
               <dt className="text-meta text-steel-500 mb-0.5">Proveedor</dt>
@@ -323,10 +323,10 @@ export default function ArticuloDetailPage() {
               <dt className="text-meta text-steel-500 mb-0.5">Última modificación</dt>
               <dd className="text-body text-steel-900">{formatFecha(articulo.updated_at)}</dd>
             </div>
-            {articulo.descripcion && (
+            {articulo.descripcion_1 && (
               <div className="col-span-2 md:col-span-4">
                 <dt className="text-meta text-steel-500 mb-0.5">Descripción</dt>
-                <dd className="text-body text-steel-700">{articulo.descripcion}</dd>
+                <dd className="text-body text-steel-700">{articulo.descripcion_1}</dd>
               </div>
             )}
           </dl>

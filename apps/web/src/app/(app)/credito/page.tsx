@@ -87,7 +87,7 @@ export default function CreditoPage() {
 
                   <div className="flex items-center gap-3">
                     <p className="text-body-sm text-steel-400 truncate">
-                      {c.credito_dias > 0 ? `${c.credito_dias} días` : 'Crédito'}{c.telefono ? ` · ${c.telefono}` : ''}
+                      {'Crédito'}{c.telefono ? ` · ${c.telefono}` : ''}
                     </p>
                     {c.limite_credito > 0 && (
                       <p className="text-meta text-steel-400 flex-shrink-0">

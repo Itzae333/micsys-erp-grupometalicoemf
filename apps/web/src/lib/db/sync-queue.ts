@@ -22,7 +22,7 @@ export async function enqueue(params: {
     empresaId: params.empresaId,
     ubicacionId: params.ubicacionId,
     accessToken: params.accessToken,
-  });
+  }) as Promise<number>;
 }
 
 // Procesa todos los pendientes en orden FIFO.

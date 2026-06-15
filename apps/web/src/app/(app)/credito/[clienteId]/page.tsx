@@ -123,9 +123,7 @@ export default function CuentaClientePage() {
               {cliente.telefono && (
                 <p className="text-body-sm text-steel-500">{cliente.telefono}</p>
               )}
-              {cliente.credito_dias > 0 && (
-                <p className="text-body-sm text-steel-400">{cliente.credito_dias} días crédito</p>
-              )}
+              <p className="text-body-sm text-steel-400">Crédito</p>
             </div>
           )}
         </div>

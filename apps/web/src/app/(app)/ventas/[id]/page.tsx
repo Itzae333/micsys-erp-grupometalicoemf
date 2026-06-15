@@ -119,7 +119,7 @@ export default function NotaDetallePage() {
   function selArt(art: Articulo) {
     setArtSel(art);
     setArtSugeridos([]);
-    setArtBusqueda(`${art.clave} — ${art.nombre}`);
+    setArtBusqueda(`${art.clave} — ${art.descripcion_1 ?? ''}`);
     const precioDefault = schema?.precios.find((p) => p.activa);
     const campo = precioDefault ? `precio_${precioDefault.numero}` as keyof Articulo : 'precio_1';
     setLineaPrecio((art[campo] as number) ?? 0);
@@ -419,9 +419,9 @@ export default function NotaDetallePage() {
                 <tr key={l.id} className={cn('border-b border-steel-50', i === nota.lineas.length - 1 && 'border-b-0')}>
                   <td className="px-4 py-3">
                     <p className="text-body-sm font-semibold text-steel-900">{l.clave}</p>
-                    <p className="text-meta text-steel-500">{l.nombre}</p>
+                    <p className="text-meta text-steel-500">{l.articulo?.descripcion_1 ?? ''}</p>
                   </td>
-                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad} {l.unidad_medida}</td>
+                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad}</td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-700">${l.precio_unitario.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-500">{l.descuento > 0 ? `${l.descuento}%` : '—'}</td>
                   <td className="px-4 py-3 text-right text-body-sm font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
@@ -645,7 +645,7 @@ export default function NotaDetallePage() {
                   >
                     <div>
                       <p className="text-body-sm font-semibold text-steel-900">{art.clave}</p>
-                      <p className="text-meta text-steel-500">{art.nombre}</p>
+                      <p className="text-meta text-steel-500">{art.descripcion_1 ?? ''}</p>
                     </div>
                   </button>
                 ))}

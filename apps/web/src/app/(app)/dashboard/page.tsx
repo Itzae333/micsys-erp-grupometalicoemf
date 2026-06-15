@@ -149,7 +149,7 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-steel-50">
                   {d.top_articulos_mes.map((a) => (
                     <tr key={a.articulo_id} className="hover:bg-steel-50 transition-colors">
-                      <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{a.nombre}</td>
+                      <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{a.clave}</td>
                       <td className="px-4 py-2 text-right text-steel-600 tabular-nums">
                         {a.cantidad.toLocaleString('es-MX')}
                       </td>

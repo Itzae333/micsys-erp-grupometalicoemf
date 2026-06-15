@@ -347,7 +347,7 @@ function TabInventario() {
     exportCSV('bajo_stock',
       ['Clave', 'Nombre', 'Unidad', 'Exist.1', 'Exist.2', 'Exist.3'],
       data.bajo_stock.map((a) => [
-        a.clave, a.nombre, a.unidad_medida,
+        a.clave, a.descripcion_1 ?? '', '',
         a.existencia_1 ?? 0, a.existencia_2 ?? 0, a.existencia_3 ?? 0,
       ]),
     );
@@ -393,7 +393,7 @@ function TabInventario() {
                 {data.bajo_stock.map((a) => (
                   <tr key={a.id} className="hover:bg-steel-50">
                     <td className="px-4 py-2">
-                      <p className="text-steel-900 truncate max-w-[180px]">{a.nombre}</p>
+                      <p className="text-steel-900 truncate max-w-[180px]">{a.descripcion_1 ?? a.clave}</p>
                       <p className="text-meta text-steel-400">{a.clave}</p>
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-amber-600 font-medium">
@@ -430,7 +430,7 @@ function TabInventario() {
                 {data.top_movidos.map((m) => (
                   <tr key={m.articulo_id} className="hover:bg-steel-50">
                     <td className="px-4 py-2 truncate max-w-[180px] text-steel-700">
-                      {m.articulo?.nombre ?? m.articulo_id}
+                      {m.articulo?.descripcion_1 ?? m.articulo_id}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{m.movimientos}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtNum(m.cantidad)}</td>
@@ -494,7 +494,7 @@ function TabCredito() {
         c.razon_social ?? '',
         c.saldo_pendiente,
         c.limite_credito,
-        c.credito_dias,
+        '',
       ]),
     );
   };
@@ -536,7 +536,7 @@ function TabCredito() {
                       <p className="text-steel-900 truncate max-w-[200px]">
                         {c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()}
                       </p>
-                      <p className="text-meta text-steel-400">{c.credito_dias} días · límite {fmt(c.limite_credito)}</p>
+                      <p className="text-meta text-steel-400">límite {fmt(c.limite_credito)}</p>
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums font-medium text-red-600">
                       {fmt(c.saldo_pendiente)}
@@ -821,7 +821,7 @@ function TabProduccion({ desde, hasta }: { desde: string; hasta: string }) {
                 {data.top_articulos.map((a) => (
                   <tr key={a.articulo_id} className="hover:bg-steel-50">
                     <td className="px-4 py-2 truncate max-w-[180px] text-steel-700">
-                      {a.articulo?.nombre ?? a.articulo_id}
+                      {a.articulo?.descripcion_1 ?? a.articulo_id}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{a.ops}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-medium">{fmtNum(a.producida)}</td>
