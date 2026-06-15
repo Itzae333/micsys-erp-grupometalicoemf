@@ -13,9 +13,14 @@ export const metadata: Metadata = {
   },
   description: 'ERP industrial multi-empresa para el Grupo Metálico EMF',
   manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'EMF',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: '/brand/grupo/favicon.svg',
-    apple: '/brand/grupo/isotipo-color.svg',
+    apple: [{ url: '/brand/grupo/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 };
 

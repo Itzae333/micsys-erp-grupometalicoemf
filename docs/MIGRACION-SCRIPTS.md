@@ -38,10 +38,10 @@ ORDER BY i.id;
 ```
 
 ### Punto de venta (`inventario_punto_venta`)
-
+admin@emfimifar.com
 `descripcion4` y `descripcion5` son columnas directas. Tiene `existencias1..3`. Sin JOINs de color/material.
 
-```sql
+```sqlAdminEmf2026!
 SELECT
   i.id,
   COALESCE(i.descripcion1, '')  AS descripcion1,
