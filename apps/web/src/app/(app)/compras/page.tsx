@@ -125,7 +125,7 @@ function ArticuloSearch({
   value: Articulo | null;
   onChange: (a: Articulo | null) => void;
 }) {
-  const [query, setQuery] = useState(value ? `${value.clave} - ${value.nombre}` : '');
+  const [query, setQuery] = useState(value ? `${value.clave} - ${value.descripcion_1 ?? ''}` : '');
   const [results, setResults] = useState<Articulo[]>([]);
   const [open, setOpen] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,13 +165,12 @@ function ArticuloSearch({
                 className="w-full px-3 py-2 text-left hover:bg-steel-50"
                 onMouseDown={() => {
                   onChange(a);
-                  setQuery(`${a.clave} - ${a.nombre}`);
+                  setQuery(`${a.clave} - ${a.descripcion_1 ?? ''}`);
                   setOpen(false);
                 }}
               >
                 <span className="text-body-sm font-medium text-steel-900">{a.clave}</span>
-                <span className="text-meta text-steel-500 ml-2">{a.nombre}</span>
-                <span className="text-meta text-steel-400 ml-1">({a.unidad_medida})</span>
+                <span className="text-meta text-steel-500 ml-2">{a.descripcion_1 ?? ''}</span>
               </button>
             </li>
           ))}
@@ -807,14 +806,14 @@ export default function ComprasPage() {
                     return (
                       <tr key={l.id} className="border-b border-steel-100 last:border-0">
                         <td className="px-3 py-2">
-                          <p className="font-medium text-steel-900">{l.nombre}</p>
+                          <p className="font-medium text-steel-900">{l.articulo?.descripcion_1 ?? l.clave}</p>
                           <p className="text-meta text-steel-400">{l.clave} · Exist. {l.existencia_num}</p>
                         </td>
                         <td className="px-3 py-2 text-right text-steel-700">
-                          {l.cantidad_solicitada} {l.unidad_medida}
+                          {l.cantidad_solicitada}
                         </td>
                         <td className={`px-3 py-2 text-right ${pendiente > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                          {l.cantidad_recibida} {l.unidad_medida}
+                          {l.cantidad_recibida}
                         </td>
                         <td className="px-3 py-2 text-right text-steel-600">{fmt(l.precio_unitario)}</td>
                         <td className="px-3 py-2 text-right font-medium text-steel-900">{fmt(l.subtotal)}</td>
@@ -884,9 +883,9 @@ export default function ComprasPage() {
                   return (
                     <div key={l.id} className="flex items-center gap-3 p-3 bg-steel-50 rounded-xl">
                       <div className="flex-1 min-w-0">
-                        <p className="text-body-sm font-medium text-steel-900">{l.nombre}</p>
+                        <p className="text-body-sm font-medium text-steel-900">{l.articulo?.descripcion_1 ?? l.clave}</p>
                         <p className="text-meta text-steel-400">
-                          Pendiente: {pendiente} {l.unidad_medida} · Exist. {l.existencia_num}
+                          Pendiente: {pendiente} · Exist. {l.existencia_num}
                         </p>
                       </div>
                       <div className="w-28 flex-shrink-0">
