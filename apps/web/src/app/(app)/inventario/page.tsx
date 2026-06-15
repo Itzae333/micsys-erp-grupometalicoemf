@@ -309,7 +309,7 @@ export default function InventarioPage() {
                     'hover:bg-steel-50 transition-colors cursor-pointer',
                     !art.activo && 'opacity-50',
                   )}
-                  onClick={() => router.push(`/inventario/${art.id}`)}
+                  onDoubleClick={() => canWrite ? openEdit(art) : router.push(`/inventario/${art.id}`)}
                 >
                   <td className="px-4 py-2.5">
                     <span className="text-table font-mono text-steel-700 font-medium">{art.clave}</span>

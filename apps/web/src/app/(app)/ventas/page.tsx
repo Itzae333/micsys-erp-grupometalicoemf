@@ -1215,11 +1215,11 @@ export default function VentasPage() {
                       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors"
                     >
                       <div>
-                        <p className="text-body-sm font-semibold text-steel-900">{art.clave}</p>
                         {(() => {
                           const d = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean).join(' · ');
-                          return d ? <p className="text-meta text-steel-500 truncate">{d}</p> : null;
+                          return <p className="text-body-sm font-semibold text-steel-900">{d || art.clave}</p>;
                         })()}
+                        <p className="text-meta text-steel-400">{art.clave}</p>
                       </div>
                     </button>
                   ))}
