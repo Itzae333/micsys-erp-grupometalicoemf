@@ -37,11 +37,11 @@ export class MigracionService {
   constructor(private prisma: PrismaService) {}
 
   async importarInventario(buffer: Buffer, empresaId: string): Promise<ImportResult> {
-    const rows: Record<string, string>[] = parse(buffer, {
+    const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
       trim: true,
-    });
+    }) as Record<string, string>[];
 
     const result: ImportResult = { insertados: 0, actualizados: 0, omitidos: 0, errores: [] };
 
@@ -89,11 +89,11 @@ export class MigracionService {
   }
 
   async importarClientes(buffer: Buffer, empresaId: string): Promise<ImportResult> {
-    const rows: Record<string, string>[] = parse(buffer, {
+    const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
       trim: true,
-    });
+    }) as Record<string, string>[];
 
     const result: ImportResult = { insertados: 0, actualizados: 0, omitidos: 0, errores: [] };
 
@@ -143,11 +143,11 @@ export class MigracionService {
   }
 
   async importarVentas(buffer: Buffer, empresaId: string): Promise<ImportResult & { lineas_insertadas: number }> {
-    const rows: Record<string, string>[] = parse(buffer, {
+    const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
       trim: true,
-    });
+    }) as Record<string, string>[];
 
     // Agrupar filas por venta_id + sucursal
     const mapa = new Map<string, { header: Record<string, string>; lineas: Record<string, string>[] }>();
