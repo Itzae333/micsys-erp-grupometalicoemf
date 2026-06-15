@@ -247,7 +247,12 @@ export class MigracionService {
 
     const where: Record<string, unknown> = { empresa_id: empresaId };
     if (sucursal) where['sucursal'] = sucursal;
-    if (q) where['cliente_nombre'] = { contains: q, mode: 'insensitive' };
+    if (q) {
+      const words = q.trim().split(/\s+/).filter(Boolean);
+      where['AND'] = words.map((word) => ({
+        cliente_nombre: { contains: word, mode: 'insensitive' },
+      }));
+    }
     if (desde || hasta) {
       where['fecha_hora'] = {
         ...(desde ? { gte: new Date(desde) } : {}),
