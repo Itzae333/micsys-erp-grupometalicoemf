@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { parse } from 'csv-parse/sync';
 
-interface ImportResult {
+export interface ImportResult {
   insertados: number;
   actualizados: number;
   omitidos: number;
