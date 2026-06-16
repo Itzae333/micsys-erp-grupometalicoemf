@@ -22,6 +22,7 @@ import {
   Search,
   Truck,
   PackageCheck,
+  MonitorDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmpresaLogo } from '@/components/brand/Logo';
@@ -30,6 +31,7 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { ContextSwitcher } from './ContextSwitcher';
 import { NotificacionesPanel } from '@/components/global/NotificacionesPanel';
 import { GlobalSearch } from '@/components/global/GlobalSearch';
+import { usePwaInstall } from '@/lib/pwa/use-pwa-install';
 import type { RolUsuario } from '@/lib/store/auth.store';
 
 interface NavItem {
@@ -127,6 +129,7 @@ export function Sidebar() {
   const { empresa, ubicacion, clearContexto } = useContextoStore();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { canInstall, install } = usePwaInstall();
 
   function handleLogout() {
     clearAuth();
@@ -245,6 +248,17 @@ export function Sidebar() {
             <span className="flex-1 text-left">Buscar…</span>
             <kbd className="text-[10px] bg-steel-700 px-1.5 py-0.5 rounded text-steel-400">Ctrl K</kbd>
           </button>
+
+          {/* Instalar PWA — solo visible cuando el browser lo permite */}
+          {canInstall && (
+            <button
+              onClick={install}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white transition-colors text-body-sm"
+            >
+              <MonitorDown className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>Instalar app</span>
+            </button>
+          )}
 
           {/* Usuario + notificaciones + logout */}
           <div className="flex items-center gap-2">
