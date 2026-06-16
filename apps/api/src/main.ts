@@ -18,13 +18,6 @@ async function bootstrap() {
   const express = require('express') as typeof import('express');
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
-  const corsOrigins: (string | RegExp)[] = [
-    frontendUrl,
-    'http://localhost:3000',
-    'http://localhost:3001',
-    /\.vercel\.app$/,
-  ];
-
   // Servir /uploads/ con header CORS explícito (se registra antes que enableCors)
   app.use(
     '/uploads',
@@ -39,9 +32,9 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
-  // CORS
+  // CORS — origin:true refleja el origin del request (permite cualquier origen con credentials)
   app.enableCors({
-    origin: corsOrigins,
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
