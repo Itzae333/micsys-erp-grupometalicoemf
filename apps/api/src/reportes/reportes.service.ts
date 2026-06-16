@@ -157,6 +157,57 @@ export class ReportesService {
     };
   }
 
+  // ── Dashboard global (SUPER_USUARIO) ──────────────────────
+
+  async getDashboardGlobal() {
+    const hoy    = new Date();
+    const iniHoy = startOfDay(hoy);
+    const finHoy = endOfDay(hoy);
+    const iniMes = startOfMonth(hoy);
+
+    const empresas = await this.prisma.empresa.findMany({
+      select: { id: true, nombre: true },
+      orderBy: { nombre: 'asc' },
+    });
+
+    const resumenPorEmpresa = await Promise.all(
+      empresas.map(async (emp) => {
+        const [hoyAgg, mesAgg, creditos] = await Promise.all([
+          this.prisma.notaVenta.aggregate({
+            where: { empresa_id: emp.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniHoy, lte: finHoy } },
+            _sum: { total: true }, _count: true,
+          }),
+          this.prisma.notaVenta.aggregate({
+            where: { empresa_id: emp.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniMes } },
+            _sum: { total: true }, _count: true,
+          }),
+          this.prisma.cliente.count({ where: { empresa_id: emp.id, saldo_pendiente: { gt: 0 } } }),
+        ]);
+
+        return {
+          empresa_id:    emp.id,
+          empresa_nombre: emp.nombre,
+          ventas_hoy:   { total: dec(hoyAgg._sum?.total), count: hoyAgg._count },
+          ventas_mes:   { total: dec(mesAgg._sum?.total), count: mesAgg._count },
+          clientes_con_saldo: creditos,
+        };
+      }),
+    );
+
+    const totalHoy = resumenPorEmpresa.reduce((s, e) => s + e.ventas_hoy.total, 0);
+    const totalMes = resumenPorEmpresa.reduce((s, e) => s + e.ventas_mes.total, 0);
+
+    return {
+      total_hoy:  +totalHoy.toFixed(2),
+      total_mes:  +totalMes.toFixed(2),
+      empresas:   resumenPorEmpresa.map((e) => ({
+        ...e,
+        ventas_hoy: { ...e.ventas_hoy, total: +e.ventas_hoy.total.toFixed(2) },
+        ventas_mes: { ...e.ventas_mes, total: +e.ventas_mes.total.toFixed(2) },
+      })),
+    };
+  }
+
   // ── Ventas ─────────────────────────────────────────────────
 
   async getReporteVentas(

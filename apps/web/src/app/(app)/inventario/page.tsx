@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Package, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Package, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -301,12 +301,12 @@ export default function InventarioPage() {
                 <th className="px-4 py-2.5 w-20" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-steel-100">
+            <tbody className="divide-y divide-steel-100 bg-white">
               {result.data.map((art) => (
                 <tr
                   key={art.id}
                   className={cn(
-                    'hover:bg-steel-50 transition-colors cursor-pointer',
+                    'bg-white hover:bg-steel-50 transition-colors cursor-pointer',
                     !art.activo && 'opacity-50',
                   )}
                   onDoubleClick={() => canWrite ? openEdit(art) : router.push(`/inventario/${art.id}`)}
@@ -370,8 +370,17 @@ export default function InventarioPage() {
           <div className="flex items-center gap-1">
             <button
               disabled={page <= 1}
+              onClick={() => setPage(1)}
+              className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Primera página"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Página anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -379,8 +388,17 @@ export default function InventarioPage() {
               disabled={page >= result.pages}
               onClick={() => setPage((p) => p + 1)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Página siguiente"
             >
               <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              disabled={page >= result.pages}
+              onClick={() => setPage(result.pages)}
+              className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Última página"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>

@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { TrendingUp, FileText, Users, Factory, Truck, CreditCard, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { TrendingUp, FileText, Users, Factory, Truck, CreditCard, RefreshCw, Building2 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { StatCard } from '@/components/ui/stat-card';
+import { useAuthStore } from '@/lib/store/auth.store';
 import type { DashboardData } from '@/lib/types/api';
+
+interface EmpresaKpi {
+  empresa_id: string;
+  empresa_nombre: string;
+  ventas_hoy: { total: number; count: number };
+  ventas_mes: { total: number; count: number };
+  clientes_con_saldo: number;
+}
+
+interface DashboardGlobal {
+  total_hoy: number;
+  total_mes: number;
+  empresas: EmpresaKpi[];
+}
 
 const fmt = (n: number) =>
   `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,22 +30,34 @@ const fmtDia = (iso: string) => {
 };
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { usuario } = useAuthStore();
+  const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';
 
-  const load = async () => {
+  const [data, setData]           = useState<DashboardData | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [global, setGlobal]       = useState<DashboardGlobal | null>(null);
+  const [globalLoading, setGlobalLoading] = useState(false);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const d = await api.get<DashboardData>('/reportes/dashboard');
       setData(d);
-    } catch {
-      // silently fail — show zeros
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch { /* silently fail */ }
+    finally { setLoading(false); }
+  }, []);
 
-  useEffect(() => { void load(); }, []);
+  const loadGlobal = useCallback(async () => {
+    if (!isSuperUsuario) return;
+    setGlobalLoading(true);
+    try {
+      const d = await api.get<DashboardGlobal>('/reportes/dashboard-global');
+      setGlobal(d);
+    } catch { /* noop */ }
+    finally { setGlobalLoading(false); }
+  }, [isSuperUsuario]);
+
+  useEffect(() => { void load(); void loadGlobal(); }, [load, loadGlobal]);
 
   const d = data;
   const ventasHoy = d?.ventas_hoy.total ?? 0;
@@ -47,7 +74,7 @@ export default function DashboardPage() {
           <p className="text-body-sm text-steel-500 mt-0.5">Vista general del día</p>
         </div>
         <button
-          onClick={() => void load()}
+          onClick={() => { void load(); void loadGlobal(); }}
           className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-steel-900 transition-colors"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -199,6 +226,70 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Dashboard global — solo SUPER_USUARIO */}
+        {isSuperUsuario && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Vista consolidada — todas las empresas</h3>
+              </div>
+              {global && (
+                <div className="flex items-center gap-4 text-body-sm">
+                  <span className="text-steel-500">Hoy total: <span className="font-semibold text-steel-900">{fmt(global.total_hoy)}</span></span>
+                  <span className="text-steel-500">Mes total: <span className="font-semibold text-brand-600">{fmt(global.total_mes)}</span></span>
+                </div>
+              )}
+            </div>
+            {globalLoading && !global ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Cargando…</div>
+            ) : !global?.empresas.length ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Sin empresas</div>
+            ) : (
+              <table className="w-full text-body-sm">
+                <thead>
+                  <tr className="border-b border-steel-100 bg-steel-50">
+                    <th className="px-4 py-2 text-left font-medium text-steel-500">Empresa</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Ventas hoy</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Notas hoy</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Ventas mes</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Notas mes</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Clientes c/saldo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-steel-50">
+                  {global.empresas.map((e) => (
+                    <tr key={e.empresa_id} className="hover:bg-steel-50">
+                      <td className="px-4 py-2 font-medium text-steel-900 truncate max-w-[180px]">{e.empresa_nombre}</td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold text-brand-700">{fmt(e.ventas_hoy.total)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-steel-500">{e.ventas_hoy.count}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-steel-700">{fmt(e.ventas_mes.total)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-steel-500">{e.ventas_mes.count}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-amber-600">{e.clientes_con_saldo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-steel-200 bg-steel-50">
+                    <td className="px-4 py-2 font-semibold text-steel-900">Total</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-bold text-brand-700">{fmt(global.total_hoy)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-steel-500">
+                      {global.empresas.reduce((s, e) => s + e.ventas_hoy.count, 0)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-bold text-steel-900">{fmt(global.total_mes)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-steel-500">
+                      {global.empresas.reduce((s, e) => s + e.ventas_mes.count, 0)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-amber-600">
+                      {global.empresas.reduce((s, e) => s + e.clientes_con_saldo, 0)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="text-center">

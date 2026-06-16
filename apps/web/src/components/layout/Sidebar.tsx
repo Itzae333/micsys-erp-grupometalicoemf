@@ -19,12 +19,17 @@ import {
   History,
   Menu,
   X,
+  Search,
+  Truck,
+  PackageCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Wordmark } from '@/components/brand/Logo';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { ContextSwitcher } from './ContextSwitcher';
+import { NotificacionesPanel } from '@/components/global/NotificacionesPanel';
+import { GlobalSearch } from '@/components/global/GlobalSearch';
 import type { RolUsuario } from '@/lib/store/auth.store';
 
 interface NavItem {
@@ -58,6 +63,18 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Movimientos',
     icon: <ArrowUpFromLine className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA', 'JEFE_MANUFACTURA'],
+  },
+  {
+    href: '/movimientos/remisiones',
+    label: 'Remisiones',
+    icon: <Truck className="h-4 w-4" />,
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'],
+  },
+  {
+    href: '/movimientos/recibir',
+    label: 'Recibir',
+    icon: <PackageCheck className="h-4 w-4" />,
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'],
   },
   {
     href: '/ventas/clientes',
@@ -99,7 +116,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/configuracion',
     label: 'Configuración',
     icon: <Settings className="h-4 w-4" />,
-    roles: ['ADMIN'],
+    roles: ['ADMIN', 'SUPER_USUARIO'],
   },
 ];
 
@@ -217,9 +234,20 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Usuario activo */}
-        <div className="px-4 py-3 border-t border-steel-700">
-          <div className="flex items-center gap-2.5">
+        {/* Barra inferior: búsqueda + notificaciones + usuario */}
+        <div className="px-3 py-3 border-t border-steel-700 space-y-2">
+          {/* Búsqueda global */}
+          <button
+            onClick={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })); }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-steel-800 hover:bg-steel-700 text-steel-400 hover:text-white transition-colors text-body-sm"
+          >
+            <Search className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="flex-1 text-left">Buscar…</span>
+            <kbd className="text-[10px] bg-steel-700 px-1.5 py-0.5 rounded text-steel-400">Ctrl K</kbd>
+          </button>
+
+          {/* Usuario + notificaciones + logout */}
+          <div className="flex items-center gap-2">
             <Link href="/perfil" onClick={handleNavClick} className="w-7 h-7 rounded-full bg-steel-700 flex items-center justify-center flex-shrink-0 hover:bg-steel-600 transition-colors" title="Mi perfil">
               <span className="text-steel-300 text-meta font-semibold">
                 {usuario?.nombre?.charAt(0) ?? '?'}
@@ -233,6 +261,7 @@ export function Sidebar() {
                 {usuario?.rol?.toLowerCase().replace('_', ' ') ?? ''}
               </p>
             </div>
+            <NotificacionesPanel />
             <button
               onClick={handleLogout}
               className="text-steel-500 hover:text-white transition-colors"
@@ -242,6 +271,7 @@ export function Sidebar() {
             </button>
           </div>
         </div>
+        <GlobalSearch />
       </aside>
     </>
   );

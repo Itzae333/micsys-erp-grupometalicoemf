@@ -16,6 +16,13 @@ export class ReportesController {
     return this.reportes.getDashboard(empresaId);
   }
 
+  @Get('dashboard-global')
+  @Roles('SUPER_USUARIO')
+  @ApiOperation({ summary: 'KPIs consolidados de todas las empresas — solo SUPER_USUARIO' })
+  getDashboardGlobal() {
+    return this.reportes.getDashboardGlobal();
+  }
+
   @Get('ventas')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Reporte de ventas por rango de fechas' })

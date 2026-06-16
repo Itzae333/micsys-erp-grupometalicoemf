@@ -20,6 +20,10 @@ import { ComprasModule } from './compras/compras.module';
 import { RhModule } from './rh/rh.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { MigracionModule } from './migracion/migracion.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { SearchModule } from './search/search.module';
+import { AdminModule } from './admin/admin.module';
+import { RemisionesModule } from './remisiones/remisiones.module';
 
 @Module({
   imports: [
@@ -41,6 +45,10 @@ import { MigracionModule } from './migracion/migracion.module';
     RhModule,
     ReportesModule,
     MigracionModule,
+    NotificacionesModule,
+    SearchModule,
+    AdminModule,
+    RemisionesModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },

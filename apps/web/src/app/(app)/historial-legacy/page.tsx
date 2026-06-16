@@ -161,12 +161,12 @@ export default function HistorialLegacyPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-3 flex-shrink-0 bg-white border border-steel-200 rounded-xl p-3">
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0 bg-white border border-steel-200 rounded-xl px-4 py-3">
         {/* Búsqueda */}
         <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
           <Input
-            className="pl-9"
+            className="pl-9 h-9"
             placeholder="Buscar cliente…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -176,7 +176,7 @@ export default function HistorialLegacyPage() {
 
         {/* Sucursal */}
         <select
-          className="h-9 px-3 border border-steel-300 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+          className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
           value={sucursal}
           onChange={(e) => setSucursal(e.target.value)}
         >
@@ -185,27 +185,41 @@ export default function HistorialLegacyPage() {
           <option value="punto_venta">Punto de venta</option>
         </select>
 
-        {/* Fechas con label */}
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] px-0.5">Desde</label>
-            <Input type="date" className="h-9 w-36" value={desde} onChange={(e) => setDesde(e.target.value)} />
-          </div>
-          <span className="text-steel-300 mt-4">—</span>
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] px-0.5">Hasta</label>
-            <Input type="date" className="h-9 w-36" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-          </div>
+        {/* Separador */}
+        <div className="h-5 w-px bg-steel-200 hidden sm:block" />
+
+        {/* Fechas */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-meta text-steel-400 hidden sm:block">Desde</span>
+          <input
+            type="date"
+            className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+          />
+          <span className="text-steel-300">—</span>
+          <span className="text-meta text-steel-400 hidden sm:block">Hasta</span>
+          <input
+            type="date"
+            className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+          />
         </div>
 
-        <div className="flex items-end gap-2">
-          <Button variant="secondary" onClick={() => cargar(1)} disabled={loading}>
-            <Search className="h-4 w-4 mr-1.5" />
+        {/* Separador */}
+        <div className="h-5 w-px bg-steel-200 hidden sm:block" />
+
+        {/* Acciones */}
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => cargar(1)} disabled={loading}>
+            <Search className="h-3.5 w-3.5 mr-1.5" />
             Buscar
           </Button>
           {(q || sucursal || desde || hasta) && (
             <Button
-              variant="secondary"
+              size="sm"
+              variant="ghost"
               onClick={() => { setQ(''); setSucursal(''); setDesde(''); setHasta(''); }}
               disabled={loading}
             >

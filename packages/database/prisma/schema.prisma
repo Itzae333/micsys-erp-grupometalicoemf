@@ -43,6 +43,8 @@ model Empresa {
   solicitudes_edicion      SolicitudEdicionNota[]
   evidencias_nota          EvidenciaNota[]
   legacy_ventas            LegacyVenta[]
+  remisiones_origen        Remision[] @relation("RemisionOrigenEmpresa")
+  remisiones_destino       Remision[] @relation("RemisionDestinoEmpresa")
 
   @@map("empresas")
 }
@@ -78,6 +80,8 @@ model Ubicacion {
   usuarios        UsuarioUbicacion[]
   config_columnas ConfigColumnasUbicacion[]
   notas_venta     NotaVenta[]
+  remisiones_origen  Remision[] @relation("RemisionOrigenUbicacion")
+  remisiones_destino Remision[] @relation("RemisionDestinoUbicacion")
 
   @@map("ubicaciones")
 }
@@ -120,6 +124,9 @@ model Usuario {
   solicitudes_aprobadas  SolicitudEdicionNota[] @relation("SolicitudAprobador")
   evidencias_subidas     EvidenciaNota[]
   empleado               Empleado?
+  remisiones_creadas     Remision[] @relation("RemisionCreador")
+  remisiones_enviadas    Remision[] @relation("RemisionEnviador")
+  remisiones_recibidas   Remision[] @relation("RemisionReceptor")
 
   @@map("usuarios")
 }
@@ -270,6 +277,7 @@ model Articulo {
   movimientos_inventario MovimientoInventario[]
   lineas_compra          OrdenCompraLinea[]
   ordenes_produccion     OrdenProduccion[]
+  remision_lineas        RemisionLinea[]
 
   @@unique([empresa_id, clave])
   @@map("articulos")
@@ -462,6 +470,72 @@ model MovimientoInventario {
   @@index([empresa_id, articulo_id, created_at])
   @@index([empresa_id, created_at])
   @@map("movimientos_inventario")
+}
+
+// ─────────────────────────────────────────────────────────────
+// REMISIONES — MOVIMIENTOS MULTI-ARTÍCULO ENTRE UBICACIONES/EMPRESAS
+// Flujo: BORRADOR → EN_TRANSITO → RECIBIDA_COMPLETA / RECIBIDA_PARCIAL
+// Al ENVIAR descuenta existencias en origen.
+// Al RECIBIR suma existencias en destino usando articulo_clave para
+// hacer lookup cross-empresa.
+// ─────────────────────────────────────────────────────────────
+
+enum EstatusRemision {
+  BORRADOR
+  EN_TRANSITO
+  RECIBIDA_COMPLETA
+  RECIBIDA_PARCIAL
+  CANCELADA
+}
+
+model Remision {
+  id                 String          @id @default(cuid())
+  folio              String          @unique
+  empresa_origen_id  String
+  ub_origen_id       String
+  empresa_destino_id String
+  ub_destino_id      String
+  estatus            EstatusRemision @default(BORRADOR)
+  concepto           String?
+  notas              String?
+  creado_por_id      String
+  enviado_por_id     String?
+  recibido_por_id    String?
+  fecha_envio        DateTime?
+  fecha_recepcion    DateTime?
+  created_at         DateTime        @default(now())
+  updated_at         DateTime        @updatedAt
+
+  empresa_origen  Empresa   @relation("RemisionOrigenEmpresa",   fields: [empresa_origen_id],  references: [id])
+  ub_origen       Ubicacion @relation("RemisionOrigenUbicacion",  fields: [ub_origen_id],       references: [id])
+  empresa_destino Empresa   @relation("RemisionDestinoEmpresa",  fields: [empresa_destino_id], references: [id])
+  ub_destino      Ubicacion @relation("RemisionDestinoUbicacion", fields: [ub_destino_id],      references: [id])
+  creado_por      Usuario   @relation("RemisionCreador",          fields: [creado_por_id],      references: [id])
+  enviado_por     Usuario?  @relation("RemisionEnviador",         fields: [enviado_por_id],     references: [id])
+  recibido_por    Usuario?  @relation("RemisionReceptor",         fields: [recibido_por_id],    references: [id])
+
+  lineas RemisionLinea[]
+
+  @@index([empresa_origen_id,  estatus, created_at])
+  @@index([empresa_destino_id, estatus, created_at])
+  @@map("remisiones")
+}
+
+model RemisionLinea {
+  id                String   @id @default(cuid())
+  remision_id       String
+  articulo_id       String
+  articulo_clave    String
+  slot_origen       Int      @default(1)
+  slot_destino      Int      @default(1)
+  cantidad_enviada  Decimal  @db.Decimal(12, 3)
+  cantidad_recibida Decimal? @db.Decimal(12, 3)
+  notas             String?
+
+  remision Remision @relation(fields: [remision_id], references: [id], onDelete: Cascade)
+  articulo Articulo @relation(fields: [articulo_id], references: [id])
+
+  @@map("remision_lineas")
 }
 
 // ─────────────────────────────────────────────────────────────

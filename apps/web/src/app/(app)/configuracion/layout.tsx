@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, Users, Columns3, DatabaseZap, Printer, Shield } from 'lucide-react';
+import { Building2, Users, Columns3, DatabaseZap, Printer, Shield, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -10,8 +10,10 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
   const pathname = usePathname();
   const { usuario } = useAuthStore();
 
-  // Configuración es exclusivo de ADMIN
-  if (!usuario || usuario.rol !== 'ADMIN') {
+  const isAdmin       = usuario?.rol === 'ADMIN';
+  const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';
+
+  if (!usuario || (!isAdmin && !isSuperUsuario)) {
     return <div className="min-h-full">{children}</div>;
   }
 
@@ -56,6 +58,12 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
       label: 'Auditoría',
       icon: <Shield className="h-3.5 w-3.5" />,
     },
+    ...(isSuperUsuario ? [{
+      href: '/configuracion/sistema',
+      matchPrefix: '/configuracion/sistema',
+      label: 'Sistema',
+      icon: <Database className="h-3.5 w-3.5" />,
+    }] : []),
   ];
 
   // En la pantalla de columnas ocultamos la sub-nav (tiene su propio breadcrumb)
