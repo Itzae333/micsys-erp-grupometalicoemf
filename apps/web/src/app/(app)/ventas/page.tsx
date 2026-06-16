@@ -144,6 +144,13 @@ export default function VentasPage() {
   const [artsPagLoading, setArtsPagLoading] = useState(false);
   const [addingArt, setAddingArt]       = useState<string | null>(null);
 
+  // Búsqueda en carrito + highlight de duplicado + navegación por teclado
+  const [cartQ, setCartQ] = useState('');
+  const [highlightedLineaId, setHighlightedLineaId] = useState<string | null>(null);
+  const [selectedCartIdx, setSelectedCartIdx] = useState(-1);
+  const cartItemRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Split-view: seleccionar nota de la lista ─────────────
   async function seleccionarNotaIdx(idx: number) {
     const arr = notas.filter((n) => {
@@ -199,6 +206,10 @@ export default function VentasPage() {
           precio_unitario: existente.precio_unitario,
         });
         setNotaActiva(updated);
+        // Limpiar filtro del carrito y resaltar la línea existente
+        setCartQ('');
+        setHighlightedLineaId(existente.id);
+        setTimeout(() => setHighlightedLineaId(null), 2000);
       } else {
         const precioNum = clienteSeleccionado?.precio_num
           ?? schema?.precios.find((p) => p.activa)?.numero
@@ -285,7 +296,9 @@ export default function VentasPage() {
     function onKey(e: KeyboardEvent) {
       if (dlgLinea) return;
       const tag = (e.target as HTMLElement).tagName;
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+      // Bloquear todo excepto flechas desde inputs (permite navegar mientras se busca)
+      if (['SELECT', 'TEXTAREA'].includes(tag)) return;
+      if (tag === 'INPUT' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       const arr = notas.filter((n) => {
         if (!q) return true;
         const qLow = q.toLowerCase();
@@ -306,9 +319,58 @@ export default function VentasPage() {
   }, [notas, q, selectedNotaIdx, dlgLinea]);
 
   useEffect(() => {
-    if (dlgLinea) { setArtsPagQ(''); void cargarArticulosPag(1, ''); }
+    if (dlgLinea) { setArtsPagQ(''); setCartQ(''); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dlgLinea]);
+
+  // Debounce: dispara búsqueda de catálogo 350ms después de que el usuario deja de escribir
+  useEffect(() => {
+    if (!dlgLinea) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void cargarArticulosPag(1, artsPagQ);
+    }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artsPagQ, dlgLinea]);
+
+  // Navegación por teclado en el carrito (↑↓ incluso desde inputs de búsqueda)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!dlgLinea || !notaActiva) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (['SELECT', 'TEXTAREA'].includes(tag)) return;
+      // Solo flechas desde inputs; el resto de teclas las manejamos solo fuera de inputs
+      if (tag === 'INPUT' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      // Calcular filtrado en el handler para no depender del estado derivado
+      const items = notaActiva.lineas.filter((l) => {
+        if (!cartQ) return true;
+        const qLow = cartQ.toLowerCase();
+        return [l.clave, l.articulo?.descripcion_1, l.articulo?.descripcion_2,
+          l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5]
+          .filter(Boolean).join(' ').toLowerCase().includes(qLow);
+      });
+      if (items.length === 0) return;
+      e.preventDefault();
+      setSelectedCartIdx((prev) =>
+        e.key === 'ArrowDown'
+          ? Math.min(prev + 1, items.length - 1)
+          : Math.max(prev - 1, 0),
+      );
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dlgLinea, notaActiva, cartQ]);
+
+  // Auto-scroll al ítem seleccionado del carrito
+  useEffect(() => {
+    cartItemRefs.current[selectedCartIdx]?.scrollIntoView({ block: 'nearest' });
+  }, [selectedCartIdx]);
+
+  // Reset índice de carrito al cambiar búsqueda o abrir nueva nota
+  useEffect(() => { setSelectedCartIdx(-1); }, [cartQ, notaActiva?.id]);
 
   // ── Form nueva nota ───────────────────────────────────────
   const notaForm = useForm<NuevaNotaForm>({ resolver: zodResolver(NuevaNotaSchema) });
@@ -803,7 +865,7 @@ export default function VentasPage() {
     || (!checkCredito && (saldoCredito === 0 || !!notaActiva.cliente_id))
   );
 
-  // ── Filtro local ──────────────────────────────────────────
+  // ── Filtro local notas ────────────────────────────────────
   const filtered = notas.filter((n) => {
     if (!q) return true;
     const qLow = q.toLowerCase();
@@ -812,6 +874,15 @@ export default function VentasPage() {
       (n.cliente?.nombre ?? '').toLowerCase().includes(qLow) ||
       (n.cliente?.razon_social ?? '').toLowerCase().includes(qLow)
     );
+  });
+
+  // ── Filtro carrito ────────────────────────────────────────
+  const carritoFiltrado = (notaActiva?.lineas ?? []).filter((l) => {
+    if (!cartQ) return true;
+    const qLow = cartQ.toLowerCase();
+    return [l.clave, l.articulo?.descripcion_1, l.articulo?.descripcion_2,
+      l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5]
+      .filter(Boolean).join(' ').toLowerCase().includes(qLow);
   });
 
   const esCotizacionActiva = notaActiva?.estatus === 'COTIZACION';
@@ -911,7 +982,6 @@ export default function VentasPage() {
                     placeholder="Buscar producto…"
                     value={artsPagQ}
                     onChange={(e) => setArtsPagQ(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && void cargarArticulosPag(1, artsPagQ)}
                   />
                 </div>
               </div>
@@ -997,6 +1067,20 @@ export default function VentasPage() {
 
             {/* ── Carrito (abajo en móvil, derecha en desktop) ─── */}
             <div className="flex-1 flex flex-col min-h-0 min-h-[200px]">
+              {/* Buscador carrito */}
+              {notaActiva.lineas.length > 0 && (
+                <div className="px-3 py-2 bg-steel-50 border-b border-steel-100 flex-shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
+                    <input
+                      className="h-7 w-full rounded-md border border-steel-200 bg-white pl-8 pr-3 text-body-sm text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-1 focus:ring-brand-600 focus:border-brand-600"
+                      placeholder="Filtrar carrito…"
+                      value={cartQ}
+                      onChange={(e) => setCartQ(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
               {/* Líneas */}
               <div className="flex-1 overflow-y-auto">
                 {notaActiva.lineas.length === 0 ? (
@@ -1004,6 +1088,8 @@ export default function VentasPage() {
                     <Receipt className="h-10 w-10 opacity-30" />
                     <p className="text-body-sm text-center">Sin artículos — haz clic en un producto</p>
                   </div>
+                ) : carritoFiltrado.length === 0 ? (
+                  <div className="flex items-center justify-center h-24 text-body-sm text-steel-400">Sin coincidencias</div>
                 ) : (
                   <table className="w-full text-body-sm">
                     <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
@@ -1016,10 +1102,20 @@ export default function VentasPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-steel-100">
-                      {notaActiva.lineas.map((l) => {
+                      {carritoFiltrado.map((l, idx) => {
                         const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
+                        const isSelected = selectedCartIdx === idx;
                         return (
-                          <tr key={l.id} className={cn('bg-white', savingLinea === l.id && 'opacity-60')}>
+                          <tr
+                            key={l.id}
+                            ref={(el) => { cartItemRefs.current[idx] = el; }}
+                            className={cn(
+                              'transition-colors',
+                              savingLinea === l.id && 'opacity-60',
+                              highlightedLineaId === l.id ? 'bg-amber-50' :
+                              isSelected ? 'bg-brand-50 border-l-2 border-l-brand-600' : 'bg-white',
+                            )}
+                          >
                             <td className="px-4 py-2.5 min-w-0">
                               <p className="font-semibold text-steel-900 leading-tight break-words">{d.length > 0 ? d.join(' · ') : l.clave}</p>
                               <p className="text-meta text-steel-400">{l.clave}</p>
@@ -1065,7 +1161,9 @@ export default function VentasPage() {
               <div className="border-t border-steel-200 bg-steel-50 flex-shrink-0">
                 <div className="px-4 py-3 flex items-center justify-between">
                   <span className="text-body-sm text-steel-500">
-                    {notaActiva.lineas.length} artículo{notaActiva.lineas.length !== 1 ? 's' : ''}
+                    {cartQ
+                      ? `${carritoFiltrado.length} de ${notaActiva.lineas.length} artículo${notaActiva.lineas.length !== 1 ? 's' : ''}`
+                      : `${notaActiva.lineas.length} artículo${notaActiva.lineas.length !== 1 ? 's' : ''}`}
                   </span>
                   <span className="text-display-sm font-bold text-steel-900">
                     {formatPrecio(notaActiva.total)}

@@ -6,11 +6,9 @@ import {
   Delete,
   Param,
   Body,
+  BadRequestException,
   UseInterceptors,
   UploadedFile,
-  ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -109,22 +107,20 @@ export class UbicacionesController {
           cb(null, `ubicacion-${params.id}${ext}`);
         },
       }),
+      limits: { fileSize: 2 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const ok = ['image/svg+xml', 'image/png', 'image/webp'].includes(file.mimetype);
+        cb(null, ok);
+      },
     }),
   )
   async uploadLogo(
     @Param('empresaId') empresaId: string,
     @Param('id') id: string,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 2 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: /(image\/svg\+xml|image\/png|image\/webp)/ }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
+    if (!file) throw new BadRequestException('Tipo no permitido. Usa PNG, WebP o SVG (máx 2 MB).');
     const logoUrl = `/uploads/logos/${file.filename}`;
     return this.ubicaciones.updateLogo(empresaId, id, logoUrl, user);
   }
