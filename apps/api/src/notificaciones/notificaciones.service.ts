@@ -75,7 +75,7 @@ export class NotificacionesService {
         href:   '/credito',
         items:  creditosVencidos.map((n) => ({
           id:    n.id,
-          label: n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim() || 'Público general',
+          label: (n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim()) || 'Público general',
           sub:   `Folio ${n.folio ?? '—'} · $${Number(n.total).toFixed(2)}`,
           href:  `/ventas/${n.id}`,
           dias:  Math.floor((ahora.getTime() - n.created_at.getTime()) / (1000 * 60 * 60 * 24)),
@@ -91,7 +91,7 @@ export class NotificacionesService {
         href:   '/ventas',
         items:  cotizacionesViejas.map((n) => ({
           id:    n.id,
-          label: n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim() || 'Público general',
+          label: (n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim()) || 'Público general',
           sub:   `Folio ${n.folio ?? '—'} · $${Number(n.total).toFixed(2)}`,
           href:  `/ventas/${n.id}`,
           dias:  Math.floor((ahora.getTime() - n.created_at.getTime()) / (1000 * 60 * 60 * 24)),

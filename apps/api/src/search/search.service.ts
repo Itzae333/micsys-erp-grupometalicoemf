@@ -93,7 +93,7 @@ export class SearchService {
         tipo:  'nota',
         id:    n.id,
         label: `Nota ${n.folio ?? n.id.slice(-6)}`,
-        sub:   n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim() || 'Público general',
+        sub:   (n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim()) || 'Público general',
         href:  `/ventas/${n.id}`,
       });
     }
