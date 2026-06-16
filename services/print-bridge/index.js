@@ -166,6 +166,13 @@ function sep(char = '-') {
   return Buffer.from(char.repeat(config.columns) + '\n', 'latin1');
 }
 
+/** Formatea número con comas de miles: 1,234,567.89 (soporta hasta billones) */
+function formatMoney(n) {
+  const fixed = Number(n ?? 0).toFixed(2);
+  const [int, dec] = fixed.split('.');
+  return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + dec;
+}
+
 /**
  * Imprime el header de empresa/ubicación.
  * Si el ticket trae logo_escpos_b64, inserta el bitmap ESC/POS.
@@ -277,15 +284,15 @@ function buildEscPosBuffer(ticket) {
     push(ln('DESGLOSE:'));
     for (const n of (ticket.notas_pagadas ?? [])) {
       const estado = n.nuevo_estatus === 'PAGADA' ? 'PAGADA' : 'CREDITO';
-      push(row('  Nota #' + norm(n.folio), '$' + Number(n.monto_pagado).toFixed(2)));
+      push(row('  Nota #' + norm(n.folio), '$' + formatMoney(Number(n.monto_pagado))));
       push(ln('  Estatus: ' + estado));
     }
     push(sep('='));
     push(CMD.BOLD_ON);
-    push(row('TOTAL ABONADO', '$' + Number(ticket.total_aplicado ?? 0).toFixed(2)));
+    push(row('TOTAL ABONADO', '$' + formatMoney(Number(ticket.total_aplicado ?? 0))));
     const saldoRest = Number(ticket.saldo_restante ?? 0);
     if (saldoRest > 0) {
-      push(row('SALDO PENDIENTE', '$' + saldoRest.toFixed(2)));
+      push(row('SALDO PENDIENTE', '$' + formatMoney(saldoRest)));
     } else {
       push(center('*** CUENTA AL CORRIENTE ***'));
     }
@@ -323,18 +330,18 @@ function buildEscPosBuffer(ticket) {
     for (const m of METODOS) {
       const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
       const label = (METODO_LABELS[m] ?? m) + ' (' + res.count + ')';
-      push(row('  ' + label, '$' + Number(res.total).toFixed(2)));
+      push(row('  ' + label, '$' + formatMoney(Number(res.total))));
       totalGeneral += Number(res.total);
     }
     push(sep('-'));
     push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(row('TOTAL COBRADO', '$' + totalGeneral.toFixed(2)));
+    push(row('TOTAL COBRADO', '$' + formatMoney(totalGeneral)));
     push(CMD.NORMAL, CMD.BOLD_OFF, sep('='));
 
     // Por estatus
     push(CMD.BOLD_ON, ln('POR ESTATUS:'), CMD.BOLD_OFF);
     for (const [est, res] of Object.entries(ticket.por_estatus ?? {})) {
-      push(row('  ' + norm(est) + ' (' + res.count + ')', '$' + Number(res.total).toFixed(2)));
+      push(row('  ' + norm(est) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
     }
     push(sep('-'));
 
@@ -343,10 +350,10 @@ function buildEscPosBuffer(ticket) {
     for (const n of (ticket.notas ?? [])) {
       const hora = n.created_at ? new Date(n.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
       const folioStr = '#' + String(n.folio).padStart(4, '0') + ' ' + hora;
-      push(row('  ' + folioStr, '$' + Number(n.total).toFixed(2)));
+      push(row('  ' + folioStr, '$' + formatMoney(Number(n.total))));
       push(ln('  ' + norm(n.cliente?.nombre ?? 'MOSTRADOR')));
       for (const p of (n.pagos ?? [])) {
-        push(ln('    ' + norm(METODO_LABELS[p.metodo] ?? p.metodo) + ': $' + Number(p.monto).toFixed(2)));
+        push(ln('    ' + norm(METODO_LABELS[p.metodo] ?? p.metodo) + ': $' + formatMoney(Number(p.monto))));
       }
     }
     push(sep('='));
@@ -381,33 +388,33 @@ function buildEscPosBuffer(ticket) {
   // ── Productos ──────────────────────────────────────────
   for (const linea of (ticket.lineas ?? [])) {
     const nombre = linea.descripcion || linea.clave;
-    push(CMD.BOLD_ON, ln(nombre), CMD.BOLD_OFF);
-    const qtyPrecio = '  ' + linea.cantidad + ' x $' + Number(linea.precio).toFixed(2);
-    push(row(qtyPrecio, '$' + Number(linea.subtotal).toFixed(2)));
+    // Cantidad ANTES de la descripción; la impresora hace wrap automático
+    push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
+    // Precio unitario y subtotal en su propia línea alineada
+    push(row('  $' + formatMoney(Number(linea.precio)), '$' + formatMoney(Number(linea.subtotal))));
   }
 
   push(sep('='));
 
   // ── Total ──────────────────────────────────────────────
   push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-  push(row('TOTAL', '$' + Number(ticket.totales?.total ?? 0).toFixed(2)));
+  push(row('TOTAL', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
   push(CMD.NORMAL, CMD.BOLD_OFF, sep());
 
   // ── Forma de pago ──────────────────────────────────────
   if (ticket.tipo_cierre === 'CREDITO') {
-    // Mostrar lo que se abonó en esta operación
     const pagosAbono = (ticket.pagos ?? []).filter((p) => Number(p.monto) > 0);
     if (pagosAbono.length > 0) {
       push(ln('ABONO:'));
       for (const pago of pagosAbono) {
-        push(row('  ' + norm(pago.metodo), '$' + Number(pago.monto).toFixed(2)));
+        push(row('  ' + norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
       }
       push(sep('-'));
     }
     const saldoRestante = Number(ticket.saldo_restante ?? 0);
     if (saldoRestante > 0) {
       push(CMD.BOLD_ON);
-      push(row('SALDO PENDIENTE', '$' + saldoRestante.toFixed(2)));
+      push(row('SALDO PENDIENTE', '$' + formatMoney(saldoRestante)));
       push(CMD.BOLD_OFF);
       push(center('ESTATUS: CREDITO'));
     } else {
@@ -416,15 +423,15 @@ function buildEscPosBuffer(ticket) {
       push(CMD.BOLD_OFF);
     }
   } else if (ticket.tipo_cierre === 'PENDIENTE') {
-    push(row('PENDIENTE DE COBRO', '$' + Number(ticket.totales?.total ?? 0).toFixed(2)));
+    push(row('PENDIENTE DE COBRO', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
   } else {
     for (const pago of (ticket.pagos ?? [])) {
       if (Number(pago.monto) > 0) {
-        push(row(norm(pago.metodo), '$' + Number(pago.monto).toFixed(2)));
+        push(row(norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
       }
     }
     if (Number(ticket.cambio) > 0) {
-      push(row('CAMBIO', '$' + Number(ticket.cambio).toFixed(2)));
+      push(row('CAMBIO', '$' + formatMoney(Number(ticket.cambio))));
     }
   }
 
