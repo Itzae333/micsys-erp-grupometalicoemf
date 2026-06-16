@@ -16,30 +16,20 @@ async function bootstrap() {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const express = require('express') as typeof import('express');
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
+  const corsOrigins: (string | RegExp)[] = [
+    frontendUrl,
     'http://localhost:3000',
     'http://localhost:3001',
-  ].filter(Boolean) as string[];
-
-  const corsOriginFn = (origin: string | undefined, cb: (e: Error | null, allow?: boolean) => void) => {
-    if (!origin) return cb(null, true);
-    const ok = allowedOrigins.some((o) => origin === o)
-      || /\.vercel\.app$/.test(origin)
-      || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-    cb(ok ? null : new Error(`CORS bloqueado: ${origin}`), ok);
-  };
+    /\.vercel\.app$/,
+  ];
 
   // Servir /uploads/ con header CORS explícito (se registra antes que enableCors)
   app.use(
     '/uploads',
-    (req: { headers: { origin?: string } }, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
-      const o = req.headers.origin;
-      const frontendUrl = allowedOrigins[0] ?? 'http://localhost:3000';
-      (res as unknown as import('http').ServerResponse).setHeader(
-        'Access-Control-Allow-Origin',
-        o && (/\.vercel\.app$/.test(o) || allowedOrigins.includes(o)) ? o : frontendUrl,
-      );
+    (_req: unknown, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
+      (res as unknown as import('http').ServerResponse).setHeader('Access-Control-Allow-Origin', frontendUrl);
       next();
     },
     express.static(join(process.cwd(), 'uploads')),
@@ -51,7 +41,7 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: corsOriginFn,
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
