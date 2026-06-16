@@ -131,6 +131,7 @@ const CMD = {
 function norm(str) {
   if (str == null) return '';
   return String(str)
+    .replace(/·/g, '-')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^\x00-\x7E]/g, '?');

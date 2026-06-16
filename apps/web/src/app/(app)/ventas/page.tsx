@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -127,6 +127,96 @@ export default function VentasPage() {
   const [abonando, setAbonando] = useState(false);
   const [showTicketAbonar, setShowTicketAbonar] = useState(false);
 
+  // Split-view lista de notas
+  const [selectedNotaIdx, setSelectedNotaIdx] = useState(-1);
+  const [detalleNota, setDetalleNota]         = useState<NotaVenta | null>(null);
+  const [loadingDetalle, setLoadingDetalle]   = useState(false);
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+
+  // Split-view catálogo de artículos
+  const [artsPag, setArtsPag]           = useState<Articulo[]>([]);
+  const [artsPagPage, setArtsPagPage]   = useState(1);
+  const [artsPagPages, setArtsPagPages] = useState(1);
+  const [artsPagQ, setArtsPagQ]         = useState('');
+  const [artsPagLoading, setArtsPagLoading] = useState(false);
+  const [addingArt, setAddingArt]       = useState<string | null>(null);
+
+  // ── Split-view: seleccionar nota de la lista ─────────────
+  async function seleccionarNotaIdx(idx: number) {
+    const arr = notas.filter((n) => {
+      if (!q) return true;
+      const qLow = q.toLowerCase();
+      return String(n.folio).includes(q) || (n.cliente?.nombre ?? '').toLowerCase().includes(qLow) || (n.cliente?.razon_social ?? '').toLowerCase().includes(qLow);
+    });
+    if (idx < 0 || idx >= arr.length) return;
+    setSelectedNotaIdx(idx);
+    const nota = arr[idx];
+    setLoadingDetalle(true);
+    try {
+      const d = await api.get<NotaVenta>(`/ventas/${nota.id}`);
+      setDetalleNota(d);
+    } catch {
+      setDetalleNota(null);
+    } finally {
+      setLoadingDetalle(false);
+    }
+  }
+
+  async function refreshDetalleNota() {
+    if (!detalleNota) return;
+    try {
+      const d = await api.get<NotaVenta>(`/ventas/${detalleNota.id}`);
+      setDetalleNota(d);
+    } catch {}
+  }
+
+  // ── Split-view: funciones catálogo ───────────────────────
+  async function cargarArticulosPag(p: number, searchQ: string) {
+    setArtsPagLoading(true);
+    try {
+      const qp = new URLSearchParams({ page: String(p), limit: '15' });
+      if (searchQ) qp.set('q', searchQ);
+      const res = await api.get<ArticulosPage>(`/articulos?${qp}`);
+      setArtsPag(res.data);
+      setArtsPagPages(res.pages);
+      setArtsPagPage(p);
+    } finally {
+      setArtsPagLoading(false);
+    }
+  }
+
+  async function agregarArticuloRapido(art: Articulo) {
+    if (!notaActiva || addingArt) return;
+    setAddingArt(art.id);
+    try {
+      const existente = notaActiva.lineas.find((l) => l.articulo?.id === art.id);
+      if (existente) {
+        const updated = await api.patch<NotaVenta>(`/ventas/${notaActiva.id}/lineas/${existente.id}`, {
+          cantidad: existente.cantidad + 1,
+          precio_unitario: existente.precio_unitario,
+        });
+        setNotaActiva(updated);
+      } else {
+        const precioNum = clienteSeleccionado?.precio_num
+          ?? schema?.precios.find((p) => p.activa)?.numero
+          ?? 1;
+        const campo = `precio_${precioNum}` as keyof Articulo;
+        const precio = (art[campo] as number | null) ?? 0;
+        const updated = await api.post<NotaVenta>(`/ventas/${notaActiva.id}/lineas`, {
+          articulo_id: art.id,
+          cantidad: 1,
+          precio_unitario: precio,
+          descuento: 0,
+        });
+        setNotaActiva(updated);
+      }
+    } catch {
+      // silent
+    } finally {
+      setAddingArt(null);
+    }
+  }
+
   // ── Leer params de URL al montar ──────────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -181,6 +271,41 @@ export default function VentasPage() {
       .then(setSchema)
       .catch(() => {});
   }, [empresa?.id, ubicacion?.id]);
+
+  // Auto-scroll fila seleccionada en lista de notas
+  useEffect(() => {
+    rowRefs.current[selectedNotaIdx]?.scrollIntoView({ block: 'nearest' });
+  }, [selectedNotaIdx]);
+
+  // Navegación por teclado en lista de notas (solo cuando no está en modo edición)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (dlgLinea) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+      const arr = notas.filter((n) => {
+        if (!q) return true;
+        const qLow = q.toLowerCase();
+        return String(n.folio).includes(q) || (n.cliente?.nombre ?? '').toLowerCase().includes(qLow) || (n.cliente?.razon_social ?? '').toLowerCase().includes(qLow);
+      });
+      if (arr.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        void seleccionarNotaIdx(Math.min(selectedNotaIdx + 1, arr.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        void seleccionarNotaIdx(Math.max(selectedNotaIdx - 1, 0));
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notas, q, selectedNotaIdx, dlgLinea]);
+
+  useEffect(() => {
+    if (dlgLinea) { setArtsPagQ(''); void cargarArticulosPag(1, ''); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dlgLinea]);
 
   // ── Form nueva nota ───────────────────────────────────────
   const notaForm = useForm<NuevaNotaForm>({ resolver: zodResolver(NuevaNotaSchema) });
@@ -574,7 +699,8 @@ export default function VentasPage() {
         })),
       });
       setDlgAbonar(null);
-      loadNotas();
+      void loadNotas();
+      void refreshDetalleNota();
       // Siempre ofrecer imprimir/enviar comprobante del abono
       setPostCobro({
         nota: notaActualizada,
@@ -632,7 +758,8 @@ export default function VentasPage() {
 
       setDlgCobrar(false);
       setNotaActiva(null);
-      loadNotas();
+      void loadNotas();
+      void refreshDetalleNota();
       // Guardar snapshot para que el usuario elija cómo recibir el comprobante
       setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap });
     } catch (err) {
@@ -702,261 +829,581 @@ export default function VentasPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-steel-200 bg-white flex items-center justify-between">
-        <div>
-          <p className="text-eyebrow text-steel-400 tracking-[2px] uppercase mb-0.5">Ventas</p>
-          <h1 className="text-display-md font-bold text-steel-900">Notas de Venta</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => router.push('/ventas/clientes')}>
-            <Users className="h-4 w-4 mr-1.5" />
-            Clientes
-          </Button>
-          {canWrite && (
-            <>
-              <Button variant="secondary" onClick={() => openDlgNota('cotizacion')}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                Cotización
-              </Button>
-              <Button onClick={() => openDlgNota('venta')}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Nueva venta
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* ── Split-view: editar nota / cotización ─────────── */}
+      {dlgLinea && notaActiva && (
+        <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden bg-white">
 
-      <div className="p-6">
-        {/* Filtros */}
-        <div className="flex flex-col gap-2.5 mb-4">
-          {/* Fila 1: búsqueda + estatus */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
-              <input
-                className="h-9 w-full rounded-md border border-steel-300 bg-white pl-8 pr-3 text-body text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
-                placeholder="Buscar por folio o cliente…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {(['', 'COTIZACION', 'ABIERTA', 'PENDIENTE', 'PAGADA', 'CREDITO', 'CANCELADA'] as const).map((est) => (
-                <button
-                  key={est}
-                  onClick={() => { setEstatusFiltro(est); setPage(1); }}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors',
-                    estatusFiltro === est
-                      ? 'bg-steel-900 text-white'
-                      : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
-                  )}
-                >
-                  {est === '' ? 'Todas' : ESTATUS_CONFIG[est]?.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Fila 2: filtro de fecha */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] mr-1">Período</span>
-            {([
-              { value: 'hoy',   label: 'Hoy' },
-              { value: 'semana', label: 'Semana' },
-              { value: 'mes',   label: 'Mes' },
-              { value: 'año',   label: 'Año' },
-              { value: '',      label: 'Todas' },
-            ] as { value: '' | 'hoy' | 'semana' | 'mes' | 'año'; label: string }[]).map(({ value, label }) => (
+          {/* Barra superior */}
+          <div className="px-4 py-3 bg-white border-b border-steel-200 flex items-center justify-between flex-shrink-0 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <button
-                key={value || 'all'}
-                onClick={() => { setFechaFiltro(value); setPage(1); }}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors',
-                  fechaFiltro === value
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
+                onClick={() => { setDlgLinea(false); setNotaActiva(null); void loadNotas(); void refreshDetalleNota(); }}
+                className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-900 transition-colors flex-shrink-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Volver
+              </button>
+              <div className="h-4 w-px bg-steel-200 flex-shrink-0" />
+              <div className="min-w-0">
+                <span className="text-body font-semibold text-steel-900">
+                  {esCotizacionActiva ? 'Cotización' : 'Nota'} #{String(notaActiva.folio).padStart(4, '0')}
+                </span>
+                {notaActiva.cliente && (
+                  <span className="ml-2 text-body-sm text-steel-400 truncate">
+                    · {notaActiva.cliente.razon_social ?? `${notaActiva.cliente.nombre} ${notaActiva.cliente.apellidos ?? ''}`.trim()}
+                  </span>
                 )}
-              >
-                {label}
-              </button>
-            ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {esCotizacionActiva && notaActiva.lineas.length > 0 && (
+                <>
+                  <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(notaActiva)}>PDF</Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => { setEmailDest(notaActiva.cliente?.email ?? ''); setEmailError(null); setEmailOk(false); setDlgEmail('cotizacion'); }}
+                  >
+                    Enviar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
+                  >
+                    Convertir a venta
+                  </Button>
+                </>
+              )}
+              {!esCotizacionActiva && notaActiva.lineas.length > 0 && (
+                <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
+                  Cobrar — ${notaActiva.total.toFixed(2)}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Cuerpo split — apila en móvil, lado a lado en desktop */}
+          <div className="flex flex-col md:flex-row flex-1 min-h-0">
+
+            {/* ── Catálogo (arriba en móvil, izquierda en desktop) ─── */}
+            <div className="h-[48%] md:h-auto md:w-[58%] flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-steel-200">
+              {/* Buscador */}
+              <div className="px-4 py-3 bg-steel-50 border-b border-steel-100 flex-shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
+                  <input
+                    className="h-9 w-full rounded-md border border-steel-300 bg-white pl-9 pr-3 text-body text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                    placeholder="Buscar producto…"
+                    value={artsPagQ}
+                    onChange={(e) => setArtsPagQ(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void cargarArticulosPag(1, artsPagQ)}
+                  />
+                </div>
+              </div>
+
+              {/* Tabla artículos */}
+              <div className="flex-1 overflow-y-auto">
+                {artsPagLoading ? (
+                  <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Cargando...</div>
+                ) : artsPag.length === 0 ? (
+                  <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Sin resultados</div>
+                ) : (
+                  <table className="w-full text-body-sm">
+                    <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                      <tr>
+                        <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-steel-600">Exist.</th>
+                        <th className="text-right px-4 py-2.5 font-medium text-steel-600">Precio</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-steel-100">
+                      {artsPag.map((art) => {
+                        const descs = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean);
+                        const pNum = clienteSeleccionado?.precio_num ?? schema?.precios.find((p) => p.activa)?.numero ?? 1;
+                        const pCampo = `precio_${pNum}` as keyof Articulo;
+                        const precio = (art[pCampo] as number | null) ?? 0;
+                        const enCarrito = notaActiva.lineas.find((l) => l.articulo?.id === art.id);
+                        return (
+                          <tr
+                            key={art.id}
+                            onClick={() => void agregarArticuloRapido(art)}
+                            className={cn(
+                              'cursor-pointer transition-colors',
+                              addingArt === art.id ? 'opacity-50 pointer-events-none' : 'hover:bg-brand-50',
+                              enCarrito ? 'bg-green-50' : '',
+                            )}
+                          >
+                            <td className="px-4 py-2.5">
+                              <p className="font-semibold text-steel-900 leading-tight">
+                                {descs.length > 0 ? descs.join(' · ') : art.clave}
+                              </p>
+                              <p className="text-meta text-steel-400">{art.clave}</p>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
+                              {art.existencia_1 ?? 0}
+                            </td>
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                              <span className="font-semibold text-steel-900">${precio.toFixed(2)}</span>
+                              {enCarrito && (
+                                <span className="ml-2 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                                  x{enCarrito.cantidad}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Paginación catálogo */}
+              <div className="flex items-center justify-between px-4 py-2 bg-white border-t border-steel-100 flex-shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={artsPagPage <= 1}
+                  onClick={() => void cargarArticulosPag(artsPagPage - 1, artsPagQ)}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-body-sm text-steel-500">Pág {artsPagPage}/{artsPagPages}</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={artsPagPage >= artsPagPages}
+                  onClick={() => void cargarArticulosPag(artsPagPage + 1, artsPagQ)}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* ── Carrito (abajo en móvil, derecha en desktop) ─── */}
+            <div className="flex-1 flex flex-col min-h-0 min-h-[200px]">
+              {/* Líneas */}
+              <div className="flex-1 overflow-y-auto">
+                {notaActiva.lineas.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-2 text-steel-400 p-8">
+                    <Receipt className="h-10 w-10 opacity-30" />
+                    <p className="text-body-sm text-center">Sin artículos — haz clic en un producto</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-body-sm">
+                    <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                      <tr>
+                        <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-steel-600">Cant</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-steel-600">Precio</th>
+                        <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
+                        <th className="px-2 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-steel-100">
+                      {notaActiva.lineas.map((l) => {
+                        const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
+                        return (
+                          <tr key={l.id} className={cn('bg-white', savingLinea === l.id && 'opacity-60')}>
+                            <td className="px-4 py-2.5">
+                              <p className="font-semibold text-steel-900 leading-tight">{d.length > 0 ? d.join(' · ') : l.clave}</p>
+                              <p className="text-meta text-steel-400">{l.clave}</p>
+                            </td>
+                            <td className="px-2 py-2.5 text-right">
+                              <input
+                                type="number" step="0.001" min="0.001"
+                                disabled={savingLinea === l.id}
+                                className="w-14 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
+                                value={lineaDraft[l.id]?.cantidad ?? String(l.cantidad)}
+                                onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], cantidad: e.target.value } }))}
+                                onBlur={(e) => void updateLineaInline(l.id, 'cantidad', e.target.value)}
+                              />
+                            </td>
+                            <td className="px-2 py-2.5 text-right">
+                              <input
+                                type="number" step="0.01" min="0"
+                                disabled={savingLinea === l.id}
+                                className="w-20 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
+                                value={lineaDraft[l.id]?.precio ?? String(l.precio_unitario)}
+                                onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], precio: e.target.value } }))}
+                                onBlur={(e) => void updateLineaInline(l.id, 'precio_unitario', e.target.value)}
+                              />
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-steel-900 whitespace-nowrap">
+                              ${l.subtotal.toFixed(2)}
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <button
+                                onClick={() => void eliminarLinea(l.id)}
+                                className="text-steel-300 hover:text-brand-600 transition-colors"
+                              >✕</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer carrito */}
+              <div className="border-t border-steel-200 bg-steel-50 flex-shrink-0">
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-body-sm text-steel-500">
+                    {notaActiva.lineas.length} artículo{notaActiva.lineas.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-display-sm font-bold text-steel-900">
+                    ${notaActiva.total.toFixed(2)}
+                  </span>
+                </div>
+                {!esCotizacionActiva && (
+                  <div className="px-4 pb-4">
+                    <Button
+                      className="w-full"
+                      disabled={notaActiva.lineas.length === 0}
+                      onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
+                    >
+                      Cobrar ${notaActiva.total.toFixed(2)}
+                    </Button>
+                  </div>
+                )}
+                {esCotizacionActiva && notaActiva.lineas.length > 0 && (
+                  <div className="px-4 pb-4 flex gap-2">
+                    <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva)}>
+                      PDF
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={() => void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
+                    >
+                      Convertir
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {!(dlgLinea && notaActiva) && (
+      <div className="flex flex-col h-full overflow-hidden">
+
+        {/* Header */}
+        <div className="px-4 md:px-6 py-4 border-b border-steel-200 bg-white flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+          <div>
+            <p className="text-eyebrow text-steel-400 tracking-[2px] uppercase mb-0.5">Ventas</p>
+            <h1 className="text-display-md font-bold text-steel-900">Notas de Venta</h1>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="secondary" onClick={() => router.push('/ventas/clientes')}>
+              <Users className="h-4 w-4 mr-1.5" />
+              Clientes
+            </Button>
+            {canWrite && (
+              <>
+                <Button variant="secondary" onClick={() => openDlgNota('cotizacion')}>
+                  <FileText className="h-4 w-4 mr-1.5" />
+                  Cotización
+                </Button>
+                <Button onClick={() => openDlgNota('venta')}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Nueva venta
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Tabla */}
-        {loading ? (
-          <div className="space-y-2">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-14 bg-steel-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<Receipt className="h-8 w-8" />}
-            title="Sin notas"
-            description="Crea la primera nota de venta para comenzar."
-            action={canWrite ? { label: 'Nueva venta', onClick: () => openDlgNota('venta') } : undefined}
-          />
-        ) : (
-          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-steel-100">
-                  <th className="px-4 py-2.5 text-left text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium">Folio</th>
-                  <th className="px-4 py-2.5 text-left text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium">Cliente</th>
-                  <th className="px-4 py-2.5 text-left text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium">Estatus</th>
-                  <th className="px-4 py-2.5 text-right text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium">Total</th>
-                  <th className="px-4 py-2.5 text-left text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium">Fecha</th>
-                  <th className="px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((nota, i) => {
-                  const cfg = ESTATUS_CONFIG[nota.estatus];
-                  const esCot = nota.estatus === 'COTIZACION';
-                  return (
-                    <tr
-                      key={nota.id}
-                      className={cn(
-                        'border-b border-steel-50 hover:bg-steel-50 transition-colors cursor-pointer',
-                        i === filtered.length - 1 && 'border-b-0',
-                      )}
-                      onClick={() => {
-                        if (nota.estatus === 'ABIERTA' || nota.estatus === 'COTIZACION') void openEditarNota(nota);
-                        else if (nota.estatus === 'PENDIENTE') openCobrar(nota);
-                        else if (nota.estatus === 'CREDITO') openAbonar(nota);
-                        else router.push(`/ventas/${nota.id}`);
-                      }}
-                    >
-                      <td className="px-4 py-3">
-                        <span className="text-body font-bold text-steel-900">#{String(nota.folio).padStart(4, '0')}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-body text-steel-900">
-                          {nota.cliente
-                            ? nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim()
-                            : <span className="text-steel-400 italic">Mostrador</span>}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-body font-semibold text-steel-900">
-                          ${nota.total.toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-body-sm text-steel-500">
-                          {new Date(nota.created_at).toLocaleDateString('es-MX', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                          })}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          {esCot && canWrite && (
-                            <>
-                              <button
-                                onClick={() => void openEditarNota(nota)}
-                                className="px-3 py-1.5 bg-white border border-steel-300 text-steel-700 text-body-sm font-medium rounded-lg hover:bg-steel-50 transition-colors"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => void convertirAVenta(nota)}
-                                className="px-3 py-1.5 bg-steel-900 text-white text-body-sm font-medium rounded-lg hover:bg-steel-700 transition-colors"
-                              >
-                                Convertir
-                              </button>
-                            </>
-                          )}
-                          {nota.estatus === 'ABIERTA' && canWrite && (
-                            <>
-                              <button
-                                onClick={() => void openEditarNota(nota)}
-                                className="px-3 py-1.5 bg-white border border-steel-300 text-steel-700 text-body-sm font-medium rounded-lg hover:bg-steel-50 transition-colors"
-                              >
-                                Agregar
-                              </button>
-                              <button
-                                onClick={() => openCobrar(nota)}
-                                className="px-3 py-1.5 bg-brand-600 text-white text-body-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-                              >
-                                Cobrar
-                              </button>
-                            </>
-                          )}
-                          {nota.estatus === 'PENDIENTE' && canWrite && (
-                            <button
-                              onClick={() => openCobrar(nota)}
-                              className="px-3 py-1.5 bg-steel-900 text-white text-body-sm font-medium rounded-lg hover:bg-steel-700 transition-colors"
-                            >
-                              Cobrar
-                            </button>
-                          )}
-                          {nota.estatus === 'CREDITO' && canWrite && (
-                            <button
-                              onClick={() => openAbonar(nota)}
-                              className="px-3 py-1.5 bg-amber-500 text-white text-body-sm font-medium rounded-lg hover:bg-amber-600 transition-colors"
-                            >
-                              Abonar
-                            </button>
-                          )}
-                          {['PAGADA', 'CREDITO'].includes(nota.estatus) && (
-                            <button
-                              onClick={() => router.push(`/ventas/${nota.id}`)}
-                              className="px-3 py-1.5 bg-white border border-steel-200 text-steel-700 text-body-sm font-medium rounded-lg hover:bg-steel-50 transition-colors"
-                              title="Ver historial de pagos y evidencias"
-                            >
-                              Ver
-                            </button>
-                          )}
-                          {['PAGADA', 'CREDITO'].includes(nota.estatus) && canAdmin && (
-                            <button
-                              onClick={() => setDlgReimprimir(nota)}
-                              className="px-2.5 py-1.5 bg-white border border-steel-200 text-steel-500 text-body-sm font-medium rounded-lg hover:bg-steel-50 transition-colors"
-                              title="Reimprimir ticket o reenviar por correo"
-                            >
-                              🖨
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Split body */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0">
 
-        {/* Paginación */}
-        {pages > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-body-sm text-steel-500">{total} notas</p>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <span className="text-body-sm text-steel-600 px-2">{page} / {pages}</span>
-              <button
-                onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                disabled={page === pages}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
+          {/* ── Izquierda: lista de notas ─────────────────── */}
+          <div className="flex flex-col md:w-[50%] min-h-0 border-b md:border-b-0 md:border-r border-steel-200 h-[50%] md:h-auto">
+
+            {/* Filtros */}
+            <div className="px-4 py-2.5 bg-steel-50 border-b border-steel-100 flex-shrink-0 space-y-1.5">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
+                  <input
+                    className="h-8 w-full rounded-md border border-steel-300 bg-white pl-8 pr-3 text-body-sm text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                    placeholder="Folio o cliente…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {(['', 'COTIZACION', 'ABIERTA', 'PENDIENTE', 'PAGADA', 'CREDITO', 'CANCELADA'] as const).map((est) => (
+                  <button
+                    key={est}
+                    onClick={() => { setEstatusFiltro(est); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                    className={cn(
+                      'px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors',
+                      estatusFiltro === est ? 'bg-steel-900 text-white' : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
+                    )}
+                  >
+                    {est === '' ? 'Todas' : ESTATUS_CONFIG[est]?.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] mr-0.5">Período</span>
+                {([
+                  { value: 'hoy',    label: 'Hoy' },
+                  { value: 'semana', label: 'Semana' },
+                  { value: 'mes',    label: 'Mes' },
+                  { value: 'año',    label: 'Año' },
+                  { value: '',       label: 'Todas' },
+                ] as { value: '' | 'hoy' | 'semana' | 'mes' | 'año'; label: string }[]).map(({ value, label }) => (
+                  <button
+                    key={value || 'all'}
+                    onClick={() => { setFechaFiltro(value); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                    className={cn(
+                      'px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors',
+                      fechaFiltro === value ? 'bg-brand-600 text-white' : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tabla */}
+            <div className="flex-1 overflow-y-auto bg-white">
+              {loading ? (
+                <div className="p-4 space-y-2">
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="h-10 bg-steel-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="flex items-center justify-center h-full p-4">
+                  <EmptyState
+                    icon={<Receipt className="h-8 w-8" />}
+                    title="Sin notas"
+                    description="Crea la primera nota de venta para comenzar."
+                    action={canWrite ? { label: 'Nueva venta', onClick: () => openDlgNota('venta') } : undefined}
+                  />
+                </div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-100">
+                    {filtered.map((nota, i) => {
+                      const cfg = ESTATUS_CONFIG[nota.estatus];
+                      return (
+                        <tr
+                          key={nota.id}
+                          ref={(el) => { rowRefs.current[i] = el; }}
+                          onClick={() => void seleccionarNotaIdx(i)}
+                          onDoubleClick={() => {
+                            if (nota.estatus === 'ABIERTA' || nota.estatus === 'COTIZACION') void openEditarNota(nota);
+                            else router.push(`/ventas/${nota.id}`);
+                          }}
+                          className={cn(
+                            'cursor-pointer transition-colors',
+                            selectedNotaIdx === i
+                              ? 'bg-brand-50 border-l-2 border-l-brand-600'
+                              : 'hover:bg-steel-50',
+                          )}
+                        >
+                          <td className="px-4 py-2.5">
+                            <span className="font-bold text-steel-900">#{String(nota.folio).padStart(4, '0')}</span>
+                          </td>
+                          <td className="px-3 py-2.5 max-w-[120px]">
+                            <p className="text-steel-900 truncate">
+                              {nota.cliente
+                                ? nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim()
+                                : <span className="text-steel-400 italic">Mostrador</span>}
+                            </p>
+                            <p className="text-meta text-steel-400">
+                              {new Date(nota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                            </p>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="font-semibold text-steel-900">${nota.total.toFixed(2)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Paginación */}
+            <div className="flex items-center justify-between px-4 py-2 bg-white border-t border-steel-100 flex-shrink-0">
+              <p className="text-body-sm text-steel-500">{total} notas · {page}/{pages}</p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => { setPage((p) => Math.max(1, p - 1)); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                  disabled={page === 1}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => { setPage((p) => Math.min(pages, p + 1)); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                  disabled={page === pages}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           </div>
-        )}
+
+          {/* ── Derecha: detalle de la nota ────────────────── */}
+          <div className="flex-1 overflow-y-auto bg-steel-50 p-4 min-h-[200px] md:min-h-0">
+            {!detalleNota && !loadingDetalle && (
+              <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-steel-200">
+                <p className="text-body-sm text-steel-400 text-center px-4">
+                  Selecciona una nota para ver el detalle<br />
+                  <span className="text-meta">↑↓ navegar · doble clic para editar</span>
+                </p>
+              </div>
+            )}
+
+            {loadingDetalle && (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-body-sm text-steel-400">Cargando...</p>
+              </div>
+            )}
+
+            {detalleNota && !loadingDetalle && (
+              <div className="flex flex-col gap-3">
+                {/* Info nota */}
+                <div className="bg-white rounded-xl border border-steel-200 p-4">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-body font-bold text-steel-900">
+                        {detalleNota.estatus === 'COTIZACION' ? 'Cotización' : 'Nota'} #{String(detalleNota.folio).padStart(4, '0')}
+                      </p>
+                      <p className="text-body-sm text-steel-500">
+                        {new Date(detalleNota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
+                      {ESTATUS_CONFIG[detalleNota.estatus]?.label}
+                    </Badge>
+                  </div>
+                  {detalleNota.cliente && (
+                    <p className="text-body-sm text-steel-700 font-medium">
+                      {detalleNota.cliente.razon_social ?? `${detalleNota.cliente.nombre} ${detalleNota.cliente.apellidos ?? ''}`.trim()}
+                    </p>
+                  )}
+                  {detalleNota.observaciones && (
+                    <p className="text-meta text-steel-400 mt-1">{detalleNota.observaciones}</p>
+                  )}
+                </div>
+
+                {/* Artículos */}
+                {detalleNota.lineas.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
+                    <Receipt className="h-8 w-8 text-steel-300 mx-auto mb-2" />
+                    <p className="text-body-sm text-steel-400">Sin artículos en el carrito</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                    <table className="w-full text-body-sm">
+                      <thead className="bg-steel-50 border-b border-steel-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-steel-600">Cant</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-steel-600">Precio</th>
+                          <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-steel-100">
+                        {detalleNota.lineas.map((l) => {
+                          const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
+                          return (
+                            <tr key={l.id}>
+                              <td className="px-4 py-2.5">
+                                <p className="font-semibold text-steel-900 leading-tight">{d.length > 0 ? d.join(' · ') : l.clave}</p>
+                                <p className="text-meta text-steel-400">{l.clave}</p>
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
+                              <td className="px-3 py-2.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-steel-900">${detalleNota.total.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+
+                {/* Acciones */}
+                <div className="flex flex-wrap gap-2">
+                  {(detalleNota.estatus === 'ABIERTA' || detalleNota.estatus === 'COTIZACION') && canWrite && (
+                    <Button variant="secondary" size="sm" onClick={() => void openEditarNota(detalleNota)}>
+                      Agregar artículos
+                    </Button>
+                  )}
+                  {detalleNota.estatus === 'COTIZACION' && detalleNota.lineas.length > 0 && (
+                    <>
+                      <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(detalleNota)}>
+                        PDF
+                      </Button>
+                      <Button size="sm" onClick={() => void convertirAVenta(detalleNota).then(async () => { await loadNotas(); void refreshDetalleNota(); })}>
+                        Convertir a venta
+                      </Button>
+                    </>
+                  )}
+                  {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canWrite && (
+                    <Button size="sm" onClick={() => openCobrar(detalleNota)}>
+                      Cobrar
+                    </Button>
+                  )}
+                  {detalleNota.estatus === 'PENDIENTE' && canWrite && (
+                    <Button size="sm" onClick={() => openCobrar(detalleNota)}>
+                      Cobrar
+                    </Button>
+                  )}
+                  {detalleNota.estatus === 'CREDITO' && canWrite && (
+                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 border-amber-500" onClick={() => openAbonar(detalleNota)}>
+                      Abonar
+                    </Button>
+                  )}
+                  {['PAGADA', 'CREDITO'].includes(detalleNota.estatus) && (
+                    <Button variant="secondary" size="sm" onClick={() => router.push(`/ventas/${detalleNota.id}`)}>
+                      Ver detalle
+                    </Button>
+                  )}
+                  {['PAGADA', 'CREDITO'].includes(detalleNota.estatus) && canAdmin && (
+                    <Button variant="secondary" size="sm" onClick={() => setDlgReimprimir(detalleNota)}>
+                      🖨 Reimprimir
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
+      )}
 
       {/* ── Dialog: crear nota / cotización ─────────────────── */}
       <Dialog
@@ -1018,288 +1465,6 @@ export default function VentasPage() {
         </form>
       </Dialog>
 
-      {/* ── Dialog: agregar líneas ────────────────────────── */}
-      <Dialog
-        open={dlgLinea}
-        onClose={() => { setDlgLinea(false); setNotaActiva(null); loadNotas(); }}
-        title={
-          notaActiva
-            ? `${esCotizacionActiva ? 'Cotización' : 'Nota'} #${String(notaActiva.folio).padStart(4, '0')}`
-            : 'Agregar artículos'
-        }
-        size="lg"
-      >
-        <div className="space-y-4">
-          {esCotizacionActiva && (
-            <div className="flex items-center justify-between bg-steel-50 rounded-lg px-3 py-2">
-              <span className="text-body-sm text-steel-600 flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5" /> Cotización — pendiente de confirmar
-              </span>
-              {notaActiva && notaActiva.lineas.length > 0 && (
-                <Button
-                  variant="secondary"
-                  onClick={() => notaActiva && void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
-                >
-                  Convertir a venta
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Líneas actuales */}
-          {notaActiva && notaActiva.lineas.length > 0 && (
-            <div className="border border-steel-200 rounded-xl overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-steel-100 bg-steel-50">
-                    <th className="px-3 py-2 text-left text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Artículo</th>
-                    <th className="px-3 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Cant.</th>
-                    <th className="px-3 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Precio</th>
-                    <th className="px-3 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Subtotal</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {notaActiva.lineas.map((l) => (
-                    <tr key={l.id} className={cn('border-b border-steel-50 last:border-b-0', savingLinea === l.id && 'opacity-60')}>
-                      <td className="px-3 py-2">
-                        {(() => {
-                          const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
-                          return <p className="text-body-sm font-semibold text-steel-900">{d.length > 0 ? d.join(' · ') : l.clave}</p>;
-                        })()}
-                        <p className="text-meta text-steel-400">{l.clave}</p>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0.001"
-                          disabled={savingLinea === l.id}
-                          className="w-16 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
-                          value={lineaDraft[l.id]?.cantidad ?? String(l.cantidad)}
-                          onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], cantidad: e.target.value } }))}
-                          onBlur={(e) => void updateLineaInline(l.id, 'cantidad', e.target.value)}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          disabled={savingLinea === l.id}
-                          className="w-20 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
-                          value={lineaDraft[l.id]?.precio ?? String(l.precio_unitario)}
-                          onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], precio: e.target.value } }))}
-                          onBlur={(e) => void updateLineaInline(l.id, 'precio_unitario', e.target.value)}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right text-body-sm font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          onClick={() => eliminarLinea(l.id)}
-                          className="text-steel-400 hover:text-brand-600 transition-colors text-body-sm"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex items-center justify-between px-3 py-2 bg-steel-50 border-t border-steel-200">
-                <span className="text-body-sm text-steel-600">Total</span>
-                <span className="text-body font-bold text-steel-900">${notaActiva.total.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Vista previa ticket */}
-          {notaActiva && notaActiva.lineas.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowTicket((v) => !v)}
-                className="text-body-sm text-steel-500 hover:text-steel-800 transition-colors underline-offset-2 hover:underline"
-              >
-                {showTicket ? 'Ocultar ticket' : 'Ver vista previa del ticket'}
-              </button>
-              {showTicket && (
-                <div className="mt-2 border border-steel-200 rounded-xl overflow-hidden bg-white text-[11px] font-mono">
-                  {/* Cabecera: logo + nombre empresa + sucursal */}
-                  <div className="bg-steel-900 text-white px-4 py-3 text-center">
-                    {empresa?.logo_url && (
-                      <img src={empresa.logo_url} alt="Logo" className="h-8 w-auto mx-auto mb-1.5 object-contain" />
-                    )}
-                    <p className="font-bold text-[13px] tracking-wide uppercase">
-                      {ubicacion?.razon_social ?? empresa?.nombre ?? 'Empresa'}
-                    </p>
-                    <p className="text-steel-300 mt-0.5 text-[10px]">{ubicacion?.nombre}</p>
-                  </div>
-                  {/* Folio y fecha */}
-                  <div className="px-4 py-2 border-b border-dashed border-steel-200 flex justify-between text-steel-600">
-                    <span>Nota #{String(notaActiva.folio).padStart(4, '0')}</span>
-                    <span>{new Date(notaActiva.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                  </div>
-                  {/* Datos fiscales de la ubicación */}
-                  {(ubicacion?.rfc || ubicacion?.telefono || direccionUbicacion) && (
-                    <div className="px-4 py-1.5 border-b border-dashed border-steel-200 text-steel-500 text-[10px] space-y-0.5">
-                      {ubicacion?.rfc && (
-                        <p>RFC: {ubicacion.rfc}{ubicacion.telefono ? `  ·  Tel: ${ubicacion.telefono}` : ''}</p>
-                      )}
-                      {!ubicacion?.rfc && ubicacion?.telefono && <p>Tel: {ubicacion.telefono}</p>}
-                      {direccionUbicacion && <p>{direccionUbicacion}</p>}
-                    </div>
-                  )}
-                  {notaActiva.cliente && (
-                    <div className="px-4 py-2 border-b border-dashed border-steel-200 text-steel-700">
-                      <span className="text-steel-400">Cliente: </span>
-                      {notaActiva.cliente.razon_social ?? `${notaActiva.cliente.nombre} ${notaActiva.cliente.apellidos ?? ''}`.trim()}
-                    </div>
-                  )}
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-steel-100 text-steel-400">
-                        <th className="px-4 py-1.5 text-left font-medium">Artículo</th>
-                        <th className="px-2 py-1.5 text-right font-medium">Cant</th>
-                        <th className="px-2 py-1.5 text-right font-medium">Precio</th>
-                        <th className="px-4 py-1.5 text-right font-medium">Sub</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {notaActiva.lineas.map((l) => {
-                        const descs = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((d): d is string => !!d);
-                        return (
-                          <tr key={l.id} className="border-b border-steel-50">
-                            <td className="px-4 py-1.5 text-steel-800">
-                              <span className="font-semibold">{descs.length > 0 ? descs.join(' · ') : l.clave}</span>
-                            </td>
-                            <td className="px-2 py-1.5 text-right text-steel-700">{l.cantidad}</td>
-                            <td className="px-2 py-1.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
-                            <td className="px-4 py-1.5 text-right font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="px-4 py-2 border-t border-dashed border-steel-300 flex justify-between font-bold text-[13px] text-steel-900">
-                    <span>TOTAL</span>
-                    <span>${notaActiva.total.toFixed(2)}</span>
-                  </div>
-                  <div className="px-4 py-2 text-center text-steel-400 text-[10px]">¡Gracias por su compra!</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Captura rápida */}
-          <form onSubmit={lineaForm.handleSubmit(onAgregarLinea)} className="space-y-3">
-            <div className="relative">
-              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Buscar artículo</label>
-              <Input
-                placeholder="Clave o descripción…"
-                error={lineaForm.formState.errors.busqueda?.message}
-                {...lineaForm.register('busqueda', {
-                  onChange: (e) => buscarArticulo(e.target.value),
-                })}
-              />
-              {artSugeridos.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-steel-200 rounded-xl shadow-lg overflow-hidden">
-                  {artSugeridos.map((art) => (
-                    <button
-                      key={art.id}
-                      type="button"
-                      onClick={() => seleccionarArt(art)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors"
-                    >
-                      <div>
-                        {(() => {
-                          const d = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean).join(' · ');
-                          return <p className="text-body-sm font-semibold text-steel-900">{d || art.clave}</p>;
-                        })()}
-                        <p className="text-meta text-steel-400">{art.clave}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Cantidad</label>
-                <Input
-                  type="number" step="0.001" min="0.001"
-                  error={lineaForm.formState.errors.cantidad?.message}
-                  {...lineaForm.register('cantidad', { valueAsNumber: true })}
-                />
-              </div>
-              <div>
-                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Precio unit.</label>
-                <Input
-                  type="number" step="0.01" min="0"
-                  error={lineaForm.formState.errors.precio_unitario?.message}
-                  {...lineaForm.register('precio_unitario', { valueAsNumber: true })}
-                />
-              </div>
-              <div>
-                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Desc. %</label>
-                <Input
-                  type="number" step="0.1" min="0" max="100" placeholder="0"
-                  {...lineaForm.register('descuento', { valueAsNumber: true })}
-                />
-              </div>
-            </div>
-
-            {lineaError && (
-              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
-                <p className="text-body-sm text-brand-600">{lineaError}</p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-1">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => { setDlgLinea(false); setNotaActiva(null); loadNotas(); }}
-              >
-                Listo
-              </Button>
-              <div className="flex gap-2">
-                {notaActiva && notaActiva.lineas.length > 0 && esCotizacionActiva && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => notaActiva && generateCotizacionPDF(notaActiva)}
-                    >
-                      📄 PDF
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => { setEmailDest(notaActiva?.cliente?.email ?? ''); setEmailError(null); setEmailOk(false); setDlgEmail('cotizacion'); }}
-                    >
-                      ✉️ Enviar
-                    </Button>
-                  </>
-                )}
-                {notaActiva && notaActiva.lineas.length > 0 && !esCotizacionActiva && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
-                  >
-                    Cobrar ahora
-                  </Button>
-                )}
-                <Button type="submit" disabled={!artSeleccionado}>
-                  + Agregar
-                </Button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </Dialog>
 
       {/* ── Dialog: cobrar ────────────────────────────────── */}
       <Dialog
@@ -1400,6 +1565,7 @@ export default function VentasPage() {
                       <Input
                         type="number" step="0.01" min="0"
                         value={pago.monto}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => {
                           const next = [...pagos];
                           next[i] = { ...next[i], monto: parseFloat(e.target.value) || 0 };
@@ -1711,6 +1877,7 @@ export default function VentasPage() {
                       <Input
                         type="number" step="0.01" min="0"
                         value={pago.monto}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => {
                           const next = [...pagosAbono];
                           next[i] = { ...next[i], monto: parseFloat(e.target.value) || 0 };

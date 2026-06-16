@@ -17,6 +17,8 @@ import {
   ChevronsUpDown,
   Calculator,
   History,
+  Menu,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Wordmark } from '@/components/brand/Logo';
@@ -39,14 +41,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <LayoutDashboard className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR', 'ALMACENISTA', 'JEFE_MANUFACTURA', 'JEFE_RH'],
   },
-  // SUPER_USUARIO: solo historial (sin alta), VENDEDOR: solo captura
   {
     href: '/ventas',
     label: 'Ventas',
     icon: <ShoppingCart className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'],
   },
-  // ALMACENISTA y JEFE_MANUFACTURA gestionan inventario; SUPER_USUARIO no
   {
     href: '/inventario',
     label: 'Inventario',
@@ -59,7 +59,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <ArrowUpFromLine className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA', 'JEFE_MANUFACTURA'],
   },
-  // Clientes y Compras: operación diaria, no para SUPER ni roles de almacén/manufactura
   {
     href: '/ventas/clientes',
     label: 'Clientes',
@@ -78,7 +77,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <ClipboardList className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO'],
   },
-  // RH: solo ADMIN gestiona empleados; JEFE_RH opera el módulo
   {
     href: '/rh',
     label: 'RH',
@@ -97,7 +95,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <History className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
   },
-  // Configuración: exclusivo ADMIN (usuarios, inventario parametrizable, precios)
   {
     href: '/configuracion',
     label: 'Configuración',
@@ -111,13 +108,18 @@ export function Sidebar() {
   const router = useRouter();
   const { usuario, clearAuth } = useAuthStore();
   const { empresa, ubicacion, clearContexto } = useContextoStore();
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   function handleLogout() {
     clearAuth();
     clearContexto();
     router.push('/login');
   }
-  const [switcherOpen, setSwitcherOpen] = useState(false);
+
+  function handleNavClick() {
+    setMobileOpen(false);
+  }
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => usuario && item.roles.includes(usuario.rol),
@@ -126,78 +128,119 @@ export function Sidebar() {
   const nombreCompleto = usuario ? `${usuario.nombre} ${usuario.apellidos}` : '';
 
   return (
-    <aside className="w-56 bg-steel-900 h-screen flex flex-col sticky top-0 flex-shrink-0">
-      {/* Empresa + ubicación activa */}
-      <div className="px-4 py-4 border-b border-steel-700">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-6 h-6 rounded bg-brand-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-[9px]">EMF</span>
+    <>
+      {/* ── Botón hamburguesa (solo móvil) ── */}
+      <button
+        className="fixed top-3.5 left-4 z-50 md:hidden p-2 rounded-lg bg-steel-900 text-white shadow-md"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Abrir menú"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* ── Overlay móvil ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar ── */}
+      <aside
+        className={cn(
+          'w-56 bg-steel-900 flex flex-col flex-shrink-0',
+          // Desktop: static en el flex layout
+          'md:sticky md:top-0 md:h-screen',
+          // Móvil: drawer lateral fijo
+          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:h-full max-md:z-50',
+          'max-md:transition-transform max-md:duration-200 max-md:ease-in-out',
+          mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
+        )}
+      >
+        {/* Empresa + ubicación */}
+        <div className="px-4 py-4 border-b border-steel-700">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-brand-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-[9px]">EMF</span>
+              </div>
+              <Wordmark dark />
+            </div>
+            {/* Botón cerrar (solo móvil, dentro del drawer) */}
+            <button
+              className="md:hidden text-steel-400 hover:text-white transition-colors p-1"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <Wordmark dark />
+          {empresa && (
+            <button
+              onClick={() => setSwitcherOpen(true)}
+              data-testid="context-switcher-btn"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-steel-800 text-left mt-2"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-body-sm font-medium truncate">{empresa.nombre}</p>
+                <p className="text-steel-500 text-meta truncate">
+                  {ubicacion?.nombre ?? 'Sin ubicación'}
+                </p>
+              </div>
+              <ChevronsUpDown className="h-3.5 w-3.5 text-steel-500 flex-shrink-0" />
+            </button>
+          )}
+          <ContextSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
         </div>
-        {empresa && (
-          <button
-            onClick={() => setSwitcherOpen(true)}
-            data-testid="context-switcher-btn"
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-steel-800 text-left mt-2"
-          >
+
+        {/* Navegación */}
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+          {visibleItems.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={handleNavClick}
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-2 rounded-lg text-body transition-colors',
+                  isActive
+                    ? 'bg-brand-600 text-white font-medium'
+                    : 'text-steel-400 hover:bg-steel-800 hover:text-white',
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Usuario activo */}
+        <div className="px-4 py-3 border-t border-steel-700">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-steel-700 flex items-center justify-center flex-shrink-0">
+              <span className="text-steel-300 text-meta font-semibold">
+                {usuario?.nombre?.charAt(0) ?? '?'}
+              </span>
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-body-sm font-medium truncate">{empresa.nombre}</p>
-              <p className="text-steel-500 text-meta truncate">
-                {ubicacion?.nombre ?? 'Sin ubicación'}
+              <p className="text-white text-body-sm font-medium truncate">{nombreCompleto}</p>
+              <p className="text-steel-500 text-meta truncate capitalize">
+                {usuario?.rol?.toLowerCase().replace('_', ' ') ?? ''}
               </p>
             </div>
-            <ChevronsUpDown className="h-3.5 w-3.5 text-steel-500 flex-shrink-0" />
-          </button>
-        )}
-        <ContextSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
-      </div>
-
-      {/* Navegación */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {visibleItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-lg text-body transition-colors',
-                isActive
-                  ? 'bg-brand-600 text-white font-medium'
-                  : 'text-steel-400 hover:bg-steel-800 hover:text-white',
-              )}
+            <button
+              onClick={handleLogout}
+              className="text-steel-500 hover:text-white transition-colors"
+              title="Cerrar sesión"
             >
-              {item.icon}
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Usuario activo */}
-      <div className="px-4 py-3 border-t border-steel-700">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-steel-700 flex items-center justify-center flex-shrink-0">
-            <span className="text-steel-300 text-meta font-semibold">
-              {usuario?.nombre?.charAt(0) ?? '?'}
-            </span>
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-body-sm font-medium truncate">{nombreCompleto}</p>
-            <p className="text-steel-500 text-meta truncate capitalize">
-              {usuario?.rol?.toLowerCase().replace('_', ' ') ?? ''}
-            </p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-steel-500 hover:text-white transition-colors"
-            title="Cerrar sesión"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-          </button>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
