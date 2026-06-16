@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
+import { formatPrecio } from '@/lib/utils';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   UserCog, Users, ClipboardList, Factory, Plus, Edit2,
   ToggleLeft, ToggleRight, ChevronDown, Search, CalendarDays,
-  TrendingUp, CheckCircle, XCircle, Loader2, Layers,
+  TrendingUp, CheckCircle, XCircle, Loader2, Layers, Download, DollarSign,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
@@ -216,7 +217,22 @@ function ProgressBar({ producida, objetivo }: { producida: number; objetivo: num
 // PÁGINA PRINCIPAL
 // ════════════════════════════════════════════════════════════
 
-type Tab = 'empleados' | 'areas' | 'asistencia' | 'produccion';
+type Tab = 'empleados' | 'areas' | 'asistencia' | 'produccion' | 'nomina';
+
+interface NominaEmpleado {
+  empleado: { id: string; nombre: string; apellidos: string; puesto: string; salario_diario: number };
+  dias_trabajados: number;
+  total_registros: number;
+  salario_base: number;
+  total_sanciones: number;
+  total_a_pagar: number;
+}
+interface NominaData {
+  desde: string;
+  hasta: string;
+  empleados: NominaEmpleado[];
+  total_nomina: number;
+}
 
 export default function RhPage() {
   const { usuario } = useAuthStore();
@@ -348,10 +364,52 @@ export default function RhPage() {
     } catch { /* noop */ } finally { setLoadingOp(false); }
   }, [empresa, opEstatus]);
 
+  // Nómina
+  const [nominaData, setNominaData] = useState<NominaData | null>(null);
+  const [nominaLoading, setNominaLoading] = useState(false);
+  const [nominaDesde, setNominaDesde] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [nominaHasta, setNominaHasta] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const loadNomina = useCallback(async () => {
+    if (!empresa) return;
+    setNominaLoading(true);
+    try {
+      const d = await api.get<NominaData>(`/rh/nomina?desde=${nominaDesde}&hasta=${nominaHasta}`);
+      setNominaData(d);
+    } catch { /* noop */ } finally { setNominaLoading(false); }
+  }, [empresa, nominaDesde, nominaHasta]);
+
+  function exportNomina() {
+    if (!nominaData) return;
+    const BOM = '﻿';
+    const headers = ['Empleado', 'Puesto', 'Salario diario', 'Días trabajados', 'Salario base', 'Sanciones', 'Total a pagar'];
+    const rows = nominaData.empleados.map((e) => [
+      `${e.empleado.apellidos}, ${e.empleado.nombre}`,
+      e.empleado.puesto,
+      e.empleado.salario_diario,
+      e.dias_trabajados,
+      e.salario_base,
+      e.total_sanciones,
+      e.total_a_pagar,
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => {
+      const s = String(v);
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')).join('\r\n');
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `nomina_${nominaDesde}_${nominaHasta}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   useEffect(() => { loadAreas(); }, [loadAreas]);
   useEffect(() => { loadEmpleados(); }, [loadEmpleados]);
   useEffect(() => { if (tab === 'asistencia') loadAsistencia(); }, [tab, loadAsistencia]);
   useEffect(() => { if (tab === 'produccion') loadOrdenes(); }, [tab, loadOrdenes]);
+  useEffect(() => { if (tab === 'nomina') void loadNomina(); }, [tab, loadNomina]);
 
   // ── Handlers — Empleados ──────────────────────────────────
 
@@ -589,6 +647,7 @@ export default function RhPage() {
           { key: 'areas',      label: 'Áreas',      icon: <Layers className="h-3.5 w-3.5" /> },
           { key: 'asistencia', label: 'Asistencia', icon: <CalendarDays className="h-3.5 w-3.5" /> },
           { key: 'produccion', label: 'Producción', icon: <Factory className="h-3.5 w-3.5" /> },
+          { key: 'nomina',     label: 'Nómina',     icon: <DollarSign className="h-3.5 w-3.5" /> },
         ] as const).map(({ key, label, icon }) => (
           <button
             key={key}
@@ -887,7 +946,7 @@ export default function RhPage() {
                   <div>
                     {r.sancion_monto ? (
                       <div title={r.sancion_concepto ?? ''}>
-                        <span className="text-red-600 font-semibold text-body-sm">-${r.sancion_monto.toFixed(2)}</span>
+                        <span className="text-red-600 font-semibold text-body-sm">-{formatPrecio(r.sancion_monto)}</span>
                       </div>
                     ) : <span className="text-steel-400 text-meta">—</span>}
                   </div>
@@ -904,6 +963,122 @@ export default function RhPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════ TAB NÓMINA ═══════════════════ */}
+      {tab === 'nomina' && (
+        <div className="space-y-4">
+          {/* Filtros de período */}
+          <div className="flex flex-wrap items-end gap-3 bg-white border border-steel-200 rounded-xl p-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px]">Desde</label>
+              <input
+                type="date"
+                value={nominaDesde}
+                onChange={(e) => setNominaDesde(e.target.value)}
+                className="border border-steel-200 rounded-lg px-3 py-2 text-body-sm text-steel-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px]">Hasta</label>
+              <input
+                type="date"
+                value={nominaHasta}
+                onChange={(e) => setNominaHasta(e.target.value)}
+                className="border border-steel-200 rounded-lg px-3 py-2 text-body-sm text-steel-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <Button size="sm" onClick={() => void loadNomina()} disabled={nominaLoading}>
+              {nominaLoading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5 mr-1.5" />}
+              Calcular
+            </Button>
+            {nominaData && (
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={exportNomina}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                CSV
+              </Button>
+            )}
+          </div>
+
+          {nominaLoading && (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 text-brand-600 animate-spin" />
+            </div>
+          )}
+
+          {nominaData && !nominaLoading && (
+            <>
+              {/* Total */}
+              <div className="bg-brand-600 rounded-xl px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-body-sm text-brand-200">Total nómina</p>
+                  <p className="text-display-md font-bold text-white tabular-nums">
+                    {formatPrecio(nominaData.total_nomina)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-body-sm text-brand-200">Período</p>
+                  <p className="text-body font-medium text-white">{nominaData.desde} → {nominaData.hasta}</p>
+                </div>
+              </div>
+
+              {/* Tabla */}
+              <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100 bg-steel-50">
+                      <th className="px-4 py-2.5 text-left font-medium text-steel-500">Empleado</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-steel-500">Salario/día</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-steel-500">Días trab.</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-steel-500">Base</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-steel-500">Sanciones</th>
+                      <th className="px-4 py-2.5 text-right font-medium text-steel-500">A pagar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {nominaData.empleados.map((e) => (
+                      <tr key={e.empleado.id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium text-steel-900">{e.empleado.apellidos}, {e.empleado.nombre}</p>
+                          <p className="text-meta text-steel-400">{e.empleado.puesto}</p>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-steel-600">
+                          {formatPrecio(e.empleado.salario_diario)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-steel-600">
+                          {e.dias_trabajados} / {e.total_registros}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-steel-700">
+                          {formatPrecio(e.salario_base)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-red-600">
+                          {e.total_sanciones > 0 ? `-${formatPrecio(e.total_sanciones)}` : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-bold text-steel-900">
+                          {formatPrecio(e.total_a_pagar)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-steel-200 bg-steel-50">
+                      <td className="px-4 py-2.5 font-semibold text-steel-700" colSpan={5}>Total nómina</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-bold text-brand-700">
+                        {formatPrecio(nominaData.total_nomina)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+
+          {!nominaData && !nominaLoading && (
+            <div className="text-center py-12 text-body-sm text-steel-400">
+              Selecciona el período y presiona Calcular
             </div>
           )}
         </div>

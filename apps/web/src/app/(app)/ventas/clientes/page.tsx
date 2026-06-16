@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, formatPrecio } from '@/lib/utils';
 
 const ClienteSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres'),
@@ -151,6 +151,7 @@ export default function ClientesVentasPage() {
         referencia: abonarRef || undefined,
       });
       setAbonarResult(result);
+      void printAbonoTicket(result, dlgCuenta);
       setShowAbonarCuenta(false);
       // Refresh movements + client list
       await refreshCuenta(dlgCuenta);
@@ -293,9 +294,9 @@ export default function ClientesVentasPage() {
                   )}
                   {c.limite_credito > 0 && (
                     <span className="text-meta text-steel-400">
-                      límite ${c.limite_credito.toFixed(2)}
+                      límite {formatPrecio(c.limite_credito)}
                       {c.saldo_pendiente > 0 && (
-                        <span className="text-brand-600"> · saldo ${c.saldo_pendiente.toFixed(2)}</span>
+                        <span className="text-brand-600"> · saldo {formatPrecio(c.saldo_pendiente)}</span>
                       )}
                     </span>
                   )}
@@ -420,7 +421,7 @@ export default function ClientesVentasPage() {
                             'text-body-sm font-semibold',
                             m.tipo === 'CARGO' ? 'text-brand-600' : 'text-green-600',
                           )}>
-                            {m.tipo === 'CARGO' ? '+' : '−'}${m.monto.toFixed(2)}
+                            {m.tipo === 'CARGO' ? '+' : '−'}{formatPrecio(m.monto)}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -428,7 +429,7 @@ export default function ClientesVentasPage() {
                             'text-body-sm font-semibold',
                             m.saldo_despues > 0 ? 'text-brand-600' : 'text-steel-600',
                           )}>
-                            ${m.saldo_despues.toFixed(2)}
+                            {formatPrecio(m.saldo_despues)}
                           </span>
                         </td>
                       </tr>
@@ -485,7 +486,7 @@ export default function ClientesVentasPage() {
                       <div key={n.nota_id} className="flex items-center justify-between py-0.5">
                         <span className="text-steel-600">Nota #{String(n.folio).padStart(4, '0')}</span>
                         <div className="text-right">
-                          <span className="text-steel-800 font-semibold">${n.monto_pagado.toFixed(2)}</span>
+                          <span className="text-steel-800 font-semibold">{formatPrecio(n.monto_pagado)}</span>
                           <span className={cn(
                             'ml-2 text-[10px] font-bold',
                             n.nuevo_estatus === 'PAGADA' ? 'text-green-600' : 'text-amber-600',
@@ -500,12 +501,12 @@ export default function ClientesVentasPage() {
                   <div className="px-4 py-2 border-t border-dashed border-steel-300 space-y-0.5">
                     <div className="flex justify-between font-bold text-[13px] text-steel-900">
                       <span>TOTAL ABONADO</span>
-                      <span>${abonarResult.total_aplicado.toFixed(2)}</span>
+                      <span>{formatPrecio(abonarResult.total_aplicado)}</span>
                     </div>
                     {Number(abonarResult.cliente.saldo_pendiente) > 0 ? (
                       <div className="flex justify-between text-amber-700 font-semibold">
                         <span>SALDO PENDIENTE</span>
-                        <span>${Number(abonarResult.cliente.saldo_pendiente).toFixed(2)}</span>
+                        <span>{formatPrecio(Number(abonarResult.cliente.saldo_pendiente))}</span>
                       </div>
                     ) : (
                       <div className="text-center text-green-700 font-bold text-[12px] pt-0.5">
@@ -515,7 +516,7 @@ export default function ClientesVentasPage() {
                   </div>
                   {abonarResult.sobrante > 0 && (
                     <div className="px-4 py-1.5 bg-amber-50 text-amber-700 text-[10px] text-center">
-                      Sobrante ${abonarResult.sobrante.toFixed(2)} — no había más notas en crédito
+                      Sobrante {formatPrecio(abonarResult.sobrante)} — no había más notas en crédito
                     </div>
                   )}
                   <div className="px-4 py-2 text-center text-steel-400 text-[10px]">¡Gracias por su pago!</div>

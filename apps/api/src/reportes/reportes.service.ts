@@ -515,6 +515,110 @@ export class ReportesService {
     };
   }
 
+  // ── Corte de caja ──────────────────────────────────────────
+
+  async getCorteCaja(
+    empresaId: string,
+    opts: { desde?: string; hasta?: string; ubicacionId?: string },
+  ) {
+    const desde = opts.desde ? new Date(opts.desde) : startOfDay(new Date());
+    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+
+    const baseWhere = {
+      empresa_id: empresaId,
+      created_at: { gte: desde, lte: hasta },
+      ...(opts.ubicacionId ? { ubicacion_id: opts.ubicacionId } : {}),
+    };
+
+    const [notas, pagosGrouped, abonosAgg] = await Promise.all([
+      this.prisma.notaVenta.findMany({
+        where: { ...baseWhere, estatus: { in: ['PAGADA', 'CREDITO'] } },
+        include: {
+          cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
+          pagos:   { select: { metodo: true, monto: true } },
+        },
+        orderBy: { created_at: 'asc' },
+      }),
+      this.prisma.pago.groupBy({
+        by: ['metodo'],
+        where: {
+          nota: {
+            empresa_id: empresaId,
+            estatus: { in: ['PAGADA', 'CREDITO'] },
+            created_at: { gte: desde, lte: hasta },
+            ...(opts.ubicacionId ? { ubicacion_id: opts.ubicacionId } : {}),
+          },
+        },
+        _sum: { monto: true },
+        _count: { _all: true },
+      }),
+      this.prisma.movimientoCuenta.aggregate({
+        where: {
+          empresa_id: empresaId,
+          tipo:       'ABONO',
+          created_at: { gte: desde, lte: hasta },
+        },
+        _sum:   { monto: true },
+        _count: true,
+      }),
+    ]);
+
+    const porMetodo: Record<string, { count: number; total: number }> = {};
+    for (const p of pagosGrouped) {
+      porMetodo[p.metodo] = {
+        count: p._count._all,
+        total: +dec(p._sum?.monto).toFixed(2),
+      };
+    }
+
+    const porEstatusMap = new Map<string, { count: number; total: number }>();
+    for (const n of notas) {
+      const key = n.estatus;
+      const cur = porEstatusMap.get(key) ?? { count: 0, total: 0 };
+      cur.count += 1;
+      cur.total  = +(cur.total + dec(n.total)).toFixed(2);
+      porEstatusMap.set(key, cur);
+    }
+
+    const totalCobrado = Object.values(porMetodo).reduce((s, m) => s + m.total, 0);
+    const totalAbonos  = dec(abonosAgg._sum?.monto);
+
+    return {
+      desde:           desde.toISOString().slice(0, 10),
+      hasta:           hasta.toISOString().slice(0, 10),
+      total_cobrado:   +totalCobrado.toFixed(2),
+      total_abonos:    +totalAbonos.toFixed(2),
+      notas_count:     notas.length,
+      por_metodo:      porMetodo,
+      por_estatus:     Object.fromEntries(porEstatusMap),
+      abonos_count:    abonosAgg._count,
+      notas: notas.map((n) => serializeDecimal(n)),
+    };
+  }
+
+  // ── Auditoría ──────────────────────────────────────────────
+
+  async getAuditoria(
+    empresaId: string,
+    opts: { entidad?: string; usuarioId?: string; page: number; limit: number },
+  ) {
+    const where = {
+      empresa_id: empresaId,
+      ...(opts.entidad   ? { entidad:    opts.entidad   } : {}),
+      ...(opts.usuarioId ? { usuario_id: opts.usuarioId } : {}),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip:  (opts.page - 1) * opts.limit,
+        take:  opts.limit,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+    return { data, total, page: opts.page, limit: opts.limit, pages: Math.ceil(total / opts.limit) };
+  }
+
   // ── Asistencia ─────────────────────────────────────────────
 
   async getReporteAsistencia(

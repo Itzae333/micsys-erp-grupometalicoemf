@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   BarChart3, ShoppingCart, Package, Users, Truck, Factory, UserCog,
-  Download, RefreshCw, TrendingUp, AlertTriangle,
+  Download, RefreshCw, TrendingUp, AlertTriangle, Printer, Landmark,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Badge } from '@/components/ui/badge';
@@ -151,12 +151,13 @@ function DateRangeBar({
 // ── Tab helpers ───────────────────────────────────────────────
 
 const TABS = [
-  { id: 'ventas',      label: 'Ventas',      icon: <ShoppingCart className="h-4 w-4" /> },
-  { id: 'inventario',  label: 'Inventario',  icon: <Package className="h-4 w-4" /> },
-  { id: 'credito',     label: 'Crédito',     icon: <Users className="h-4 w-4" /> },
-  { id: 'compras',     label: 'Compras',     icon: <Truck className="h-4 w-4" /> },
-  { id: 'produccion',  label: 'Producción',  icon: <Factory className="h-4 w-4" /> },
-  { id: 'asistencia',  label: 'RH',          icon: <UserCog className="h-4 w-4" /> },
+  { id: 'ventas',      label: 'Ventas',       icon: <ShoppingCart className="h-4 w-4" /> },
+  { id: 'inventario',  label: 'Inventario',   icon: <Package className="h-4 w-4" /> },
+  { id: 'credito',     label: 'Crédito',      icon: <Users className="h-4 w-4" /> },
+  { id: 'compras',     label: 'Compras',      icon: <Truck className="h-4 w-4" /> },
+  { id: 'produccion',  label: 'Producción',   icon: <Factory className="h-4 w-4" /> },
+  { id: 'asistencia',  label: 'RH',           icon: <UserCog className="h-4 w-4" /> },
+  { id: 'corte_caja',  label: 'Corte de Caja',icon: <Landmark className="h-4 w-4" /> },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -955,6 +956,251 @@ function TabAsistencia({ desde, hasta }: { desde: string; hasta: string }) {
   );
 }
 
+// ── Corte de Caja ─────────────────────────────────────────────
+
+interface CorteCajaData {
+  desde: string;
+  hasta: string;
+  total_cobrado: number;
+  total_abonos: number;
+  notas_count: number;
+  abonos_count: number;
+  por_metodo: Record<string, { count: number; total: number }>;
+  por_estatus: Record<string, { count: number; total: number }>;
+  notas: {
+    id: string;
+    folio: string | null;
+    estatus: string;
+    total: number;
+    created_at: string;
+    cliente?: { nombre: string; apellidos: string; razon_social: string | null } | null;
+    pagos: { metodo: string; monto: number }[];
+  }[];
+}
+
+function TabCorteCaja({ desde, hasta }: { desde: string; hasta: string }) {
+  const [data, setData] = useState<CorteCajaData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await api.get<CorteCajaData>(`/reportes/corte-caja?desde=${desde}&hasta=${hasta}`);
+      setData(d);
+    } catch { setData(null); }
+    finally { setLoading(false); }
+  }, [desde, hasta]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const doExport = () => {
+    if (!data) return;
+    exportCSV('corte_caja',
+      ['Folio', 'Estatus', 'Cliente', 'Total', 'Métodos', 'Fecha'],
+      data.notas.map((n) => [
+        n.folio ?? n.id.slice(-6),
+        n.estatus,
+        n.cliente
+          ? n.cliente.razon_social ?? `${n.cliente.nombre} ${n.cliente.apellidos}`
+          : 'Público general',
+        n.total,
+        n.pagos.map((p) => `${METODO_LABEL[p.metodo] ?? p.metodo} $${p.monto}`).join(' | '),
+        fmtDia(n.created_at.slice(0, 10)),
+      ]),
+    );
+  };
+
+  const printCorte = async () => {
+    if (!data) return;
+    setPrinting(true);
+    try {
+      const cfg = typeof window !== 'undefined'
+        ? JSON.parse(localStorage.getItem('print_bridge_config') ?? '{}')
+        : {};
+      const lines: string[] = [
+        '='.repeat(32),
+        '     CORTE DE CAJA',
+        `Desde: ${fmtDia(data.desde)}  Hasta: ${fmtDia(data.hasta)}`,
+        '='.repeat(32),
+        ...Object.entries(data.por_metodo).map(
+          ([m, v]) => `${(METODO_LABEL[m] ?? m).padEnd(14)} ${fmt(v.total).padStart(12)} (${v.count})`,
+        ),
+        '-'.repeat(32),
+        `TOTAL COBRADO   ${fmt(data.total_cobrado).padStart(12)}`,
+        `Abonos cta.     ${fmt(data.total_abonos).padStart(12)}`,
+        `Notas           ${String(data.notas_count).padStart(12)}`,
+        '='.repeat(32),
+      ];
+      await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'texto', texto: lines.join('\n'), copias: cfg.copias ?? 1 }),
+        signal: AbortSignal.timeout(6000),
+      });
+    } catch { /* ticketera puede no estar disponible */ }
+    finally { setPrinting(false); }
+  };
+
+  if (loading) return <div className="p-8 text-center text-steel-400">Cargando…</div>;
+  if (!data)   return <div className="p-8 text-center text-steel-400">Sin datos</div>;
+
+  const metodos = Object.entries(data.por_metodo).filter(([, v]) => v.count > 0);
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatMini label="Total cobrado" value={fmt(data.total_cobrado)} accent />
+        <StatMini label="Abonos a crédito" value={fmt(data.total_abonos)} sub={`${data.abonos_count} movimientos`} />
+        <StatMini label="Notas cerradas" value={String(data.notas_count)} />
+        <StatMini label="Promedio por nota"
+          value={data.notas_count > 0 ? fmt(data.total_cobrado / data.notas_count) : '$0.00'} />
+      </div>
+
+      {/* Por método + acciones */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
+            <SectionTitle>Por método de pago</SectionTitle>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => void printCorte()} disabled={printing}>
+                <Printer className={`h-3.5 w-3.5 mr-1.5 ${printing ? 'animate-pulse' : ''}`} />
+                {printing ? 'Imprimiendo…' : 'Imprimir corte'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={doExport}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />CSV
+              </Button>
+            </div>
+          </div>
+          {metodos.length === 0 ? (
+            <div className="p-8 text-center text-body-sm text-steel-400">Sin pagos en el período</div>
+          ) : (
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Método</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {metodos.map(([m, v]) => (
+                  <tr key={m} className="hover:bg-steel-50">
+                    <td className="px-4 py-2 text-steel-700">{METODO_LABEL[m] ?? m}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-steel-500">{v.count}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium text-steel-900">{fmt(v.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-steel-200 bg-steel-50">
+                  <td className="px-4 py-2 font-semibold text-steel-900">Total</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-steel-900">{data.notas_count}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-steel-900">{fmt(data.total_cobrado)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+
+        {/* Por estatus */}
+        <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-steel-100"><SectionTitle>Por estatus</SectionTitle></div>
+          {Object.keys(data.por_estatus).length === 0 ? (
+            <div className="p-8 text-center text-body-sm text-steel-400">Sin datos</div>
+          ) : (
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Estatus</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {Object.entries(data.por_estatus).map(([e, v]) => (
+                  <tr key={e} className="hover:bg-steel-50">
+                    <td className="px-4 py-2">
+                      <Badge variant={NOTA_CFG[e]?.variant ?? 'default'}>
+                        {NOTA_CFG[e]?.label ?? e}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-steel-500">{v.count}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium text-steel-900">{fmt(v.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Detalle notas */}
+      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-steel-100">
+          <SectionTitle>Detalle de notas ({data.notas_count})</SectionTitle>
+        </div>
+        {data.notas.length === 0 ? (
+          <div className="p-8 text-center text-body-sm text-steel-400">Sin notas en el período</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100 bg-steel-50">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Folio</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Estatus</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Métodos</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Fecha</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {data.notas.map((n) => (
+                  <tr key={n.id} className="hover:bg-steel-50">
+                    <td className="px-4 py-2 font-mono text-meta text-steel-500">
+                      {n.folio ?? n.id.slice(-8)}
+                    </td>
+                    <td className="px-4 py-2 text-steel-700 truncate max-w-[160px]">
+                      {n.cliente
+                        ? n.cliente.razon_social ?? `${n.cliente.nombre} ${n.cliente.apellidos}`
+                        : <span className="text-steel-400">Público general</span>}
+                    </td>
+                    <td className="px-4 py-2">
+                      <Badge variant={NOTA_CFG[n.estatus]?.variant ?? 'default'}>
+                        {NOTA_CFG[n.estatus]?.label ?? n.estatus}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2 text-meta text-steel-500">
+                      {n.pagos.map((p) => `${METODO_LABEL[p.metodo] ?? p.metodo}`).join(', ')}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium text-steel-900">
+                      {fmt(n.total)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-meta text-steel-400 tabular-nums whitespace-nowrap">
+                      {fmtDia(n.created_at.slice(0, 10))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-steel-200 bg-steel-50">
+                  <td colSpan={4} className="px-4 py-2 font-semibold text-steel-900">Total</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-brand-700">
+                    {fmt(data.total_cobrado)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 
 export default function ReportesPage() {
@@ -963,7 +1209,7 @@ export default function ReportesPage() {
   const [hasta, setHasta] = useState(hoy);
   const [applied, setApplied] = useState({ desde: iniMes(), hasta: hoy() });
 
-  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia';
+  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja';
 
   const handleApply = () => setApplied({ desde, hasta });
 
@@ -1010,12 +1256,13 @@ export default function ReportesPage() {
         )}
 
         {/* Tab content */}
-        {tab === 'ventas'     && <TabVentas     desde={applied.desde} hasta={applied.hasta} />}
-        {tab === 'inventario' && <TabInventario />}
-        {tab === 'credito'    && <TabCredito />}
-        {tab === 'compras'    && <TabCompras    desde={applied.desde} hasta={applied.hasta} />}
-        {tab === 'produccion' && <TabProduccion desde={applied.desde} hasta={applied.hasta} />}
-        {tab === 'asistencia' && <TabAsistencia desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'ventas'      && <TabVentas     desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'inventario'  && <TabInventario />}
+        {tab === 'credito'     && <TabCredito />}
+        {tab === 'compras'     && <TabCompras    desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'produccion'  && <TabProduccion desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'asistencia'  && <TabAsistencia desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'corte_caja'  && <TabCorteCaja  desde={applied.desde} hasta={applied.hasta} />}
       </div>
     </div>
   );

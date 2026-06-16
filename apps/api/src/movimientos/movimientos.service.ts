@@ -52,6 +52,7 @@ export class MovimientosService {
 
   async registrarEntrada(dto: EntradaDto, empresaId: string, usuarioId: string) {
     const articulo = await this.findArticulo(dto.articulo_id, empresaId);
+    if (!(articulo as any).activo) throw new BadRequestException('El artículo está inactivo');
     if (dto.proveedor_id) await this.checkProveedor(dto.proveedor_id, empresaId);
 
     const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
@@ -88,13 +89,7 @@ export class MovimientosService {
   async registrarSalida(dto: SalidaDto, empresaId: string, usuarioId: string) {
     const articulo = await this.findArticulo(dto.articulo_id, empresaId);
 
-    const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
-    if (cantidadAntes < dto.cantidad) {
-      throw new BadRequestException(
-        `Existencia insuficiente (slot ${dto.existencia_num}): hay ${cantidadAntes}, se requieren ${dto.cantidad}`,
-      );
-    }
-
+    const cantidadAntes   = this.getExistencia(articulo, dto.existencia_num);
     const cantidadDespues = cantidadAntes - dto.cantidad;
 
     return this.prisma.$transaction(async (tx) => {
@@ -125,20 +120,14 @@ export class MovimientosService {
   // ─── Registrar transferencia ──────────────────────────────────
 
   async registrarTransferencia(dto: TransferenciaDto, empresaId: string, usuarioId: string) {
-    if (dto.existencia_num_origen === dto.existencia_num_destino) {
-      throw new BadRequestException('El slot de origen y destino deben ser diferentes');
-    }
+    // if (dto.existencia_num_origen === dto.existencia_num_destino) {
+    //   throw new BadRequestException('El slot de origen y destino deben ser diferentes');
+    // }
 
     const articulo = await this.findArticulo(dto.articulo_id, empresaId);
 
     const cantAntes    = this.getExistencia(articulo, dto.existencia_num_origen);
     const cantAntesDst = this.getExistencia(articulo, dto.existencia_num_destino);
-
-    if (cantAntes < dto.cantidad) {
-      throw new BadRequestException(
-        `Existencia insuficiente (slot ${dto.existencia_num_origen}): hay ${cantAntes}, se requieren ${dto.cantidad}`,
-      );
-    }
 
     const refId    = randomUUID();
     const concepto = dto.concepto ?? 'Transferencia interna';

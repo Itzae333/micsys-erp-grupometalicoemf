@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+import { formatPrecio } from '@/lib/utils';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -31,7 +32,7 @@ export default function CreditoPage() {
         {!loading && cuentas.length > 0 && (
           <div className="text-right">
             <p className="text-body-sm text-steel-400">Total pendiente</p>
-            <p className="text-display-sm font-bold text-brand-600">${totalSaldo.toFixed(2)}</p>
+            <p className="text-display-sm font-bold text-brand-600">{formatPrecio(totalSaldo)}</p>
           </div>
         )}
       </div>
@@ -81,7 +82,7 @@ export default function CreditoPage() {
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <p className="text-body font-semibold text-steel-900 truncate">{nombre}</p>
                     <p className={`text-body font-bold flex-shrink-0 ${sobreLimite ? 'text-red-600' : 'text-steel-900'}`}>
-                      ${c.saldo_pendiente.toFixed(2)}
+                      {formatPrecio(c.saldo_pendiente)}
                     </p>
                   </div>
 
@@ -91,7 +92,7 @@ export default function CreditoPage() {
                     </p>
                     {c.limite_credito > 0 && (
                       <p className="text-meta text-steel-400 flex-shrink-0">
-                        límite ${c.limite_credito.toFixed(2)}
+                        límite {formatPrecio(c.limite_credito)}
                       </p>
                     )}
                   </div>

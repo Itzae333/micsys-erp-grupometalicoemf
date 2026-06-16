@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn, formatPrecio } from '@/lib/utils';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -110,6 +110,7 @@ export default function VentasPage() {
     tipoCierre: string;
     pagos: { metodo: string; monto: number; referencia: string }[];
     cambio: number;
+    printStatus?: 'printing' | 'ok' | 'error';
   } | null>(null);
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
@@ -485,12 +486,14 @@ export default function VentasPage() {
     tipoCierre: 'PAGADA' | 'CREDITO' | 'PENDIENTE',
     pagosList: { metodo: string; monto: number; referencia: string }[],
     cambioFinal: number,
-  ) {
+    copias = 1,
+  ): Promise<boolean> {
     const totalPagadoNota = (nota.pagos ?? []).reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoNota).toFixed(2));
 
     const payload = {
       tipo: 'venta',
+      copias,
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',
@@ -540,10 +543,13 @@ export default function VentasPage() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
         console.warn('[ventas] Error print bridge:', err.error);
+        return false;
       }
+      return true;
     } catch {
       // Bridge no disponible — no bloquear la UI
       console.warn('[ventas] Print bridge no disponible en localhost:7788');
+      return false;
     }
   }
 
@@ -760,8 +766,11 @@ export default function VentasPage() {
       setNotaActiva(null);
       void loadNotas();
       void refreshDetalleNota();
-      // Guardar snapshot para que el usuario elija cómo recibir el comprobante
-      setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap });
+      // Auto-imprimir 2 copias inmediatamente — dialog muestra el estado
+      setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap, printStatus: 'printing' });
+      void printTicket(notaSnap, tipoCierre, pagosSnap, cambioSnap, 2).then((ok) => {
+        setPostCobro((prev) => prev ? { ...prev, printStatus: ok ? 'ok' : 'error' } : prev);
+      });
     } catch (err) {
       setCobrandoError(err instanceof Error ? err.message : 'Error al procesar');
     } finally {
@@ -876,7 +885,7 @@ export default function VentasPage() {
               )}
               {!esCotizacionActiva && notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
-                  Cobrar — ${notaActiva.total.toFixed(2)}
+                  Cobrar — {formatPrecio(notaActiva.total)}
                 </Button>
               )}
             </div>
@@ -943,7 +952,7 @@ export default function VentasPage() {
                               {art.existencia_1 ?? 0}
                             </td>
                             <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                              <span className="font-semibold text-steel-900">${precio.toFixed(2)}</span>
+                              <span className="font-semibold text-steel-900">{formatPrecio(precio)}</span>
                               {enCarrito && (
                                 <span className="ml-2 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
                                   x{enCarrito.cantidad}
@@ -1030,7 +1039,7 @@ export default function VentasPage() {
                               />
                             </td>
                             <td className="px-4 py-2.5 text-right font-semibold text-steel-900 whitespace-nowrap">
-                              ${l.subtotal.toFixed(2)}
+                              {formatPrecio(l.subtotal)}
                             </td>
                             <td className="px-2 py-2.5">
                               <button
@@ -1053,7 +1062,7 @@ export default function VentasPage() {
                     {notaActiva.lineas.length} artículo{notaActiva.lineas.length !== 1 ? 's' : ''}
                   </span>
                   <span className="text-display-sm font-bold text-steel-900">
-                    ${notaActiva.total.toFixed(2)}
+                    {formatPrecio(notaActiva.total)}
                   </span>
                 </div>
                 {!esCotizacionActiva && (
@@ -1063,7 +1072,7 @@ export default function VentasPage() {
                       disabled={notaActiva.lineas.length === 0}
                       onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
                     >
-                      Cobrar ${notaActiva.total.toFixed(2)}
+                      Cobrar {formatPrecio(notaActiva.total)}
                     </Button>
                   </div>
                 )}
@@ -1235,7 +1244,7 @@ export default function VentasPage() {
                             <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <span className="font-semibold text-steel-900">${nota.total.toFixed(2)}</span>
+                            <span className="font-semibold text-steel-900">{formatPrecio(nota.total)}</span>
                           </td>
                         </tr>
                       );
@@ -1338,8 +1347,8 @@ export default function VentasPage() {
                                 <p className="text-meta text-steel-400">{l.clave}</p>
                               </td>
                               <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
-                              <td className="px-3 py-2.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
-                              <td className="px-4 py-2.5 text-right font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
+                              <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_unitario)}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
                             </tr>
                           );
                         })}
@@ -1347,7 +1356,7 @@ export default function VentasPage() {
                       <tfoot className="border-t-2 border-steel-200 bg-steel-50">
                         <tr>
                           <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
-                          <td className="px-4 py-2.5 text-right font-bold text-steel-900">${detalleNota.total.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -1481,17 +1490,17 @@ export default function VentasPage() {
                 <span className="text-body-sm text-steel-500">
                   {notaActiva.lineas.length} artículo{notaActiva.lineas.length !== 1 ? 's' : ''}
                 </span>
-                <span className="text-body-sm text-steel-500">Subtotal ${notaActiva.subtotal.toFixed(2)}</span>
+                <span className="text-body-sm text-steel-500">Subtotal {formatPrecio(notaActiva.subtotal)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-body font-semibold text-steel-900">Total a cobrar</span>
-                <span className="text-display-sm font-bold text-steel-900">${notaActiva.total.toFixed(2)}</span>
+                <span className="text-display-sm font-bold text-steel-900">{formatPrecio(notaActiva.total)}</span>
               </div>
               {notaActiva.cliente && (
                 <p className="text-meta text-steel-500 mt-1">
                   Cliente: {notaActiva.cliente.razon_social ?? `${notaActiva.cliente.nombre} ${notaActiva.cliente.apellidos ?? ''}`.trim()}
                   {notaActiva.cliente.limite_credito > 0 && (
-                    <span className="ml-2 text-steel-400">· límite ${notaActiva.cliente.limite_credito.toFixed(2)}</span>
+                    <span className="ml-2 text-steel-400">· límite {formatPrecio(notaActiva.cliente.limite_credito)}</span>
                   )}
                 </p>
               )}
@@ -1618,32 +1627,32 @@ export default function VentasPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-body-sm text-steel-500">Cargo a cuenta de crédito</span>
-                    <span className="text-body font-semibold text-brand-600">${notaActiva.total.toFixed(2)}</span>
+                    <span className="text-body font-semibold text-brand-600">{formatPrecio(notaActiva.total)}</span>
                   </div>
                 </>
               ) : checkNotaPorPagar ? (
                 <div className="flex items-center justify-between">
                   <span className="text-body-sm text-steel-500">Pendiente de cobrar</span>
-                  <span className="text-body font-semibold text-steel-700">${notaActiva.total.toFixed(2)}</span>
+                  <span className="text-body font-semibold text-steel-700">{formatPrecio(notaActiva.total)}</span>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-body-sm text-steel-500">Total pagado</span>
                     <span className={cn('text-body font-semibold', totalPagos >= notaActiva.total ? 'text-steel-900' : 'text-steel-600')}>
-                      ${totalPagos.toFixed(2)}
+                      {formatPrecio(totalPagos)}
                     </span>
                   </div>
                   {cambio > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-body-sm text-steel-500">Cambio</span>
-                      <span className="text-body font-semibold text-steel-900">${cambio.toFixed(2)}</span>
+                      <span className="text-body font-semibold text-steel-900">{formatPrecio(cambio)}</span>
                     </div>
                   )}
                   {saldoCredito > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-body-sm text-steel-500">Saldo a crédito</span>
-                      <span className="text-body font-semibold text-brand-600">${saldoCredito.toFixed(2)}</span>
+                      <span className="text-body font-semibold text-brand-600">{formatPrecio(saldoCredito)}</span>
                     </div>
                   )}
                 </>
@@ -1710,8 +1719,8 @@ export default function VentasPage() {
                               <span className="font-semibold">{descs.length > 0 ? descs.join(' · ') : l.clave}</span>
                             </td>
                             <td className="px-2 py-1.5 text-right text-steel-700">{l.cantidad}</td>
-                            <td className="px-2 py-1.5 text-right text-steel-700">${l.precio_unitario.toFixed(2)}</td>
-                            <td className="px-4 py-1.5 text-right font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
+                            <td className="px-2 py-1.5 text-right text-steel-700">{formatPrecio(l.precio_unitario)}</td>
+                            <td className="px-4 py-1.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
                           </tr>
                         );
                       })}
@@ -1719,30 +1728,30 @@ export default function VentasPage() {
                   </table>
                   <div className="px-4 py-2 border-t border-dashed border-steel-300 flex justify-between font-bold text-[13px] text-steel-900">
                     <span>TOTAL</span>
-                    <span>${notaActiva.total.toFixed(2)}</span>
+                    <span>{formatPrecio(notaActiva.total)}</span>
                   </div>
                   {checkCredito ? (
                     <div className="px-4 py-1.5 border-t border-dashed border-steel-200 flex justify-between text-steel-500">
                       <span>A CRÉDITO</span>
-                      <span>${notaActiva.total.toFixed(2)}</span>
+                      <span>{formatPrecio(notaActiva.total)}</span>
                     </div>
                   ) : checkNotaPorPagar ? (
                     <div className="px-4 py-1.5 border-t border-dashed border-steel-200 flex justify-between text-steel-500">
                       <span>PENDIENTE DE COBRO</span>
-                      <span>${notaActiva.total.toFixed(2)}</span>
+                      <span>{formatPrecio(notaActiva.total)}</span>
                     </div>
                   ) : (
                     <>
                       {pagos.filter((p) => p.monto > 0).map((p, i) => (
                         <div key={i} className="px-4 py-1 border-t border-dashed border-steel-200 flex justify-between text-steel-600">
                           <span>{METODO_LABEL[p.metodo] ?? p.metodo}</span>
-                          <span>${p.monto.toFixed(2)}</span>
+                          <span>{formatPrecio(p.monto)}</span>
                         </div>
                       ))}
                       {cambio > 0 && (
                         <div className="px-4 py-1 border-t border-dashed border-steel-200 flex justify-between text-steel-500">
                           <span>CAMBIO</span>
-                          <span>${cambio.toFixed(2)}</span>
+                          <span>{formatPrecio(cambio)}</span>
                         </div>
                       )}
                     </>
@@ -1761,14 +1770,14 @@ export default function VentasPage() {
             {checkCredito && notaActiva.cliente_id && !excedeLimite && (
               <div className="bg-steel-50 border border-steel-200 rounded-md px-3 py-2">
                 <p className="text-body-sm text-steel-600">
-                  Se cargará <span className="font-semibold text-steel-900">${notaActiva.total.toFixed(2)}</span> a la cuenta del cliente.
+                  Se cargará <span className="font-semibold text-steel-900">{formatPrecio(notaActiva.total)}</span> a la cuenta del cliente.
                 </p>
               </div>
             )}
             {excedeLimite && (
               <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
                 <p className="text-body-sm text-brand-600">
-                  Excede el límite de crédito. Saldo actual: ${clienteCredito!.saldo_pendiente.toFixed(2)} · Límite: ${clienteCredito!.limite_credito.toFixed(2)}
+                  Excede el límite de crédito. Saldo actual: {formatPrecio(clienteCredito!.saldo_pendiente)} · Límite: {formatPrecio(clienteCredito!.limite_credito)}
                 </p>
               </div>
             )}
@@ -1782,7 +1791,7 @@ export default function VentasPage() {
             {saldoCredito > 0 && !checkCredito && !checkNotaPorPagar && notaActiva.cliente_id && (
               <div className="bg-steel-50 border border-steel-200 rounded-md px-3 py-2">
                 <p className="text-body-sm text-steel-600">
-                  El saldo de <span className="font-semibold text-steel-900">${saldoCredito.toFixed(2)}</span> se cargará a la cuenta del cliente.
+                  El saldo de <span className="font-semibold text-steel-900">{formatPrecio(saldoCredito)}</span> se cargará a la cuenta del cliente.
                 </p>
               </div>
             )}
@@ -1840,17 +1849,17 @@ export default function VentasPage() {
                 </p>
                 <div className="flex items-center justify-between">
                   <span className="text-body-sm text-amber-700">Total de la nota</span>
-                  <span className="text-body font-semibold text-amber-900">${dlgAbonar.total.toFixed(2)}</span>
+                  <span className="text-body font-semibold text-amber-900">{formatPrecio(dlgAbonar.total)}</span>
                 </div>
                 {pagado > 0 && (
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-body-sm text-amber-600">Ya pagado</span>
-                    <span className="text-body-sm text-amber-600">−${pagado.toFixed(2)}</span>
+                    <span className="text-body-sm text-amber-600">−{formatPrecio(pagado)}</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between mt-1 pt-1 border-t border-amber-200">
                   <span className="text-body font-semibold text-amber-900">Saldo pendiente</span>
-                  <span className="text-display-sm font-bold text-amber-700">${saldoNota.toFixed(2)}</span>
+                  <span className="text-display-sm font-bold text-amber-700">{formatPrecio(saldoNota)}</span>
                 </div>
               </div>
 
@@ -1924,14 +1933,14 @@ export default function VentasPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-body-sm text-steel-500">Total a abonar</span>
                   <span className={cn('text-body font-semibold', totalAbono > saldoNota ? 'text-amber-600' : 'text-steel-900')}>
-                    ${totalAbono.toFixed(2)}
+                    {formatPrecio(totalAbono)}
                   </span>
                 </div>
                 {totalAbono >= saldoNota && saldoNota > 0 && (
                   <p className="text-body-sm text-green-600 font-medium">✓ La nota quedará como pagada</p>
                 )}
                 {totalAbono > saldoNota && (
-                  <p className="text-meta text-amber-600">El excedente no se aplica — el abono máximo es ${saldoNota.toFixed(2)}</p>
+                  <p className="text-meta text-amber-600">El excedente no se aplica — el abono máximo es {formatPrecio(saldoNota)}</p>
                 )}
               </div>
 
@@ -1971,7 +1980,7 @@ export default function VentasPage() {
                     {/* Total de la nota */}
                     <div className="px-4 py-2 flex justify-between font-bold text-[13px] text-steel-900">
                       <span>TOTAL NOTA</span>
-                      <span>${dlgAbonar.total.toFixed(2)}</span>
+                      <span>{formatPrecio(dlgAbonar.total)}</span>
                     </div>
                     {/* Separador */}
                     <div className="px-4"><div className="border-t border-dashed border-steel-300" /></div>
@@ -1982,7 +1991,7 @@ export default function VentasPage() {
                         {pagosAbono.filter((p) => p.monto > 0).map((p, i) => (
                           <div key={i} className="px-4 py-0.5 flex justify-between text-steel-700">
                             <span>{METODO_LABEL[p.metodo] ?? p.metodo}</span>
-                            <span>${p.monto.toFixed(2)}</span>
+                            <span>{formatPrecio(p.monto)}</span>
                           </div>
                         ))}
                       </>
@@ -1993,7 +2002,7 @@ export default function VentasPage() {
                     ) : totalAbono > 0 ? (
                       <div className="px-4 py-1.5 flex justify-between text-amber-700 font-semibold">
                         <span>SALDO PENDIENTE</span>
-                        <span>${(saldoNota - Math.min(totalAbono, saldoNota)).toFixed(2)}</span>
+                        <span>{formatPrecio(saldoNota - Math.min(totalAbono, saldoNota))}</span>
                       </div>
                     ) : null}
                     <div className="px-4 py-2 text-center text-steel-400 text-[10px]">¡Gracias por su pago!</div>
@@ -2037,7 +2046,7 @@ export default function VentasPage() {
                 ? (dlgReimprimir.cliente.razon_social ?? `${dlgReimprimir.cliente.nombre} ${dlgReimprimir.cliente.apellidos ?? ''}`.trim())
                 : 'Mostrador'}
               {' · '}
-              <span className="font-semibold text-steel-700">${dlgReimprimir.total.toFixed(2)}</span>
+              <span className="font-semibold text-steel-700">{formatPrecio(dlgReimprimir.total)}</span>
             </p>
             <Button
               variant="secondary"
@@ -2156,10 +2165,10 @@ export default function VentasPage() {
             <div className="bg-steel-50 rounded-xl px-4 py-3 text-body-sm">
               <p className="text-steel-700 mb-1">
                 Nota <strong>#{String(postCobro.nota.folio).padStart(4, '0')}</strong>
-                {' · '}Total <strong>${postCobro.nota.total.toFixed(2)}</strong>
+                {' · '}Total <strong>{formatPrecio(postCobro.nota.total)}</strong>
               </p>
               {esAbono && totalAbonado > 0 && (
-                <p className="text-green-700">Abono registrado: <strong>${totalAbonado.toFixed(2)}</strong></p>
+                <p className="text-green-700">Abono registrado: <strong>{formatPrecio(totalAbonado)}</strong></p>
               )}
               {postCobro.tipoCierre === 'CREDITO' && saldoRestante > 0 ? (
                 <p className="text-amber-700 font-semibold">Saldo pendiente: ${saldoRestante.toFixed(2)} — Estatus: CRÉDITO</p>
@@ -2167,6 +2176,18 @@ export default function VentasPage() {
                 <p className="text-green-700 font-semibold">✓ Nota liquidada — Estatus: PAGADA</p>
               )}
             </div>
+            {postCobro.printStatus === 'printing' && (
+              <p className="text-body-sm text-steel-500 flex items-center gap-2">
+                <span className="inline-block w-3.5 h-3.5 border-2 border-steel-300 border-t-brand-600 rounded-full animate-spin flex-shrink-0" />
+                Imprimiendo 2 copias…
+              </p>
+            )}
+            {postCobro.printStatus === 'ok' && (
+              <p className="text-body-sm text-green-700 font-medium">🖨️ Ticket impreso · 2 copias</p>
+            )}
+            {postCobro.printStatus === 'error' && (
+              <p className="text-body-sm text-amber-700">⚠ Ticketera sin respuesta — usa el botón para reintentar</p>
+            )}
             <p className="text-body-sm text-steel-500">¿Cómo deseas entregar el comprobante?</p>
             <div className="grid grid-cols-1 gap-2">
               <Button
@@ -2177,7 +2198,7 @@ export default function VentasPage() {
                   setPostCobro(null);
                 }}
               >
-                🖨️ Imprimir ticket (ticketera)
+                🖨️ {postCobro.printStatus === 'ok' ? 'Reimprimir ticket' : 'Imprimir ticket (ticketera)'}
               </Button>
               <Button
                 variant="secondary"

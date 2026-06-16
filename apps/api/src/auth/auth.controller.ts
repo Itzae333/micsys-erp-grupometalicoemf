@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Delete,
   Get,
   Body,
   Req,
@@ -92,5 +93,26 @@ export class AuthController {
   @ApiOperation({ summary: 'Usuario autenticado + permisos' })
   me(@CurrentUser() user: JwtPayload) {
     return this.auth.me(user.sub);
+  }
+
+  @Get('sessions')
+  @ApiBearerAuth()
+  @SkipEmpresaUbicacion()
+  @ApiOperation({ summary: 'Sesiones activas del usuario autenticado' })
+  getSessions(@CurrentUser() user: JwtPayload) {
+    return this.auth.getSessions(user.sub);
+  }
+
+  @Delete('sessions')
+  @ApiBearerAuth()
+  @SkipEmpresaUbicacion()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revocar todas las sesiones (salvo la actual)' })
+  async revokeAllSessions(
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ) {
+    const currentToken = (req as unknown as { cookies?: Record<string, string> }).cookies?.['refresh_token'];
+    await this.auth.revokeAllSessions(user.sub, currentToken);
   }
 }

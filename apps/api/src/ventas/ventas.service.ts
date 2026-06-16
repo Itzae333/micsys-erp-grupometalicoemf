@@ -144,6 +144,7 @@ export class VentasService {
       where: { id: dto.articulo_id, empresa_id: empresaId },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
+    if (!art.activo) throw new BadRequestException('El artículo está inactivo');
 
     const subtotal = this.calcSubtotal(dto.cantidad, dto.precio_unitario, dto.descuento ?? 0);
 

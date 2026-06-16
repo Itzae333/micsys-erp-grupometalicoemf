@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, formatPrecio } from '@/lib/utils';
 
 const ArticuloSchema = z.object({
   clave: z.string().min(1, 'Requerido').max(40),
@@ -324,7 +324,7 @@ export default function InventarioPage() {
                     return (
                       <td key={p.numero} className="px-3 py-2.5 text-right">
                         <span className="text-table text-steel-800 font-medium tabular-nums">
-                          {val !== null && val !== undefined ? `$${val.toFixed(2)}` : '—'}
+                          {val !== null && val !== undefined ? formatPrecio(val) : '—'}
                         </span>
                       </td>
                     );

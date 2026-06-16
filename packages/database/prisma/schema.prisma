@@ -787,3 +787,26 @@ model LegacyVentaLinea {
 
   @@map("legacy_venta_lineas")
 }
+
+// ─────────────────────────────────────────────────────────────
+// AUDITORÍA
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  empresa_id   String?
+  usuario_id   String?
+  usuario_name String?
+  accion       String
+  entidad      String
+  entidad_id   String?
+  cambios      Json?
+  ip           String?
+  user_agent   String?
+  created_at   DateTime @default(now())
+
+  @@index([empresa_id, created_at(sort: Desc)])
+  @@index([entidad, entidad_id])
+  @@index([usuario_id])
+  @@map("audit_logs")
+}

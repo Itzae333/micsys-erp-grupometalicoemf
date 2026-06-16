@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Plus, TrendingDown, TrendingUp, SlidersHorizontal } from 'lucide-react';
+import { formatPrecio } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -132,10 +133,10 @@ export default function CuentaClientePage() {
           <div className="text-right">
             <p className="text-body-sm text-steel-400 mb-0.5">Saldo pendiente</p>
             <p className={`text-display-sm font-bold ${cliente.saldo_pendiente > 0 ? 'text-brand-600' : 'text-green-600'}`}>
-              ${cliente.saldo_pendiente.toFixed(2)}
+              {formatPrecio(cliente.saldo_pendiente)}
             </p>
             {cliente.limite_credito > 0 && (
-              <p className="text-meta text-steel-400">límite ${cliente.limite_credito.toFixed(2)}</p>
+              <p className="text-meta text-steel-400">límite {formatPrecio(cliente.limite_credito)}</p>
             )}
           </div>
         )}
@@ -187,7 +188,7 @@ export default function CuentaClientePage() {
           <div className="flex items-center justify-between mb-2">
             <p className="text-body-sm font-medium text-steel-700">Uso de línea de crédito</p>
             <p className="text-body-sm text-steel-500">
-              ${cliente.saldo_pendiente.toFixed(2)} / ${cliente.limite_credito.toFixed(2)}
+              {formatPrecio(cliente.saldo_pendiente)} / {formatPrecio(cliente.limite_credito)}
             </p>
           </div>
           <div className="h-2 bg-steel-100 rounded-full overflow-hidden">
@@ -263,9 +264,9 @@ export default function CuentaClientePage() {
 
                   <div className="text-right flex-shrink-0">
                     <p className={`text-body font-bold ${m.tipo === 'ABONO' ? 'text-green-600' : 'text-steel-900'}`}>
-                      {m.tipo === 'ABONO' ? '-' : '+'}${m.monto.toFixed(2)}
+                      {m.tipo === 'ABONO' ? '-' : '+'}{formatPrecio(m.monto)}
                     </p>
-                    <p className="text-meta text-steel-400">saldo ${m.saldo_despues.toFixed(2)}</p>
+                    <p className="text-meta text-steel-400">saldo {formatPrecio(m.saldo_despues)}</p>
                   </div>
                 </div>
               );
@@ -295,7 +296,7 @@ export default function CuentaClientePage() {
               {...regAbono('monto', { valueAsNumber: true })}
             />
             {cliente && (
-              <p className="text-meta text-steel-400 mt-1">Saldo actual: ${cliente.saldo_pendiente.toFixed(2)}</p>
+              <p className="text-meta text-steel-400 mt-1">Saldo actual: {formatPrecio(cliente.saldo_pendiente)}</p>
             )}
           </div>
           <div>

@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, History } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
-import { formatFechaCorta } from '@/lib/utils';
+import { formatFechaCorta, formatPrecio } from '@/lib/utils';
 
 interface LineaLegacy {
   id: string;
@@ -100,15 +100,15 @@ export default function DetalleVentaLegacyPage() {
         </div>
         <div>
           <p className="text-caption text-steel-500">Total</p>
-          <p className="text-body font-bold text-steel-900">${venta.total.toFixed(2)}</p>
+          <p className="text-body font-bold text-steel-900">{formatPrecio(venta.total)}</p>
         </div>
         <div>
           <p className="text-caption text-steel-500">Recibido</p>
-          <p className="text-body font-medium text-green-700">${venta.recibido.toFixed(2)}</p>
+          <p className="text-body font-medium text-green-700">{formatPrecio(venta.recibido)}</p>
         </div>
         <div>
           <p className="text-caption text-steel-500">Restan</p>
-          <p className="text-body font-medium text-amber-700">${venta.restan.toFixed(2)}</p>
+          <p className="text-body font-medium text-amber-700">{formatPrecio(venta.restan)}</p>
         </div>
         {venta.nota && (
           <div className="col-span-2">
@@ -144,15 +144,15 @@ export default function DetalleVentaLegacyPage() {
                 <tr key={l.id}>
                   <td className="px-4 py-3 text-steel-900">{descripcion(l) || '—'}</td>
                   <td className="px-4 py-3 text-right text-steel-700">{l.cantidad}</td>
-                  <td className="px-4 py-3 text-right text-steel-700">${l.precio_neto.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-steel-900">${l.total.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-steel-700">{formatPrecio(l.precio_neto)}</td>
+                  <td className="px-4 py-3 text-right font-medium text-steel-900">{formatPrecio(l.total)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="border-t-2 border-steel-200 bg-steel-50">
               <tr>
                 <td colSpan={3} className="px-4 py-3 text-right font-semibold text-steel-900">Total</td>
-                <td className="px-4 py-3 text-right font-bold text-steel-900">${venta.total.toFixed(2)}</td>
+                <td className="px-4 py-3 text-right font-bold text-steel-900">{formatPrecio(venta.total)}</td>
               </tr>
             </tfoot>
           </table>

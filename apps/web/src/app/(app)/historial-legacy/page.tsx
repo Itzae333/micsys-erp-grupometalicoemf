@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,8 +7,7 @@ import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
-import { formatFechaCorta } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { cn, formatFechaCorta, formatPrecio } from '@/lib/utils';
 
 interface VentaLegacy {
   id: string;
@@ -270,7 +269,7 @@ export default function HistorialLegacyPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right font-medium text-steel-900">
-                          ${v.total.toFixed(2)}
+                          {formatPrecio(v.total)}
                         </td>
                         <td className="px-3 py-2.5">
                           <span className={cn(
@@ -345,16 +344,16 @@ export default function HistorialLegacyPage() {
                 </div>
                 <div>
                   <p className="text-caption text-steel-500">Total</p>
-                  <p className="text-body font-bold text-steel-900">${detalle.total.toFixed(2)}</p>
+                  <p className="text-body font-bold text-steel-900">{formatPrecio(detalle.total)}</p>
                 </div>
                 <div>
                   <p className="text-caption text-steel-500">Recibido</p>
-                  <p className="text-body font-medium text-green-700">${detalle.recibido.toFixed(2)}</p>
+                  <p className="text-body font-medium text-green-700">{formatPrecio(detalle.recibido)}</p>
                 </div>
                 {detalle.restan > 0 && (
                   <div>
                     <p className="text-caption text-steel-500">Restan</p>
-                    <p className="text-body font-medium text-amber-700">${detalle.restan.toFixed(2)}</p>
+                    <p className="text-body font-medium text-amber-700">{formatPrecio(detalle.restan)}</p>
                   </div>
                 )}
                 {detalle.nota && (
@@ -387,15 +386,15 @@ export default function HistorialLegacyPage() {
                       <tr key={l.id}>
                         <td className="px-4 py-2.5 text-steel-900">{descripcionLinea(l) || '—'}</td>
                         <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
-                        <td className="px-3 py-2.5 text-right text-steel-700">${l.precio_neto.toFixed(2)}</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-steel-900">${l.total.toFixed(2)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_neto)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-steel-900">{formatPrecio(l.total)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="border-t-2 border-steel-200 bg-steel-50">
                     <tr>
                       <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-steel-900">${detalle.total.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalle.total)}</td>
                     </tr>
                   </tfoot>
                 </table>

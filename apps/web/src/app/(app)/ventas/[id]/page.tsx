@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn, formatPrecio } from '@/lib/utils';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' }> = {
   ABIERTA:   { label: 'Abierta',   variant: 'pending' },
@@ -81,6 +81,9 @@ export default function NotaDetallePage() {
 
   // Lightbox
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  // Reimprimir
+  const [printing, setPrinting] = useState(false);
 
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
@@ -194,6 +197,68 @@ export default function NotaDetallePage() {
       load();
     } catch {} finally {
       setCancelando(false);
+    }
+  }
+
+  // ── Reimprimir ticket ──────────────────────────────────────
+  async function printTicketNota() {
+    if (!nota) return;
+    const tipoCierre = nota.estatus === 'CREDITO' ? 'CREDITO' : 'PAGADA';
+    const totalPagadoCalc = nota.pagos.reduce((s, p) => s + p.monto, 0);
+    const saldoRestante = Math.max(0, +(nota.total - totalPagadoCalc).toFixed(2));
+
+    const payload = {
+      tipo: 'venta',
+      copias: 1,
+      empresa: { nombre: empresa?.nombre ?? '' },
+      ubicacion: {
+        nombre: ubicacion?.nombre ?? '',
+        razon_social: ubicacion?.razon_social ?? null,
+        rfc: ubicacion?.rfc ?? null,
+        telefono: ubicacion?.telefono ?? null,
+        direccion: null,
+      },
+      nota: {
+        folio: String(nota.folio).padStart(4, '0'),
+        fecha: new Date(nota.created_at).toLocaleDateString('es-MX', {
+          day: '2-digit', month: 'short', year: 'numeric',
+        }),
+        cliente: nota.cliente
+          ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
+          : null,
+      },
+      lineas: nota.lineas.map((l) => ({
+        clave: l.clave,
+        descripcion: [
+          l.articulo?.descripcion_1, l.articulo?.descripcion_2,
+          l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5,
+        ].filter((d): d is string => !!d).join(' · ') || null,
+        cantidad: l.cantidad,
+        precio: l.precio_unitario,
+        subtotal: l.subtotal,
+      })),
+      totales: { subtotal: nota.subtotal, total: nota.total },
+      pagos: nota.pagos.map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
+      cambio: 0,
+      tipo_cierre: tipoCierre,
+      saldo_restante: tipoCierre === 'CREDITO' ? saldoRestante : 0,
+    };
+
+    setPrinting(true);
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // Bridge no disponible — no bloquear la UI
+    } finally {
+      setPrinting(false);
     }
   }
 
@@ -348,9 +413,9 @@ export default function NotaDetallePage() {
             </>
           )}
           {esCerrada && (
-            <Button variant="secondary">
-              <Printer className="h-4 w-4 mr-1.5" />
-              Ticket
+            <Button variant="secondary" disabled={printing} onClick={() => void printTicketNota()}>
+              <Printer className={`h-4 w-4 mr-1.5 ${printing ? 'animate-pulse' : ''}`} />
+              {printing ? 'Imprimiendo…' : 'Reimprimir'}
             </Button>
           )}
           {['ABIERTA', 'PENDIENTE'].includes(nota.estatus) && canCancel && (
@@ -452,9 +517,9 @@ export default function NotaDetallePage() {
                     <p className="text-meta text-steel-500">{l.articulo?.descripcion_1 ?? ''}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad}</td>
-                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">${l.precio_unitario.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">{formatPrecio(l.precio_unitario)}</td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-500">{l.descuento > 0 ? `${l.descuento}%` : '—'}</td>
-                  <td className="px-4 py-3 text-right text-body-sm font-semibold text-steel-900">${l.subtotal.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-body-sm font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
                   {nota.estatus === 'ABIERTA' && canWrite && (
                     <td className="px-4 py-3">
                       <button
@@ -472,7 +537,7 @@ export default function NotaDetallePage() {
         )}
         <div className="border-t border-steel-200 px-4 py-3 bg-steel-50 flex items-center justify-between">
           <span className="text-body-sm text-steel-500">Total</span>
-          <span className="text-display-sm font-bold text-steel-900">${nota.total.toFixed(2)}</span>
+          <span className="text-display-sm font-bold text-steel-900">{formatPrecio(nota.total)}</span>
         </div>
       </div>
 
@@ -508,7 +573,7 @@ export default function NotaDetallePage() {
                           {METODO_LABEL[pago.metodo]}
                           {pago.referencia && <span className="text-steel-400 font-normal"> — {pago.referencia}</span>}
                         </p>
-                        <span className="text-body font-semibold text-steel-900">${pago.monto.toFixed(2)}</span>
+                        <span className="text-body font-semibold text-steel-900">{formatPrecio(pago.monto)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
                         <p className="text-meta text-steel-400">{fmtFecha(pago.created_at)}</p>
@@ -533,7 +598,7 @@ export default function NotaDetallePage() {
                     <p className="text-body-sm font-medium text-steel-900">{METODO_LABEL[p.metodo]}</p>
                     {p.referencia && <p className="text-meta text-steel-400">{p.referencia}</p>}
                   </div>
-                  <span className="text-body font-semibold text-steel-900">${p.monto.toFixed(2)}</span>
+                  <span className="text-body font-semibold text-steel-900">{formatPrecio(p.monto)}</span>
                 </div>
               ))}
             </div>
@@ -544,7 +609,7 @@ export default function NotaDetallePage() {
             <div className="border-t border-steel-200 px-4 py-3 bg-steel-50 space-y-1">
               <div className="flex items-center justify-between text-body-sm text-steel-500">
                 <span>Total nota</span>
-                <span className="font-medium text-steel-700">${nota.total.toFixed(2)}</span>
+                <span className="font-medium text-steel-700">{formatPrecio(nota.total)}</span>
               </div>
               <div className="flex items-center justify-between text-body-sm text-steel-500">
                 <span>Cobrado</span>
@@ -714,7 +779,7 @@ export default function NotaDetallePage() {
             <div className="bg-steel-50 rounded-lg px-3 py-2 text-body-sm text-steel-700">
               Subtotal estimado:{' '}
               <span className="font-semibold">
-                ${(lineaCantidad * lineaPrecio * (1 - lineaDesc / 100)).toFixed(2)}
+                {formatPrecio(lineaCantidad * lineaPrecio * (1 - lineaDesc / 100))}
               </span>
             </div>
           )}
@@ -740,7 +805,7 @@ export default function NotaDetallePage() {
           <div className="space-y-4">
             <div className="bg-steel-50 rounded-xl p-4 flex items-center justify-between">
               <span className="text-body font-semibold text-steel-900">Total</span>
-              <span className="text-display-sm font-bold text-steel-900">${nota.total.toFixed(2)}</span>
+              <span className="text-display-sm font-bold text-steel-900">{formatPrecio(nota.total)}</span>
             </div>
 
             <div className="space-y-3">
@@ -788,7 +853,7 @@ export default function NotaDetallePage() {
               <div className="flex items-center justify-between">
                 <span className="text-body-sm text-steel-500">Total pagado</span>
                 <span className={cn('text-body font-semibold', totalPagos >= nota.total ? 'text-steel-900' : 'text-brand-600')}>
-                  ${totalPagos.toFixed(2)}
+                  {formatPrecio(totalPagos)}
                 </span>
               </div>
               {cambio > 0 && (

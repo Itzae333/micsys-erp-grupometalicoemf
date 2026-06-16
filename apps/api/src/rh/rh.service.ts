@@ -479,4 +479,82 @@ export class RhService {
     const updated = await this.prisma.ordenProduccion.update({ where: { id }, data: { estatus: 'CANCELADA' } });
     return serializeDecimal(updated);
   }
+
+  // ── Nómina ─────────────────────────────────────────────────
+
+  async getNomina(empresaId: string, opts: { desde?: string; hasta?: string }) {
+    const desde = opts.desde ? new Date(opts.desde) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const hasta = opts.hasta
+      ? new Date(new Date(opts.hasta).setHours(23, 59, 59, 999))
+      : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const empleados = await this.prisma.empleado.findMany({
+      where: { empresa_id: empresaId, activo: true },
+      include: { area: { select: { id: true, nombre: true, tipo_pago: true } } },
+      orderBy: [{ apellidos: 'asc' }, { nombre: 'asc' }],
+    });
+
+    const resultados = await Promise.all(
+      empleados.map(async (emp) => {
+        const registros = await this.prisma.registroAsistencia.findMany({
+          where: {
+            empresa_id:  empresaId,
+            empleado_id: emp.id,
+            fecha:       { gte: desde, lte: hasta },
+          },
+          select: {
+            fecha:           true,
+            estatus:         true,
+            minutos_tarde:   true,
+            sancion_monto:   true,
+            sancion_concepto: true,
+          },
+        });
+
+        const diasTrabajados = registros.filter(
+          (r) => r.estatus === 'PRESENTE' || r.estatus === 'TARDANZA',
+        ).length;
+
+        const totalSanciones = registros.reduce(
+          (s, r) => s + Number(r.sancion_monto ?? 0), 0,
+        );
+
+        const salarioDiario = Number(emp.salario_diario);
+        const salarioBase   = +(salarioDiario * diasTrabajados).toFixed(2);
+        const totalAPagar   = +Math.max(0, salarioBase - totalSanciones).toFixed(2);
+
+        return {
+          empleado: {
+            id:       emp.id,
+            nombre:   emp.nombre,
+            apellidos: emp.apellidos,
+            puesto:   emp.puesto,
+            area:     emp.area,
+            salario_diario: salarioDiario,
+          },
+          dias_trabajados: diasTrabajados,
+          total_registros: registros.length,
+          salario_base:    salarioBase,
+          total_sanciones: +totalSanciones.toFixed(2),
+          total_a_pagar:   totalAPagar,
+          detalle:         registros.map((r) => ({
+            fecha:           r.fecha,
+            estatus:         r.estatus,
+            minutos_tarde:   r.minutos_tarde,
+            sancion_monto:   Number(r.sancion_monto ?? 0),
+            sancion_concepto: r.sancion_concepto,
+          })),
+        };
+      }),
+    );
+
+    const totalNomina = +resultados.reduce((s, e) => s + e.total_a_pagar, 0).toFixed(2);
+
+    return {
+      desde:        desde.toISOString().slice(0, 10),
+      hasta:        hasta.toISOString().slice(0, 10),
+      empleados:    resultados,
+      total_nomina: totalNomina,
+    };
+  }
 }

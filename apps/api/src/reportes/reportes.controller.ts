@@ -83,4 +83,41 @@ export class ReportesController {
   ) {
     return this.reportes.getReporteAsistencia(empresaId, { desde, hasta });
   }
+
+  @Get('corte-caja')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Corte de caja por rango de fechas' })
+  @ApiQuery({ name: 'desde',       required: false })
+  @ApiQuery({ name: 'hasta',       required: false })
+  @ApiQuery({ name: 'ubicacionId', required: false })
+  getCorteCaja(
+    @Headers('x-empresa-id') empresaId: string,
+    @Query('desde')       desde?: string,
+    @Query('hasta')       hasta?: string,
+    @Query('ubicacionId') ubicacionId?: string,
+  ) {
+    return this.reportes.getCorteCaja(empresaId, { desde, hasta, ubicacionId });
+  }
+
+  @Get('auditoria')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @ApiOperation({ summary: 'Log de auditoría — solo ADMIN/SUPER_USUARIO' })
+  @ApiQuery({ name: 'entidad',   required: false })
+  @ApiQuery({ name: 'usuarioId', required: false })
+  @ApiQuery({ name: 'page',      required: false })
+  @ApiQuery({ name: 'limit',     required: false })
+  getAuditoria(
+    @Headers('x-empresa-id') empresaId: string,
+    @Query('entidad')   entidad?: string,
+    @Query('usuarioId') usuarioId?: string,
+    @Query('page')      page?: string,
+    @Query('limit')     limit?: string,
+  ) {
+    return this.reportes.getAuditoria(empresaId, {
+      entidad,
+      usuarioId,
+      page:  page  ? Number(page) : 1,
+      limit: limit ? Math.min(Number(limit), 100) : 50,
+    });
+  }
 }

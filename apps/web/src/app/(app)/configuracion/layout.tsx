@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, Users, Columns3, DatabaseZap } from 'lucide-react';
+import { Building2, Users, Columns3, DatabaseZap, Printer, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -43,6 +43,18 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
       matchPrefix: '/configuracion/migracion',
       label: 'Migración',
       icon: <DatabaseZap className="h-3.5 w-3.5" />,
+    },
+    {
+      href: '/configuracion/ticketera',
+      matchPrefix: '/configuracion/ticketera',
+      label: 'Ticketera',
+      icon: <Printer className="h-3.5 w-3.5" />,
+    },
+    {
+      href: '/configuracion/auditoria',
+      matchPrefix: '/configuracion/auditoria',
+      label: 'Auditoría',
+      icon: <Shield className="h-3.5 w-3.5" />,
     },
   ];
 

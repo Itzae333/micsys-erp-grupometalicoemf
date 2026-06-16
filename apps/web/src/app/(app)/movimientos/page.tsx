@@ -390,9 +390,13 @@ export default function MovimientosPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant={cfg.variant}>{cfg.label}</Badge>
                     {m.articulo && (
-                      <span className="text-body-sm text-steel-800 font-medium truncate">
-                        {m.articulo.clave}{m.articulo.descripcion_1 ? ` — ${m.articulo.descripcion_1}` : ''}
-                      </span>
+                      <div className="min-w-0">
+                        <p className="text-body-sm font-bold text-steel-900 truncate">
+                          {[m.articulo.descripcion_1, m.articulo.descripcion_2]
+                            .filter((x): x is string => !!x).join(' · ') || m.articulo.clave}
+                        </p>
+                        <p className="text-meta text-steel-400 font-mono">{m.articulo.clave}</p>
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">

@@ -224,4 +224,19 @@ export class RhController {
   cancelarOrden(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
     return this.rh.cancelarOrden(id, empresaId);
   }
+
+  // ── Nómina ─────────────────────────────────────────────────
+
+  @Get('nomina')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'JEFE_RH')
+  @ApiOperation({ summary: 'Calcular nómina del período' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  getNomina(
+    @Headers('x-empresa-id') empresaId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.rh.getNomina(empresaId, { desde, hasta });
+  }
 }

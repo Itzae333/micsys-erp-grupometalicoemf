@@ -220,13 +220,15 @@ export function Sidebar() {
         {/* Usuario activo */}
         <div className="px-4 py-3 border-t border-steel-700">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-steel-700 flex items-center justify-center flex-shrink-0">
+            <Link href="/perfil" onClick={handleNavClick} className="w-7 h-7 rounded-full bg-steel-700 flex items-center justify-center flex-shrink-0 hover:bg-steel-600 transition-colors" title="Mi perfil">
               <span className="text-steel-300 text-meta font-semibold">
                 {usuario?.nombre?.charAt(0) ?? '?'}
               </span>
-            </div>
+            </Link>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-body-sm font-medium truncate">{nombreCompleto}</p>
+              <Link href="/perfil" onClick={handleNavClick} className="block">
+                <p className="text-white text-body-sm font-medium truncate hover:text-brand-300 transition-colors">{nombreCompleto}</p>
+              </Link>
               <p className="text-steel-500 text-meta truncate capitalize">
                 {usuario?.rol?.toLowerCase().replace('_', ' ') ?? ''}
               </p>

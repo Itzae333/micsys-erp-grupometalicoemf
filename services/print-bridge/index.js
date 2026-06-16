@@ -95,11 +95,13 @@ app.post('/print', async (req, res) => {
   if (!ticket || !ticket.tipo) {
     return res.status(400).json({ error: 'Payload inválido. Se requiere campo "tipo".' });
   }
+  const copias = Math.max(1, Math.min(5, Number(ticket.copias) || 1));
   try {
     const buffer = buildEscPosBuffer(ticket);
-    await sendToPrinter(buffer);
-    console.log(`[print-bridge] OK tipo=${ticket.tipo} folio=${ticket.nota?.folio} bytes=${buffer.length}`);
-    res.json({ ok: true, bytes: buffer.length });
+    const printBuffer = copias === 1 ? buffer : Buffer.concat(Array.from({ length: copias }, () => buffer));
+    await sendToPrinter(printBuffer);
+    console.log(`[print-bridge] OK tipo=${ticket.tipo} folio=${ticket.nota?.folio} bytes=${buffer.length} copias=${copias}`);
+    res.json({ ok: true, bytes: buffer.length, copias });
   } catch (err) {
     console.error('[print-bridge] Error al imprimir:', err.message);
     res.status(500).json({ error: err.message });

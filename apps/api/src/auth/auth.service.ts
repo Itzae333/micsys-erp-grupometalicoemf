@@ -121,6 +121,23 @@ export class AuthService {
       });
   }
 
+  async getSessions(userId: string) {
+    return this.prisma.refreshToken.findMany({
+      where: { usuario_id: userId, revocado: false, expires_at: { gt: new Date() } },
+      select: { id: true, created_at: true, expires_at: true },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async revokeAllSessions(userId: string, exceptToken?: string) {
+    const where: { usuario_id: string; revocado: boolean; token?: { not: string } } = {
+      usuario_id: userId,
+      revocado: false,
+    };
+    if (exceptToken) where.token = { not: exceptToken };
+    await this.prisma.refreshToken.updateMany({ where, data: { revocado: true } });
+  }
+
   async me(userId: string) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: userId },

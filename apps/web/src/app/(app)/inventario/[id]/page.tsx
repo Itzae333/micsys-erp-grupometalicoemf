@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
-import { formatFecha } from '@/lib/utils';
+import { formatFecha, formatPrecio } from '@/lib/utils';
 
 const PreciosSchema = z.object({
   precio_1: z.coerce.number().min(0).optional(),
@@ -262,7 +262,7 @@ export default function ArticuloDetailPage() {
                   <div key={p.numero} className="flex items-center justify-between">
                     <dt className="text-body-sm text-steel-600">{p.label}</dt>
                     <dd className="text-body font-semibold text-steel-900 tabular-nums">
-                      {val !== null && val !== undefined ? `$${val.toFixed(2)}` : '—'}
+                      {val !== null && val !== undefined ? formatPrecio(val) : '—'}
                     </dd>
                   </div>
                 );
