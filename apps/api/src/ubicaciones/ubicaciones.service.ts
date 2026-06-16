@@ -59,6 +59,16 @@ export class UbicacionesService {
     });
   }
 
+  async updateLogo(empresaId: string, id: string, logoUrl: string | null, user: JwtPayload) {
+    this.checkEmpresaAccess(empresaId, user);
+    await this.findOne(empresaId, id, user);
+
+    return this.prisma.ubicacion.update({
+      where: { id },
+      data: { logo_url: logoUrl },
+    });
+  }
+
   private checkEmpresaAccess(empresaId: string, user: JwtPayload) {
     if (user.rol === 'SUPER_USUARIO') return;
     if (user.empresa_id !== empresaId) {

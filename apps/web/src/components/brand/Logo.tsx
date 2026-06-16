@@ -90,3 +90,41 @@ export function Wordmark({ dark = false }: { dark?: boolean }) {
     </span>
   );
 }
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3001';
+
+// Resuelve rutas relativas del servidor de uploads; URLs absolutas pasan sin cambio
+function resolveLogoUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url}`;
+}
+
+// Logo dinámico por empresa — usa logo_url si está definido, o cae a wordmark
+interface EmpresaLogoProps {
+  logo_url?: string | null;
+  empresa_nombre?: string;
+  className?: string;
+}
+
+export function EmpresaLogo({ logo_url, empresa_nombre, className }: EmpresaLogoProps) {
+  if (logo_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={resolveLogoUrl(logo_url)}
+        alt={empresa_nombre ?? 'Logo empresa'}
+        className={cn('object-contain max-h-8 max-w-[140px]', className)}
+      />
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-6 h-6 rounded bg-brand-600 flex items-center justify-center flex-shrink-0">
+        <span className="text-white font-bold text-[9px]">EMF</span>
+      </div>
+      <Wordmark dark />
+    </div>
+  );
+}
+
+export { resolveLogoUrl };

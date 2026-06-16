@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
+import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' }> = {
   ABIERTA:   { label: 'Abierta',   variant: 'pending' },
@@ -207,9 +208,13 @@ export default function NotaDetallePage() {
     const totalPagadoCalc = nota.pagos.reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoCalc).toFixed(2));
 
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+
     const payload = {
       tipo: 'venta',
       copias: 1,
+      logo_escpos_b64,
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',

@@ -166,6 +166,51 @@ function sep(char = '-') {
   return Buffer.from(char.repeat(config.columns) + '\n', 'latin1');
 }
 
+/**
+ * Imprime el header de empresa/ubicación.
+ * Si el ticket trae logo_escpos_b64, inserta el bitmap ESC/POS.
+ * Si no, imprime el nombre de empresa en texto bold grande.
+ */
+function pushHeader(ticket, push) {
+  push(CMD.ALIGN_CENTER);
+  if (ticket.logo_escpos_b64) {
+    try {
+      push(Buffer.from(ticket.logo_escpos_b64, 'base64'));
+      push(CMD.FEED(1));
+    } catch {
+      // Si el base64 es inválido, caer a texto
+      push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+      push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
+      push(CMD.NORMAL, CMD.BOLD_OFF);
+    }
+  } else {
+    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+    push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
+    push(CMD.NORMAL, CMD.BOLD_OFF);
+  }
+}
+
+/**
+ * Imprime un QR code usando el comando GS ( k (función PDF417/QR2).
+ * Soportado en impresoras Epson TM y compatibles.
+ */
+function pushQr(text, push) {
+  const data = Buffer.from(text, 'utf8');
+  const pL = (data.length + 3) & 0xFF;
+  const pH = ((data.length + 3) >> 8) & 0xFF;
+  // Seleccionar modelo 2
+  push(Buffer.from([0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]));
+  // Tamaño de módulo (3 = mediano)
+  push(Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x04]));
+  // Nivel de corrección L
+  push(Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x30]));
+  // Almacenar datos
+  push(Buffer.from([0x1D, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30]));
+  push(data);
+  // Imprimir
+  push(Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]));
+}
+
 function buildEscPosBuffer(ticket) {
   const parts = [];
   const push = (...bufs) => bufs.forEach((b) => parts.push(b));
@@ -173,11 +218,47 @@ function buildEscPosBuffer(ticket) {
   // ── Inicializar ────────────────────────────────────────
   push(CMD.INIT);
 
+  // ── Remisión de almacén ────────────────────────────────
+  if (ticket.tipo === 'remision') {
+    pushHeader(ticket, push);
+    push(CMD.BOLD_ON, ln('REMISION DE ALMACEN'), CMD.BOLD_OFF);
+    push(CMD.BOLD_ON, ln(ticket.folio ?? ''), CMD.BOLD_OFF);
+    push(CMD.ALIGN_LEFT, sep('='));
+    push(ln('ORIGEN:  ' + norm(ticket.origen?.empresa ?? '')));
+    push(ln('         ' + norm(ticket.origen?.ubicacion ?? '')));
+    push(ln('DESTINO: ' + norm(ticket.destino?.empresa ?? '')));
+    push(ln('         ' + norm(ticket.destino?.ubicacion ?? '')));
+    push(row('Fecha', norm(ticket.fecha ?? '')));
+    push(sep('-'));
+
+    const colNombre = config.columns - 7;
+    push(ln(('ARTICULO').padEnd(colNombre) + ' CANT'.padStart(6)));
+    push(sep('-'));
+    for (const linea of (ticket.lineas ?? [])) {
+      const desc = norm(linea.clave + (linea.descripcion ? ' ' + linea.descripcion : ''));
+      const cant = String(linea.cantidad).padStart(6);
+      push(ln(desc.slice(0, colNombre).padEnd(colNombre) + cant));
+    }
+    push(sep('-'));
+    push(ln('Total: ' + (ticket.lineas ?? []).length + ' articulos'));
+
+    if (ticket.concepto) push(ln('Concepto: ' + norm(ticket.concepto)));
+
+    if (ticket.qr_url) {
+      push(CMD.FEED(1), CMD.ALIGN_CENTER);
+      push(CMD.BOLD_ON, ln('Escanea para confirmar recepcion:'), CMD.BOLD_OFF);
+      pushQr(ticket.qr_url, push);
+      push(CMD.FEED(1), CMD.ALIGN_LEFT);
+    }
+
+    push(CMD.FEED(config.cutFeedLines ?? 5));
+    push(CMD.CUT(0));
+    return Buffer.concat(parts);
+  }
+
   // ── Comprobante de abono a cuenta ──────────────────────
   if (ticket.tipo === 'abono_cuenta') {
-    push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
-    push(CMD.NORMAL, CMD.BOLD_OFF);
+    pushHeader(ticket, push);
     if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
     if (ticket.ubicacion?.rfc) {
       push(center('RFC: ' + ticket.ubicacion.rfc + (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '')));
@@ -224,9 +305,7 @@ function buildEscPosBuffer(ticket) {
     };
     const METODOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'];
 
-    push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
-    push(CMD.NORMAL, CMD.BOLD_OFF);
+    pushHeader(ticket, push);
     if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
     push(CMD.ALIGN_LEFT, sep('='));
     push(CMD.BOLD_ON, center('CORTE DE CAJA'), CMD.BOLD_OFF);
@@ -278,9 +357,7 @@ function buildEscPosBuffer(ticket) {
   }
 
   // ── Nombre empresa / sucursal ──────────────────────────
-  push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-  push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
-  push(CMD.NORMAL, CMD.BOLD_OFF);
+  pushHeader(ticket, push);
   if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
 
   // Datos fiscales debajo del nombre

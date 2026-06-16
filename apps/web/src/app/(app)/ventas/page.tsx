@@ -16,6 +16,8 @@ import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
+import { resolveLogoUrl } from '@/components/brand/Logo';
+import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -491,9 +493,13 @@ export default function VentasPage() {
     const totalPagadoNota = (nota.pagos ?? []).reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoNota).toFixed(2));
 
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+
     const payload = {
       tipo: 'venta',
       copias,
+      logo_escpos_b64,
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',
@@ -1672,8 +1678,9 @@ export default function VentasPage() {
                 <div className="mt-2 border border-steel-200 rounded-xl overflow-hidden bg-white text-[11px] font-mono">
                   {/* Cabecera: logo + nombre empresa + sucursal */}
                   <div className="bg-steel-900 text-white px-4 py-3 text-center">
-                    {empresa?.logo_url && (
-                      <img src={empresa.logo_url} alt="Logo" className="h-8 w-auto mx-auto mb-1.5 object-contain" />
+                    {getTicketLogoUrl(empresa, ubicacion) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolveLogoUrl(getTicketLogoUrl(empresa, ubicacion)!)} alt="Logo" className="h-8 w-auto mx-auto mb-1.5 object-contain" />
                     )}
                     <p className="font-bold text-[13px] tracking-wide uppercase">
                       {ubicacion?.razon_social ?? empresa?.nombre ?? 'Empresa'}

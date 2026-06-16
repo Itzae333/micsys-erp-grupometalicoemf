@@ -11,6 +11,8 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { resolveLogoUrl } from '@/components/brand/Logo';
+import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -72,6 +74,7 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
   // Recepción inline
   const [showRecibir, setShowRecibir]   = useState(false);
   const [cantidades, setCantidades]     = useState<Record<string, number>>({});
+  const [showPreview, setShowPreview]   = useState(false);
 
   const canManage  = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
@@ -147,38 +150,34 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
     }
   }
 
-  function printTicket() {
+  async function printTicket() {
     if (!rem) return;
-    const lines = [
-      '================================',
-      '       REMISIÓN DE ALMACÉN',
-      `       ${rem.folio}`,
-      '================================',
-      `Origen:  ${rem.empresa_origen.nombre}`,
-      `         ${rem.ub_origen.nombre}`,
-      `Destino: ${rem.empresa_destino.nombre}`,
-      `         ${rem.ub_destino.nombre}`,
-      `Fecha:   ${new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX')}`,
-      '--------------------------------',
-      'ARTÍCULO                   CANT',
-      '--------------------------------',
-      ...rem.lineas.map((l) => {
-        const nombre = (l.articulo.clave + ' ' + (l.articulo.descripcion_1 ?? '')).slice(0, 28);
-        const cant   = String(l.cantidad_enviada).padStart(6);
-        return `${nombre.padEnd(29)}${cant}`;
+    const logoUrl = getTicketLogoUrl(empresa, null); // usa logo de empresa activa (contexto)
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+
+    const payload = {
+      tipo: 'remision',
+      logo_escpos_b64,
+      empresa_origen: { nombre: rem.empresa_origen.nombre },
+      folio: rem.folio,
+      concepto: rem.concepto ?? null,
+      origen: { empresa: rem.empresa_origen.nombre, ubicacion: rem.ub_origen.nombre },
+      destino: { empresa: rem.empresa_destino.nombre, ubicacion: rem.ub_destino.nombre },
+      fecha: new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
       }),
-      '--------------------------------',
-      `Total artículos: ${rem.lineas.length}`,
-      '',
-      `Escanea para recibir:`,
-      `${APP_URL}/movimientos/recibir?folio=${rem.folio}`,
-      '================================',
-    ].join('\n');
+      lineas: rem.lineas.map((l) => ({
+        clave: l.articulo.clave,
+        descripcion: l.articulo.descripcion_1 ?? null,
+        cantidad: l.cantidad_enviada,
+      })),
+      qr_url: `${APP_URL}/movimientos/recibir?folio=${rem.folio}`,
+    };
 
     fetch('http://localhost:7788/print', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: lines,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     }).catch(console.error);
   }
 
@@ -245,6 +244,58 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-body-sm text-red-700">{error}</div>
       )}
+
+      {/* Vista previa del ticket */}
+      <div>
+        <button
+          onClick={() => setShowPreview((v) => !v)}
+          className="text-body-sm text-steel-500 hover:text-steel-800 transition-colors underline-offset-2 hover:underline"
+        >
+          {showPreview ? 'Ocultar vista previa' : 'Ver ticket'}
+        </button>
+        {showPreview && (
+          <div className="mt-2 border border-steel-200 rounded-xl overflow-hidden bg-white text-[11px] font-mono max-w-xs">
+            {/* Cabecera */}
+            <div className="bg-steel-900 text-white px-4 py-3 text-center">
+              {getTicketLogoUrl(empresa, null) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={resolveLogoUrl(getTicketLogoUrl(empresa, null)!)}
+                  alt="Logo"
+                  className="h-8 w-auto mx-auto mb-1.5 object-contain"
+                />
+              )}
+              <p className="font-bold text-[13px] tracking-wide uppercase">REMISIÓN DE ALMACÉN</p>
+              <p className="text-steel-300 mt-0.5 font-bold">{rem.folio}</p>
+            </div>
+            {/* Ruta */}
+            <div className="px-4 py-2 border-b border-dashed border-steel-200 text-[10px] text-steel-600 space-y-0.5">
+              <p><span className="font-semibold">ORIGEN:</span>  {rem.empresa_origen.nombre} / {rem.ub_origen.nombre}</p>
+              <p><span className="font-semibold">DESTINO:</span> {rem.empresa_destino.nombre} / {rem.ub_destino.nombre}</p>
+              <p><span className="font-semibold">Fecha:</span> {new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+            {/* Artículos */}
+            <div className="px-4 py-2 border-b border-dashed border-steel-200">
+              <div className="flex justify-between text-[10px] text-steel-400 font-semibold mb-1">
+                <span>ARTÍCULO</span><span>CANT</span>
+              </div>
+              {rem.lineas.map((l) => (
+                <div key={l.id} className="flex justify-between text-steel-700 leading-5">
+                  <span className="truncate max-w-[160px]">{l.articulo.clave}</span>
+                  <span>{l.cantidad_enviada}</span>
+                </div>
+              ))}
+            </div>
+            {/* QR placeholder */}
+            {qrUrl && (
+              <div className="px-4 py-3 text-center">
+                <p className="text-[10px] text-steel-500 mb-1.5">Escanea para confirmar recepción</p>
+                <img src={qrUrl} alt="QR" className="w-24 h-24 mx-auto" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px] gap-6">
         <div className="space-y-5">

@@ -3,10 +3,30 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Directorio para logos subidos — se crea si no existe
+  const uploadsDir = join(process.cwd(), 'uploads', 'logos');
+  if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const express = require('express') as typeof import('express');
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
+  // Servir /uploads/ con header CORS explícito (se registra antes que enableCors)
+  app.use(
+    '/uploads',
+    (_req: unknown, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
+      (res as unknown as import('http').ServerResponse).setHeader('Access-Control-Allow-Origin', frontendUrl);
+      next();
+    },
+    express.static(join(process.cwd(), 'uploads')),
+  );
 
   // Seguridad
   app.use(helmet());

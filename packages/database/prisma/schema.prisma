@@ -76,6 +76,8 @@ model Ubicacion {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  logo_url    String?
+
   empresa         Empresa                 @relation(fields: [empresa_id], references: [id])
   usuarios        UsuarioUbicacion[]
   config_columnas ConfigColumnasUbicacion[]

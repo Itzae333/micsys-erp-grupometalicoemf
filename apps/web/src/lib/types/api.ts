@@ -36,6 +36,7 @@ export interface Ubicacion {
   estado: string | null;
   cp: string | null;
   telefono: string | null;
+  logo_url: string | null;
 }
 
 export interface Usuario {

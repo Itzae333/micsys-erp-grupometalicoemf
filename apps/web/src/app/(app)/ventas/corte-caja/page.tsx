@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -86,11 +87,14 @@ export default function CorteCajaPage() {
   const print = async () => {
     if (!data || !empresa) return;
     try {
+      const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+      const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tipo: 'corte_caja',
+          logo_escpos_b64,
           empresa: { nombre: empresa.nombre },
           ubicacion: ubicacion ? { nombre: ubicacion.nombre } : null,
           desde: data.desde,

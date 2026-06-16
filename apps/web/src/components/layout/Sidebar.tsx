@@ -24,7 +24,7 @@ import {
   PackageCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Wordmark } from '@/components/brand/Logo';
+import { EmpresaLogo } from '@/components/brand/Logo';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { ContextSwitcher } from './ContextSwitcher';
@@ -178,11 +178,11 @@ export function Sidebar() {
         {/* Empresa + ubicación */}
         <div className="px-4 py-4 border-b border-steel-700">
           <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-brand-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-[9px]">EMF</span>
-              </div>
-              <Wordmark dark />
+            <div className="flex items-center gap-2 min-w-0">
+              <EmpresaLogo
+                logo_url={empresa?.logo_url}
+                empresa_nombre={empresa?.nombre}
+              />
             </div>
             {/* Botón cerrar (solo móvil, dentro del drawer) */}
             <button

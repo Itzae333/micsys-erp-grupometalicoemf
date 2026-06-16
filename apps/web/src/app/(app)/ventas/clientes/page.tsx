@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 import type { Cliente, ConfigColumnasSchema, CuentaClienteDetalle, AbonarCuentaResult } from '@/lib/types/api';
 
 const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
@@ -164,8 +165,11 @@ export default function ClientesVentasPage() {
   }
 
   async function printAbonoTicket(result: AbonarCuentaResult, cliente: Cliente) {
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
     const payload = {
       tipo: 'abono_cuenta',
+      logo_escpos_b64,
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',

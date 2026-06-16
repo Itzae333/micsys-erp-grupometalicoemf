@@ -11,6 +11,7 @@ export interface UbicacionContexto {
   id: string;
   nombre: string;
   tipo: 'MATRIZ' | 'FABRICA' | 'PUNTO_VENTA';
+  logo_url?: string | null;
   razon_social?: string | null;
   rfc?: string | null;
   telefono?: string | null;

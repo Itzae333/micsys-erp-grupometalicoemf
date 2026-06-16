@@ -59,7 +59,7 @@ export class EmpresasService {
     return this.prisma.empresa.update({ where: { id }, data: dto });
   }
 
-  async updateLogo(id: string, logoUrl: string, user: JwtPayload) {
+  async updateLogo(id: string, logoUrl: string | null, user: JwtPayload) {
     if (user.rol !== 'SUPER_USUARIO' && user.empresa_id !== id) {
       throw new ForbiddenException('No tienes acceso a esta empresa');
     }

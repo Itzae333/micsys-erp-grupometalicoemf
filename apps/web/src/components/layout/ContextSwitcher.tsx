@@ -76,7 +76,7 @@ export function ContextSwitcher({ open, onClose }: Props) {
     if (!selectedEmpresa) return;
     setContexto(
       { id: selectedEmpresa.id, nombre: selectedEmpresa.nombre, logo_url: selectedEmpresa.logo_url },
-      { id: ub.id, nombre: ub.nombre, tipo: ub.tipo },
+      { id: ub.id, nombre: ub.nombre, tipo: ub.tipo, logo_url: ub.logo_url },
     );
     onClose();
     router.refresh();

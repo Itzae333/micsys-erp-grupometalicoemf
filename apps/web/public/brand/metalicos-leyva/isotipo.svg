@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360" width="600" height="360" role="img" aria-label="Metálicos Leyva"><g transform="translate(0,30)"><rect x="44" y="80" width="22" height="140" rx="11" fill="#9C906C"/>
+<rect x="44" y="79" width="86" height="26" rx="13" fill="#9C906C"/>
+<rect x="44" y="137" width="86" height="26" rx="13" fill="#9C906C"/>
+<rect x="44" y="195" width="86" height="26" rx="13" fill="#9C906C"/>
+<rect x="534" y="80" width="22" height="140" rx="11" fill="#9C906C"/>
+<rect x="470" y="79" width="86" height="26" rx="13" fill="#9C906C"/>
+<rect x="470" y="137" width="86" height="26" rx="13" fill="#9C906C"/>
+<rect x="470" y="195" width="86" height="26" rx="13" fill="#9C906C"/>
+<polyline points="250,78 172,150 250,222" fill="none" stroke="#565338" stroke-width="38" stroke-linejoin="miter" stroke-linecap="butt"/>
+<polyline points="350,78 428,150 350,222" fill="none" stroke="#565338" stroke-width="38" stroke-linejoin="miter" stroke-linecap="butt"/>
+<rect x="284" y="118" width="30" height="74" rx="6" fill="#565338"/>
+<path d="M 343.00,82.00 L 321.00,120.11 L 277.00,120.11 L 255.00,82.00 L 277.00,43.89 L 321.00,43.89 Z" fill="#565338"/>
+<path d="M 322.00,82.00 L 310.50,101.92 L 287.50,101.92 L 276.00,82.00 L 287.50,62.08 L 310.50,62.08 Z" fill="#FFFFFF"/>
+<rect x="284" y="150" width="30" height="6" fill="#FFFFFF"/>
+<rect x="284" y="188" width="96" height="48" rx="5" fill="#565338"/>
+<rect x="306" y="192" width="4" height="40" fill="#FFFFFF"/>
+<rect x="330" y="192" width="4" height="40" fill="#FFFFFF"/>
+<rect x="354" y="192" width="4" height="40" fill="#FFFFFF"/>
+<rect x="288" y="202" width="88" height="4" fill="#FFFFFF"/>
+<rect x="288" y="218" width="88" height="4" fill="#FFFFFF"/></g></svg>

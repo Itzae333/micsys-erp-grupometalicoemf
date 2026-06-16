@@ -12,14 +12,20 @@ import {
   CheckCircle2,
   XCircle,
   Columns3,
+  ImagePlus,
+  X,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useContextoStore } from '@/lib/store/contexto.store';
 import type { Empresa, Ubicacion } from '@/lib/types/api';
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 import { Button } from '@/components/ui/button';
+import { resolveLogoUrl } from '@/components/brand/Logo';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -69,6 +75,7 @@ export default function EmpresaDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { usuario } = useAuthStore();
+  const { empresa: ctxEmpresa, setEmpresa: setCtxEmpresa } = useContextoStore();
 
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);
@@ -77,6 +84,7 @@ export default function EmpresaDetailPage() {
   const [ubicacionOpen, setUbicacionOpen] = useState(false);
   const [editingUbicacion, setEditingUbicacion] = useState<Ubicacion | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState<string | null>(null); // entity id being uploaded
 
   const canEdit = usuario?.rol === 'SUPER_USUARIO' || usuario?.rol === 'ADMIN';
   const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';
@@ -176,6 +184,36 @@ export default function EmpresaDetailPage() {
     }
   }
 
+  async function handleLogoUpload(entityPath: string, entityId: string, file: File) {
+    setLogoUploading(entityId);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const { empresa: ctxEmp, ubicacion: ctxUb } = useContextoStore.getState();
+      const formData = new FormData();
+      formData.append('logo', file);
+      const res = await fetch(`${BASE_URL}${entityPath}/logo`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token ?? ''}`,
+          ...(ctxEmp?.id ? { 'x-empresa-id': ctxEmp.id } : {}),
+          ...(ctxUb?.id ? { 'x-ubicacion-id': ctxUb.id } : {}),
+        },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Error al subir logo');
+      const updated = await res.json() as { logo_url: string | null };
+      // Si es el logo de la empresa activa en contexto, actualizarlo
+      if (entityId === ctxEmpresa?.id && updated.logo_url !== undefined) {
+        setCtxEmpresa({ ...ctxEmpresa, logo_url: updated.logo_url });
+      }
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al subir logo');
+    } finally {
+      setLogoUploading(null);
+    }
+  }
+
   if (loading || !empresa) {
     return (
       <div className="p-8 space-y-4">
@@ -225,6 +263,73 @@ export default function EmpresaDetailPage() {
             {empresa.activa ? 'Activa' : 'Inactiva'}
           </span>
         </div>
+
+        {/* Sección logo empresa */}
+        {canEdit && (
+          <div className="mt-5 pt-4 border-t border-steel-100">
+            <p className="text-table-header text-steel-400 uppercase tracking-widest mb-3">
+              Logo de empresa
+            </p>
+            <div className="flex items-center gap-4">
+              {empresa.logo_url ? (
+                <div className="w-32 h-14 rounded-lg border border-steel-200 bg-steel-50 flex items-center justify-center p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={resolveLogoUrl(empresa.logo_url)}
+                    alt="Logo empresa"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-32 h-14 rounded-lg border border-dashed border-steel-300 bg-steel-50 flex items-center justify-center">
+                  <ImagePlus className="h-5 w-5 text-steel-300" />
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="cursor-pointer">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-steel-100 hover:bg-steel-200 text-body-sm font-medium text-steel-700 transition-colors">
+                    {logoUploading === empresa.id ? (
+                      <span className="text-steel-500">Subiendo…</span>
+                    ) : (
+                      <>
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        {empresa.logo_url ? 'Cambiar logo' : 'Subir logo'}
+                      </>
+                    )}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".svg,.png,.webp"
+                    className="sr-only"
+                    disabled={!!logoUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleLogoUpload(`/empresas/${empresa.id}`, empresa.id, file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                <p className="text-meta text-steel-400">SVG, PNG o WebP · máx. 2 MB</p>
+              </div>
+              {empresa.logo_url && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('¿Eliminar logo?')) return;
+                    await api.delete(`/empresas/${empresa.id}/logo`);
+                    if (ctxEmpresa?.id === empresa.id) {
+                      setCtxEmpresa({ ...ctxEmpresa, logo_url: null });
+                    }
+                    load();
+                  }}
+                  className="text-steel-400 hover:text-brand-600 transition-colors"
+                  title="Eliminar logo"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sección ubicaciones */}
@@ -279,6 +384,34 @@ export default function EmpresaDetailPage() {
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {canEdit && (
                     <>
+                      {/* Logo por ubicación */}
+                      <label
+                        className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-steel-100 transition-colors cursor-pointer"
+                        title="Subir logo de ubicación"
+                      >
+                        {ub.logo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={resolveLogoUrl(ub.logo_url)} alt="" className="h-4 w-auto object-contain" />
+                        ) : (
+                          <ImagePlus className={`h-3.5 w-3.5 text-steel-500 ${logoUploading === ub.id ? 'animate-pulse' : ''}`} />
+                        )}
+                        <input
+                          type="file"
+                          accept=".svg,.png,.webp"
+                          className="sr-only"
+                          disabled={!!logoUploading}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file)
+                              handleLogoUpload(
+                                `/empresas/${empresa.id}/ubicaciones/${ub.id}`,
+                                ub.id,
+                                file,
+                              );
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
                       <Button
                         variant="ghost"
                         size="sm"

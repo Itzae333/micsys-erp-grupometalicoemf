@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   UseInterceptors,
@@ -12,6 +13,9 @@ import {
   FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { EmpresasService } from './empresas.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
@@ -21,6 +25,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SetMetadata } from '@nestjs/common';
 import { SKIP_EMPRESA_UBICACION_KEY } from '../common/guards/empresa-ubicacion.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { Request } from 'express';
 
 const SkipEmpresaUbicacion = () => SetMetadata(SKIP_EMPRESA_UBICACION_KEY, true);
 
@@ -69,13 +74,27 @@ export class EmpresasController {
   @SkipEmpresaUbicacion()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Subir logo de empresa' })
-  @UseInterceptors(FileInterceptor('logo'))
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: diskStorage({
+        destination: (_req: Request, _file: Express.Multer.File, cb) => {
+          const dir = join(process.cwd(), 'uploads', 'logos');
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (req: Request, file: Express.Multer.File, cb) => {
+          const ext = extname(file.originalname);
+          cb(null, `empresa-${(req.params as Record<string, string>).id}${ext}`);
+        },
+      }),
+    }),
+  )
   async uploadLogo(
     @Param('id') id: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 2 * 1024 * 1024 }), // 2MB
+          new MaxFileSizeValidator({ maxSize: 2 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: /(image\/svg\+xml|image\/png|image\/webp)/ }),
         ],
       }),
@@ -83,9 +102,15 @@ export class EmpresasController {
     file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
-    // TODO Fase 2: subir a Cloudflare R2 y retornar URL pública
-    // Por ahora devuelve el nombre del archivo como placeholder
-    const logoUrl = `/brand/empresas/${id}/${file.originalname}`;
+    const logoUrl = `/uploads/logos/${file.filename}`;
     return this.empresas.updateLogo(id, logoUrl, user);
+  }
+
+  @Delete(':id/logo')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @SkipEmpresaUbicacion()
+  @ApiOperation({ summary: 'Eliminar logo de empresa' })
+  removeLogo(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.empresas.updateLogo(id, null, user);
   }
 }
