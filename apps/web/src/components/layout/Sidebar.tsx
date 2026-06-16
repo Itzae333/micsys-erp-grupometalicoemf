@@ -23,6 +23,7 @@ import {
   Truck,
   PackageCheck,
   MonitorDown,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmpresaLogo } from '@/components/brand/Logo';
@@ -129,7 +130,8 @@ export function Sidebar() {
   const { empresa, ubicacion, clearContexto } = useContextoStore();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { canInstall, install } = usePwaInstall();
+  const { canInstall, installed, install } = usePwaInstall();
+  const [showPwaGuide, setShowPwaGuide] = useState(false);
 
   function handleLogout() {
     clearAuth();
@@ -249,15 +251,25 @@ export function Sidebar() {
             <kbd className="text-[10px] bg-steel-700 px-1.5 py-0.5 rounded text-steel-400">Ctrl K</kbd>
           </button>
 
-          {/* Instalar PWA — solo visible cuando el browser lo permite */}
-          {canInstall && (
-            <button
-              onClick={install}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white transition-colors text-body-sm"
-            >
-              <MonitorDown className="h-3.5 w-3.5 flex-shrink-0" />
-              <span>Instalar app</span>
-            </button>
+          {/* Instalar PWA */}
+          {!installed && (
+            <>
+              <button
+                onClick={canInstall ? install : () => setShowPwaGuide(v => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white transition-colors text-body-sm"
+              >
+                <MonitorDown className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="flex-1 text-left">Instalar app</span>
+                {!canInstall && <Info className="h-3 w-3 flex-shrink-0 opacity-70" />}
+              </button>
+              {showPwaGuide && !canInstall && (
+                <div className="rounded-lg bg-steel-800 border border-steel-700 px-3 py-2 text-steel-300 text-meta space-y-1">
+                  <p className="font-medium text-steel-200">Instalar manualmente:</p>
+                  <p>Chrome/Edge: menú <span className="text-white">⋮</span> → <em>Instalar aplicación</em></p>
+                  <p>Safari: botón compartir → <em>Agregar a inicio</em></p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Usuario + notificaciones + logout */}

@@ -47,5 +47,9 @@ export function usePwaInstall() {
     }
   }
 
-  return { canInstall: !!prompt && !installed, install };
+  return {
+    canInstall: !!prompt && !installed,
+    installed,
+    install,
+  };
 }
