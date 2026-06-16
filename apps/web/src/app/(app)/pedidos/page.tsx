@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Search, ChevronLeft, ChevronRight, ClipboardList, Trash2, Pencil, Check, X, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api/client';
@@ -39,9 +39,19 @@ function initPagos(): PagoForm[] {
   return [{ metodo: 'EFECTIVO', monto: 0, referencia: '' }];
 }
 
-export default function PedidosPage() {
+function AutoCrearPedido({ empresa, onCrear }: { empresa: { id: string } | null; onCrear: (p: Pedido) => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  useEffect(() => {
+    const clienteId = searchParams.get('cliente_id');
+    if (!clienteId || !empresa) return;
+    router.replace('/pedidos');
+    api.post<Pedido>('/pedidos', { cliente_id: clienteId }).then(onCrear).catch(() => null);
+  }, [empresa, searchParams]);
+  return null;
+}
+
+export default function PedidosPage() {
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 
@@ -125,17 +135,6 @@ export default function PedidosPage() {
     const t = setTimeout(() => { setPage(1); loadPedidos(1, estatusFiltro, q); }, 350);
     return () => clearTimeout(t);
   }, [q, estatusFiltro]);
-
-  // ── Auto-crear pedido desde clientes page ───────────────────
-  useEffect(() => {
-    const clienteId = searchParams.get('cliente_id');
-    if (!clienteId || !empresa) return;
-    router.replace('/pedidos');
-    api.post<Pedido>('/pedidos', { cliente_id: clienteId }).then((p) => {
-      setPedidos((prev) => [p, ...prev]);
-      setPedidoActivo(p);
-    }).catch(() => null);
-  }, [empresa, searchParams]);
 
   // ── Cargar schema columnas ──────────────────────────────────
   useEffect(() => {
@@ -347,6 +346,12 @@ export default function PedidosPage() {
   // ── Render ──────────────────────────────────────────────────
   return (
     <div className="flex h-full overflow-hidden">
+      <Suspense fallback={null}>
+        <AutoCrearPedido
+          empresa={empresa}
+          onCrear={(p) => { setPedidos((prev) => [p, ...prev]); setPedidoActivo(p); }}
+        />
+      </Suspense>
       {/* ── Panel izquierdo — Lista ── */}
       <div className="w-80 flex-shrink-0 border-r border-steel-200 flex flex-col bg-white">
         {/* Header */}
