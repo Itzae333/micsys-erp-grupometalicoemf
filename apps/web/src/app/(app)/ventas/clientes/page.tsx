@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Users, Search, ShoppingCart, FileText, BookOpen } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Search, ShoppingCart, FileText, BookOpen, ClipboardList } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -331,6 +331,14 @@ export default function ClientesVentasPage() {
                     >
                       <FileText className="h-3.5 w-3.5" />
                       Cotizar
+                    </button>
+                    <button
+                      onClick={() => router.push(`/pedidos?cliente_id=${c.id}`)}
+                      className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors"
+                      title="Nuevo pedido con anticipo"
+                    >
+                      <ClipboardList className="h-3.5 w-3.5" />
+                      Pedido
                     </button>
                     <button
                       onClick={() => router.push(`/ventas?cliente_id=${c.id}`)}

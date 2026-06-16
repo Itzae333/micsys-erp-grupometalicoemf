@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Search, ChevronLeft, ChevronRight, ClipboardList, Trash2, Pencil, Check, X, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
@@ -39,6 +40,8 @@ function initPagos(): PagoForm[] {
 }
 
 export default function PedidosPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 
@@ -122,6 +125,17 @@ export default function PedidosPage() {
     const t = setTimeout(() => { setPage(1); loadPedidos(1, estatusFiltro, q); }, 350);
     return () => clearTimeout(t);
   }, [q, estatusFiltro]);
+
+  // ── Auto-crear pedido desde clientes page ───────────────────
+  useEffect(() => {
+    const clienteId = searchParams.get('cliente_id');
+    if (!clienteId || !empresa) return;
+    router.replace('/pedidos');
+    api.post<Pedido>('/pedidos', { cliente_id: clienteId }).then((p) => {
+      setPedidos((prev) => [p, ...prev]);
+      setPedidoActivo(p);
+    }).catch(() => null);
+  }, [empresa, searchParams]);
 
   // ── Cargar schema columnas ──────────────────────────────────
   useEffect(() => {
