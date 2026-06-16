@@ -76,7 +76,22 @@ export function ContextSwitcher({ open, onClose }: Props) {
     if (!selectedEmpresa) return;
     setContexto(
       { id: selectedEmpresa.id, nombre: selectedEmpresa.nombre, logo_url: selectedEmpresa.logo_url },
-      { id: ub.id, nombre: ub.nombre, tipo: ub.tipo, logo_url: ub.logo_url },
+      {
+        id: ub.id,
+        nombre: ub.nombre,
+        tipo: ub.tipo,
+        logo_url: ub.logo_url,
+        razon_social: ub.razon_social,
+        rfc: ub.rfc,
+        telefono: ub.telefono,
+        calle: ub.calle,
+        num_ext: ub.num_ext,
+        num_int: ub.num_int,
+        colonia: ub.colonia,
+        municipio: ub.municipio,
+        estado: ub.estado,
+        cp: ub.cp,
+      },
     );
     onClose();
     router.refresh();

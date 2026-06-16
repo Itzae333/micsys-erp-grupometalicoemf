@@ -173,20 +173,23 @@ function sep(char = '-') {
  */
 function pushHeader(ticket, push) {
   push(CMD.ALIGN_CENTER);
+  const mainName = ticket.ubicacion?.nombre ?? ticket.empresa?.nombre ?? 'EMPRESA';
   if (ticket.logo_escpos_b64) {
     try {
       push(Buffer.from(ticket.logo_escpos_b64, 'base64'));
       push(CMD.FEED(1));
     } catch {
-      // Si el base64 es inválido, caer a texto
       push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-      push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
+      push(ln(mainName));
       push(CMD.NORMAL, CMD.BOLD_OFF);
     }
   } else {
     push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(ln(ticket.ubicacion?.razon_social ?? ticket.empresa?.nombre ?? 'EMPRESA'));
+    push(ln(mainName));
     push(CMD.NORMAL, CMD.BOLD_OFF);
+  }
+  if (ticket.ubicacion?.razon_social) {
+    push(center(ticket.ubicacion.razon_social));
   }
 }
 
@@ -259,7 +262,6 @@ function buildEscPosBuffer(ticket) {
   // ── Comprobante de abono a cuenta ──────────────────────
   if (ticket.tipo === 'abono_cuenta') {
     pushHeader(ticket, push);
-    if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
     if (ticket.ubicacion?.rfc) {
       push(center('RFC: ' + ticket.ubicacion.rfc + (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '')));
     } else if (ticket.ubicacion?.telefono) {
@@ -306,7 +308,6 @@ function buildEscPosBuffer(ticket) {
     const METODOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'];
 
     pushHeader(ticket, push);
-    if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
     push(CMD.ALIGN_LEFT, sep('='));
     push(CMD.BOLD_ON, center('CORTE DE CAJA'), CMD.BOLD_OFF);
 
@@ -358,9 +359,8 @@ function buildEscPosBuffer(ticket) {
 
   // ── Nombre empresa / sucursal ──────────────────────────
   pushHeader(ticket, push);
-  if (ticket.ubicacion?.nombre) push(center(ticket.ubicacion.nombre));
 
-  // Datos fiscales debajo del nombre
+  // RFC + Teléfono
   if (ticket.ubicacion?.rfc) {
     const rfcLine = 'RFC: ' + ticket.ubicacion.rfc +
       (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '');
@@ -368,6 +368,7 @@ function buildEscPosBuffer(ticket) {
   } else if (ticket.ubicacion?.telefono) {
     push(center('Tel: ' + ticket.ubicacion.telefono));
   }
+  // Dirección (campo pre-ensamblado desde el frontend)
   if (ticket.ubicacion?.direccion) push(center(ticket.ubicacion.direccion));
 
   push(CMD.ALIGN_LEFT, sep());
