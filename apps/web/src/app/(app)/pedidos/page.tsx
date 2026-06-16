@@ -243,7 +243,7 @@ export default function PedidosPage() {
     try {
       const logoUrl = getTicketLogoUrl(ubicacion, empresa);
       let escpos: string | undefined;
-      if (logoUrl) { try { escpos = await logoToEscPosBase64(logoUrl as string); } catch { /* sin logo */ } }
+      if (logoUrl) { try { escpos = (await logoToEscPosBase64(logoUrl as string)) ?? undefined; } catch { /* sin logo */ } }
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
