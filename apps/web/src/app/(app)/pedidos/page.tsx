@@ -93,12 +93,6 @@ export default function PedidosPage() {
 
   // ── Debounce arts ───────────────────────────────────────────
   const artDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const clienteDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const headers = useCallback(() => {
-    if (!empresa || !ubicacion) return {};
-    return { 'x-empresa-id': empresa.id, 'x-ubicacion-id': ubicacion.id };
-  }, [empresa, ubicacion]);
 
   // ── Cargar pedidos ──────────────────────────────────────────
   const loadPedidos = useCallback(async (p = page, filtro = estatusFiltro, busq = q) => {
@@ -112,14 +106,14 @@ export default function PedidosPage() {
         ...(busq ? { q: busq } : {}),
         ...(ubicacion ? { ubicacionId: ubicacion.id } : {}),
       });
-      const res = await api.get<PedidosPage>(`/pedidos?${params}`, headers());
+      const res = await api.get<PedidosPage>(`/pedidos?${params}`);
       setPedidos(res.data);
       setTotal(res.total);
       setPages(res.pages);
     } finally {
       setLoading(false);
     }
-  }, [empresa, ubicacion, page, estatusFiltro, q, headers]);
+  }, [empresa, ubicacion, page, estatusFiltro, q]);
 
   useEffect(() => { loadPedidos(1, estatusFiltro, q); setPage(1); }, [empresa, ubicacion]);
 
@@ -132,14 +126,14 @@ export default function PedidosPage() {
   // ── Cargar schema columnas ──────────────────────────────────
   useEffect(() => {
     if (!empresa || !ubicacion) return;
-    api.get<ConfigColumnasSchema>('/config-columnas/schema', headers())
+    api.get<ConfigColumnasSchema>('/config-columnas/schema')
       .then(setSchema).catch(() => null);
   }, [empresa, ubicacion]);
 
   // ── Cargar clientes ─────────────────────────────────────────
   useEffect(() => {
     if (!dlgNuevo || !empresa) return;
-    api.get<{ data: Cliente[] }>('/clientes?limit=200', headers())
+    api.get<{ data: Cliente[] }>('/clientes?limit=200')
       .then((r) => setClientes(r.data)).catch(() => null);
   }, [dlgNuevo, empresa]);
 
@@ -150,7 +144,7 @@ export default function PedidosPage() {
     if (!artQ.trim() || artQ.length < 2) { setArtSugeridos([]); return; }
     artDebounceRef.current = setTimeout(async () => {
       if (!empresa) return;
-      const res = await api.get<ArticulosPage>(`/articulos?q=${encodeURIComponent(artQ)}&limit=10`, headers());
+      const res = await api.get<ArticulosPage>(`/articulos?q=${encodeURIComponent(artQ)}&limit=10`);
       setArtSugeridos(res.data);
     }, 300);
     return () => { if (artDebounceRef.current) clearTimeout(artDebounceRef.current); };
@@ -159,7 +153,7 @@ export default function PedidosPage() {
   // ── Refrescar pedido activo ─────────────────────────────────
   const refreshActivo = useCallback(async (id: string) => {
     if (!empresa) return;
-    const p = await api.get<Pedido>(`/pedidos/${id}`, headers());
+    const p = await api.get<Pedido>(`/pedidos/${id}`);
     setPedidoActivo(p);
     setPedidos((prev) => prev.map((x) => x.id === id ? p : x));
   }, [empresa, headers]);
@@ -180,7 +174,7 @@ export default function PedidosPage() {
       const p = await api.post<Pedido>('/pedidos', {
         cliente_id: clienteSeleccionado.id,
         observaciones: obsNuevo || undefined,
-      }, headers());
+      });
       setPedidos((prev) => [p, ...prev]);
       setPedidoActivo(p);
       setDlgNuevo(false);
@@ -207,7 +201,7 @@ export default function PedidosPage() {
         cantidad: cant,
         precio_unitario: precio,
         descuento: parseFloat(lineaDescuento) || 0,
-      }, headers());
+      });
       await refreshActivo(pedidoActivo.id);
       setDlgLinea(false);
       setArtQ(''); setArtSugeridos([]); setArtSeleccionado(null);
@@ -222,7 +216,7 @@ export default function PedidosPage() {
   // ── Eliminar línea ──────────────────────────────────────────
   async function handleRemoveLinea(lineaId: string) {
     if (!pedidoActivo) return;
-    await api.delete(`/pedidos/${pedidoActivo.id}/lineas/${lineaId}`, headers());
+    await api.delete(`/pedidos/${pedidoActivo.id}/lineas/${lineaId}`);
     await refreshActivo(pedidoActivo.id);
   }
 
@@ -236,7 +230,7 @@ export default function PedidosPage() {
       await api.patch(`/pedidos/${pedidoActivo.id}/lineas/${linea.id}`, {
         cantidad: parseFloat(draft.cantidad) || linea.cantidad,
         precio_unitario: parseFloat(draft.precio) || linea.precio_unitario,
-      }, headers());
+      });
       await refreshActivo(pedidoActivo.id);
       setLineaDraft((prev) => { const n = { ...prev }; delete n[linea.id]; return n; });
     } finally {
@@ -285,7 +279,7 @@ export default function PedidosPage() {
           monto: p.monto,
           ...(p.referencia ? { referencia: p.referencia } : {}),
         })),
-      }, headers());
+      });
       setPedidoActivo(res.pedido);
       setPedidos((prev) => prev.map((x) => x.id === res.pedido.id ? res.pedido : x));
       await printTicket(res.ticket);
@@ -314,7 +308,7 @@ export default function PedidosPage() {
           metodo: p.metodo, monto: p.monto,
           ...(p.referencia ? { referencia: p.referencia } : {}),
         })),
-      }, headers());
+      });
       await printTicket(res.ticket);
       await refreshActivo(pedidoActivo.id);
       setDlgLiquidar(false);
@@ -330,7 +324,7 @@ export default function PedidosPage() {
   async function handleCancelar() {
     if (!pedidoActivo) return;
     if (!confirm(`¿Cancelar pedido #${pedidoActivo.folio}?`)) return;
-    await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {}, headers());
+    await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {});
     await refreshActivo(pedidoActivo.id);
   }
 
