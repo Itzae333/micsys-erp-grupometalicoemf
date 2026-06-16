@@ -56,6 +56,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'],
   },
   {
+    href: '/pedidos',
+    label: 'Pedidos',
+    icon: <ClipboardList className="h-4 w-4" />,
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'],
+  },
+  {
     href: '/inventario',
     label: 'Inventario',
     icon: <Package className="h-4 w-4" />,

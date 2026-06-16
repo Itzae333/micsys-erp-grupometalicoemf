@@ -603,3 +603,99 @@ export interface ReporteAsistenciaData {
     ausencias: number;
   }[];
 }
+
+// ── Pedidos con Anticipos ────────────────────────────────────
+
+export type EstatusPedido = 'ABIERTO' | 'PARCIAL' | 'LIQUIDADO' | 'CANCELADO';
+
+export interface PedidoLinea {
+  id: string;
+  pedido_id: string;
+  articulo_id: string;
+  articulo: {
+    id: string;
+    clave: string;
+    descripcion_1: string | null;
+    descripcion_2: string | null;
+    descripcion_3: string | null;
+    descripcion_4: string | null;
+    descripcion_5: string | null;
+  } | null;
+  clave: string;
+  descripcion: string | null;
+  cantidad: number;
+  precio_unitario: number;
+  descuento: number;
+  subtotal: number;
+  created_at: string;
+}
+
+export interface AnticiposPedido {
+  id: string;
+  pedido_id: string;
+  empresa_id: string;
+  ubicacion_id: string;
+  usuario_id: string;
+  usuario: { id: string; nombre: string; apellidos: string } | null;
+  metodo: MetodoPago;
+  monto: number;
+  referencia: string | null;
+  created_at: string;
+}
+
+export interface EvidenciaPedido {
+  id: string;
+  pedido_id: string;
+  empresa_id: string;
+  tipo: TipoEvidencia;
+  descripcion: string | null;
+  archivo_url: string | null;
+  data_json: { base64?: string } | null;
+  subido_por_id: string;
+  subido_por: { id: string; nombre: string; apellidos: string } | null;
+  created_at: string;
+}
+
+export interface Pedido {
+  id: string;
+  folio: number;
+  empresa_id: string;
+  ubicacion_id: string;
+  usuario_id: string;
+  cliente_id: string;
+  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null } | null;
+  usuario: { id: string; nombre: string; apellidos: string } | null;
+  estatus: EstatusPedido;
+  subtotal: number;
+  descuento: number;
+  total: number;
+  total_anticipos: number;
+  saldo_pendiente: number;
+  observaciones: string | null;
+  nota_venta_id: string | null;
+  lineas: PedidoLinea[];
+  anticipos: AnticiposPedido[];
+  evidencias: EvidenciaPedido[];
+  created_at: string;
+  updated_at: string;
+  cerrado_at: string | null;
+}
+
+export interface PedidosPage {
+  data: Pedido[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface RegistrarAnticipoResult {
+  pedido: Pedido;
+  ticket: Record<string, unknown>;
+}
+
+export interface LiquidarPedidoResult {
+  nota_venta_id: string;
+  nota_folio: number;
+  ticket: Record<string, unknown>;
+}

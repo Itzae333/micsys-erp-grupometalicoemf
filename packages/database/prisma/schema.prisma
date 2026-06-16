@@ -42,6 +42,8 @@ model Empresa {
   ordenes_produccion       OrdenProduccion[]
   solicitudes_edicion      SolicitudEdicionNota[]
   evidencias_nota          EvidenciaNota[]
+  pedidos                  Pedido[]
+  anticipos_pedido         AnticiposPedido[]
   legacy_ventas            LegacyVenta[]
   remisiones_origen        Remision[] @relation("RemisionOrigenEmpresa")
   remisiones_destino       Remision[] @relation("RemisionDestinoEmpresa")
@@ -82,6 +84,8 @@ model Ubicacion {
   usuarios        UsuarioUbicacion[]
   config_columnas ConfigColumnasUbicacion[]
   notas_venta     NotaVenta[]
+  pedidos         Pedido[]
+  anticipos_pedido AnticiposPedido[]
   remisiones_origen  Remision[] @relation("RemisionOrigenUbicacion")
   remisiones_destino Remision[] @relation("RemisionDestinoUbicacion")
 
@@ -125,6 +129,9 @@ model Usuario {
   solicitudes_enviadas   SolicitudEdicionNota[] @relation("SolicitudSolicitante")
   solicitudes_aprobadas  SolicitudEdicionNota[] @relation("SolicitudAprobador")
   evidencias_subidas     EvidenciaNota[]
+  pedidos_creados        Pedido[]
+  anticipos_pedido       AnticiposPedido[]
+  evidencias_pedido      EvidenciaPedido[]
   empleado               Empleado?
   remisiones_creadas     Remision[] @relation("RemisionCreador")
   remisiones_enviadas    Remision[] @relation("RemisionEnviador")
@@ -276,6 +283,7 @@ model Articulo {
   empresa                Empresa              @relation(fields: [empresa_id], references: [id])
   proveedor              Proveedor?           @relation(fields: [proveedor_id], references: [id])
   lineas_venta           NotaVentaLinea[]
+  lineas_pedido          PedidoLinea[]
   movimientos_inventario MovimientoInventario[]
   lineas_compra          OrdenCompraLinea[]
   ordenes_produccion     OrdenProduccion[]
@@ -310,6 +318,7 @@ model Cliente {
 
   empresa      Empresa            @relation(fields: [empresa_id], references: [id])
   notas        NotaVenta[]
+  pedidos      Pedido[]
   movimientos  MovimientoCuenta[]
 
   @@map("clientes")
@@ -363,6 +372,7 @@ model NotaVenta {
   movimientos        MovimientoCuenta[]
   solicitudes_edicion SolicitudEdicionNota[]
   evidencias         EvidenciaNota[]
+  pedido_origen      Pedido?
 
   @@unique([empresa_id, folio])
   @@map("notas_venta")
@@ -816,6 +826,108 @@ model EvidenciaNota {
 
   @@index([nota_id])
   @@map("evidencias_nota")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PEDIDOS CON ANTICIPOS
+// Flujo: ABIERTO → PARCIAL (con anticipos) → LIQUIDADO (se crea NotaVenta)
+// Los anticipos aparecen en corte de caja separados de las ventas.
+// ─────────────────────────────────────────────────────────────
+
+enum EstatusPedido {
+  ABIERTO
+  PARCIAL
+  LIQUIDADO
+  CANCELADO
+}
+
+model Pedido {
+  id              String        @id @default(cuid())
+  folio           Int
+  empresa_id      String
+  ubicacion_id    String
+  usuario_id      String
+  cliente_id      String
+  estatus         EstatusPedido @default(ABIERTO)
+  subtotal        Decimal       @db.Decimal(12, 2)
+  descuento       Decimal       @default(0) @db.Decimal(12, 2)
+  total           Decimal       @db.Decimal(12, 2)
+  total_anticipos Decimal       @default(0) @db.Decimal(12, 2)
+  observaciones   String?
+  nota_venta_id   String?       @unique
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+  cerrado_at      DateTime?
+
+  empresa    Empresa    @relation(fields: [empresa_id], references: [id])
+  ubicacion  Ubicacion  @relation(fields: [ubicacion_id], references: [id])
+  usuario    Usuario    @relation(fields: [usuario_id], references: [id])
+  cliente    Cliente    @relation(fields: [cliente_id], references: [id])
+  nota_venta NotaVenta? @relation(fields: [nota_venta_id], references: [id])
+
+  lineas     PedidoLinea[]
+  anticipos  AnticiposPedido[]
+  evidencias EvidenciaPedido[]
+
+  @@unique([empresa_id, folio])
+  @@index([empresa_id, estatus, created_at])
+  @@map("pedidos")
+}
+
+model PedidoLinea {
+  id              String   @id @default(cuid())
+  pedido_id       String
+  articulo_id     String
+  clave           String
+  descripcion     String?
+  cantidad        Decimal  @db.Decimal(12, 3)
+  precio_unitario Decimal  @db.Decimal(12, 2)
+  descuento       Decimal  @default(0) @db.Decimal(5, 2)
+  subtotal        Decimal  @db.Decimal(12, 2)
+  created_at      DateTime @default(now())
+
+  pedido   Pedido   @relation(fields: [pedido_id], references: [id], onDelete: Cascade)
+  articulo Articulo @relation(fields: [articulo_id], references: [id])
+
+  @@map("pedido_lineas")
+}
+
+model AnticiposPedido {
+  id           String     @id @default(cuid())
+  pedido_id    String
+  empresa_id   String
+  ubicacion_id String
+  usuario_id   String
+  metodo       MetodoPago
+  monto        Decimal    @db.Decimal(12, 2)
+  referencia   String?
+  created_at   DateTime   @default(now())
+
+  pedido    Pedido    @relation(fields: [pedido_id], references: [id])
+  empresa   Empresa   @relation(fields: [empresa_id], references: [id])
+  ubicacion Ubicacion @relation(fields: [ubicacion_id], references: [id])
+  usuario   Usuario   @relation(fields: [usuario_id], references: [id])
+
+  @@index([empresa_id, ubicacion_id, created_at])
+  @@map("anticipos_pedido")
+}
+
+model EvidenciaPedido {
+  id            String        @id @default(cuid())
+  pedido_id     String
+  empresa_id    String
+  tipo          TipoEvidencia
+  descripcion   String?
+  archivo_url   String?
+  data_json     Json?
+  subido_por_id String
+  created_at    DateTime      @default(now())
+
+  pedido     Pedido  @relation(fields: [pedido_id], references: [id])
+  subido_por Usuario @relation(fields: [subido_por_id], references: [id])
+
+  @@index([pedido_id])
+  @@map("evidencias_pedido")
 }
 
 // ─────────────────────────────────────────────────────────────

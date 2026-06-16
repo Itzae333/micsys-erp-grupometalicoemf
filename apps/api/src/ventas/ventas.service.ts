@@ -689,14 +689,37 @@ export class VentasService {
       };
     }
 
-    const notas = await this.prisma.notaVenta.findMany({
-      where,
-      orderBy: { created_at: 'asc' },
-      include: {
-        cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
-        pagos: true,
-      },
-    });
+    const whereAnticipos: Prisma.AnticiposPedidoWhereInput = { empresa_id: empresaId };
+    if (ubicacionId) whereAnticipos.ubicacion_id = ubicacionId;
+    if (desde || hasta) {
+      whereAnticipos.created_at = {
+        ...(desde ? { gte: new Date(desde) } : {}),
+        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+      };
+    }
+
+    const [notas, anticiposPedido] = await Promise.all([
+      this.prisma.notaVenta.findMany({
+        where,
+        orderBy: { created_at: 'asc' },
+        include: {
+          cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
+          pagos: true,
+        },
+      }),
+      this.prisma.anticiposPedido.findMany({
+        where: whereAnticipos,
+        orderBy: { created_at: 'asc' },
+        include: {
+          pedido: {
+            select: {
+              folio: true,
+              cliente: { select: { nombre: true, apellidos: true, razon_social: true } },
+            },
+          },
+        },
+      }),
+    ]);
 
     const metodos: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
@@ -740,6 +763,24 @@ export class VentasService {
       totalCobrado = +(totalCobrado + nonCashSum + efectivoReal).toFixed(2);
     }
 
+    // Agregar anticipos de pedidos
+    const metodoAnticipos: Record<string, { count: number; total: number }> = {
+      EFECTIVO:     { count: 0, total: 0 },
+      TARJETA:      { count: 0, total: 0 },
+      TRANSFERENCIA:{ count: 0, total: 0 },
+      DEPOSITO:     { count: 0, total: 0 },
+    };
+    let totalAnticipos = 0;
+
+    for (const ant of anticiposPedido) {
+      const m = ant.metodo as string;
+      const monto = Number(ant.monto);
+      if (!metodoAnticipos[m]) metodoAnticipos[m] = { count: 0, total: 0 };
+      metodoAnticipos[m].count++;
+      metodoAnticipos[m].total = +(metodoAnticipos[m].total + monto).toFixed(2);
+      totalAnticipos = +(totalAnticipos + monto).toFixed(2);
+    }
+
     return {
       desde: desde ?? null,
       hasta: hasta ?? null,
@@ -747,6 +788,21 @@ export class VentasService {
       total_cobrado: totalCobrado,
       por_metodo: metodos,
       por_estatus: porEstatus,
+      anticipos_pedido: {
+        total: totalAnticipos,
+        count: anticiposPedido.length,
+        por_metodo: metodoAnticipos,
+        detalle: anticiposPedido.map((a) => ({
+          pedido_folio: a.pedido.folio,
+          cliente: a.pedido.cliente
+            ? (a.pedido.cliente.razon_social ?? `${a.pedido.cliente.nombre}${a.pedido.cliente.apellidos ? ' ' + a.pedido.cliente.apellidos : ''}`)
+            : 'Sin cliente',
+          metodo: a.metodo,
+          monto: Number(a.monto),
+          referencia: a.referencia,
+          fecha: a.created_at,
+        })),
+      },
       notas: notas.map((n) => {
         const notaTotal = Number(n.total);
         const nonCash = n.pagos

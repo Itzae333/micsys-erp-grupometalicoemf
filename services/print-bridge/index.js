@@ -356,8 +356,85 @@ function buildEscPosBuffer(ticket) {
         push(ln('    ' + norm(METODO_LABELS[p.metodo] ?? p.metodo) + ': $' + formatMoney(Number(p.monto))));
       }
     }
+    // Anticipos de pedidos
+    if (ticket.anticipos_pedido && (ticket.anticipos_pedido.count > 0)) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('ANTICIPOS DE PEDIDOS:'), CMD.BOLD_OFF);
+      for (const m of METODOS) {
+        const res = ticket.anticipos_pedido.por_metodo?.[m] ?? { count: 0, total: 0 };
+        if (res.count === 0) continue;
+        const label = (METODO_LABELS[m] ?? m) + ' (' + res.count + ')';
+        push(row('  ' + label, '$' + formatMoney(Number(res.total))));
+      }
+      push(sep('-'));
+      push(CMD.BOLD_ON, row('TOTAL ANTICIPOS', '$' + formatMoney(Number(ticket.anticipos_pedido.total ?? 0))), CMD.BOLD_OFF);
+    }
+
     push(sep('='));
     push(CMD.ALIGN_CENTER, ln('Generado: ' + new Date().toLocaleString('es-MX')));
+    push(CMD.ALIGN_LEFT);
+    push(CMD.FEED(config.cutFeedLines ?? 5));
+    push(CMD.CUT(0));
+    return Buffer.concat(parts);
+  }
+
+  // ── Anticipo de pedido ─────────────────────────────────
+  if (ticket.tipo === 'anticipo_pedido') {
+    pushHeader(ticket, push);
+    if (ticket.ubicacion?.rfc) {
+      const rfcLine = 'RFC: ' + ticket.ubicacion.rfc +
+        (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '');
+      push(center(rfcLine));
+    } else if (ticket.ubicacion?.telefono) {
+      push(center('Tel: ' + ticket.ubicacion.telefono));
+    }
+    const dirs = [ticket.ubicacion?.calle, ticket.ubicacion?.num_ext, ticket.ubicacion?.colonia].filter(Boolean).join(' ');
+    if (dirs) push(center(dirs));
+    const mun = [ticket.ubicacion?.municipio, ticket.ubicacion?.estado].filter(Boolean).join(', ');
+    if (mun) push(center(mun));
+
+    push(CMD.ALIGN_LEFT, sep('='));
+    push(CMD.BOLD_ON, center('ANTICIPO DE PEDIDO'), CMD.BOLD_OFF);
+    push(sep('='));
+
+    const folioStr = '#' + String(ticket.pedido?.folio ?? '').padStart(4, '0');
+    const fecha = ticket.pedido?.fecha ? new Date(ticket.pedido.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+    push(row('Pedido ' + folioStr, fecha));
+    push(ln('Cliente: ' + norm(ticket.pedido?.cliente_nombre ?? 'N/A')));
+    push(sep('-'));
+
+    // Líneas del pedido
+    for (const linea of (ticket.lineas ?? [])) {
+      const nombre = linea.descripcion || linea.clave;
+      push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
+      push(row('  $' + formatMoney(Number(linea.precio)), '$' + formatMoney(Number(linea.subtotal))));
+    }
+    push(sep('='));
+
+    const tot = ticket.totales ?? {};
+    push(row('TOTAL DEL PEDIDO', '$' + formatMoney(Number(tot.total_pedido ?? 0))));
+    if (Number(tot.anticipos_anteriores ?? 0) > 0) {
+      push(row('ANTICIPOS ANTERIORES', '$' + formatMoney(Number(tot.anticipos_anteriores))));
+    }
+    push(sep('-'));
+    push(CMD.BOLD_ON);
+    push(row('ESTE ANTICIPO', '$' + formatMoney(Number(tot.este_anticipo ?? 0))));
+    push(row('TOTAL PAGADO', '$' + formatMoney(Number(tot.total_pagado ?? 0))));
+    push(CMD.BOLD_OFF);
+    push(sep('-'));
+    const saldo = Number(tot.saldo_pendiente ?? 0);
+    if (saldo > 0.01) {
+      push(CMD.BOLD_ON, row('SALDO PENDIENTE', '$' + formatMoney(saldo)), CMD.BOLD_OFF);
+    } else {
+      push(CMD.BOLD_ON, center('*** PEDIDO SALDADO ***'), CMD.BOLD_OFF);
+    }
+    push(sep('='), CMD.ALIGN_CENTER);
+
+    // Métodos de pago
+    for (const mp of (ticket.metodos_pago ?? [])) {
+      push(ln('Pago: ' + norm(mp.metodo) + '  $' + formatMoney(Number(mp.monto))));
+    }
+    push(ln('!Gracias por su anticipo!'));
     push(CMD.ALIGN_LEFT);
     push(CMD.FEED(config.cutFeedLines ?? 5));
     push(CMD.CUT(0));
@@ -433,6 +510,20 @@ function buildEscPosBuffer(ticket) {
     if (Number(ticket.cambio) > 0) {
       push(row('CAMBIO', '$' + formatMoney(Number(ticket.cambio))));
     }
+  }
+
+  // ── Historial de anticipos (pedidos liquidados) ────────
+  if (ticket.historial_anticipos && ticket.historial_anticipos.length > 0) {
+    push(sep());
+    push(CMD.BOLD_ON, ln('HISTORIAL DE ANTICIPOS:'), CMD.BOLD_OFF);
+    let totalAnticipado = 0;
+    for (const a of ticket.historial_anticipos) {
+      const fechaA = a.fecha ? new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+      push(row('  ' + fechaA + ' ' + norm(a.metodo), '$' + formatMoney(Number(a.monto))));
+      totalAnticipado += Number(a.monto);
+    }
+    push(sep('-'));
+    push(row('  TOTAL ANTICIPADO', '$' + formatMoney(totalAnticipado)));
   }
 
   // ── Pie ────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { SearchModule } from './search/search.module';
 import { AdminModule } from './admin/admin.module';
 import { RemisionesModule } from './remisiones/remisiones.module';
+import { PedidosModule } from './pedidos/pedidos.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { RemisionesModule } from './remisiones/remisiones.module';
     SearchModule,
     AdminModule,
     RemisionesModule,
+    PedidosModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },
