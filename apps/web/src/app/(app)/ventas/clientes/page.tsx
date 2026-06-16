@@ -211,8 +211,13 @@ export default function ClientesVentasPage() {
     setFormError(null);
     const payload = {
       ...data,
-      email: data.email || undefined,
-      precio_num: data.precio_num || undefined,
+      apellidos:    data.apellidos    || undefined,
+      razon_social: data.razon_social || undefined,
+      rfc:          data.rfc          || undefined,
+      telefono:     data.telefono     || undefined,
+      email:        data.email        || undefined,
+      direccion:    data.direccion    || undefined,
+      precio_num:   data.precio_num   || undefined,
     };
     try {
       if (editTarget) {
@@ -285,7 +290,7 @@ export default function ClientesVentasPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-body font-semibold text-steel-900 truncate">
-                  {c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()}
+                  {c.razon_social || `${c.nombre} ${c.apellidos ?? ''}`.trim()}
                 </p>
                 <p className="text-body-sm text-steel-500 truncate">
                   {[c.rfc, c.telefono].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
@@ -356,7 +361,7 @@ export default function ClientesVentasPage() {
         open={!!dlgCuenta}
         onClose={() => { setDlgCuenta(null); setCuenta(null); }}
         title={dlgCuenta
-          ? `Cuenta — ${dlgCuenta.razon_social ?? `${dlgCuenta.nombre} ${dlgCuenta.apellidos ?? ''}`.trim()}`
+          ? `Cuenta — ${dlgCuenta.razon_social || `${dlgCuenta.nombre} ${dlgCuenta.apellidos ?? ''}`.trim()}`
           : 'Cuenta'}
         size="lg"
       >

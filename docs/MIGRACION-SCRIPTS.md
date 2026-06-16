@@ -30,6 +30,7 @@ SELECT
   COALESCE(i.precio2, 0.00)     AS precio2,
   COALESCE(i.precio3, 0.00)     AS precio3,
   COALESCE(i.precio4, 0.00)     AS precio4,
+  COALESCE(i.precio5, 0.00)     AS precio5,
   'virgen'                      AS sucursal
 FROM inventario_virgen i
 LEFT JOIN color_virgen    c ON c.id = i.color_id
@@ -56,6 +57,7 @@ SELECT
   COALESCE(i.precio2, 0.00)     AS precio2,
   COALESCE(i.precio3, 0.00)     AS precio3,
   COALESCE(i.precio4, 0.00)     AS precio4,
+  COALESCE(i.precio5, 0.00)     AS precio5,
   'punto_venta'                 AS sucursal
 FROM inventario_punto_venta i
 ORDER BY i.id;
@@ -66,9 +68,9 @@ ORDER BY i.id;
 
 **Formato del CSV (encabezado unificado):**
 ```
-id,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,existencias1,existencias2,existencias3,precio1,precio2,precio3,precio4,sucursal
-1,Tubo Cuadrado,1x1,3mm,Negro,Acero,100,0,0,25.00,22.00,20.00,18.00,virgen
-2,Lámina Lisa,2x4,1mm,,,50,20,5,120.00,110.00,100.00,90.00,punto_venta
+id,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,existencias1,existencias2,existencias3,precio1,precio2,precio3,precio4,precio5,sucursal
+1,Tubo Cuadrado,1x1,3mm,Negro,Acero,100,0,0,25.00,22.00,20.00,18.00,15.00,virgen
+2,Lámina Lisa,2x4,1mm,,,50,20,5,120.00,110.00,100.00,90.00,80.00,punto_venta
 ```
 
 ---
@@ -76,6 +78,17 @@ id,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,existencias1
 ## 2. `clientes.csv`
 
 > La FK de `cliente_punto_venta` es `cuentaClientePuntoVenta_id` (no `cuenta_id`).
+
+El campo `tipoCliente` del legado se convierte a `precio_num` del ERP con esta equivalencia:
+
+| tipoCliente legacy | precio_num ERP | Lista de precio |
+|---|---|---|
+| `MENUDEO` | 1 | Público |
+| `MAYOREO` | 2 | Mayoreo |
+| `CREDITO` | 3 | Crédito |
+| `NO_CREDITO` | 4 | No crédito |
+| `PUNTO_VENTA` | 5 | Punto de venta |
+| `PUEBLA`, `LOCAL`, `FABRICA` | *(vacío)* | Sin tipo asignado |
 
 ```sql
 -- Clientes de la sucursal principal
@@ -87,6 +100,14 @@ SELECT
   COALESCE(cl.telefono, '')        AS telefono,
   COALESCE(cl.correo, '')          AS correo,
   COALESCE(cu.saldo, 0.00)         AS saldo,
+  CASE cl.tipoCliente
+    WHEN 'MENUDEO'     THEN 1
+    WHEN 'MAYOREO'     THEN 2
+    WHEN 'CREDITO'     THEN 3
+    WHEN 'NO_CREDITO'  THEN 4
+    WHEN 'PUNTO_VENTA' THEN 5
+    ELSE NULL
+  END                              AS precio_num,
   'virgen'                         AS sucursal
 FROM cliente_virgen cl
 LEFT JOIN cuenta_cliente_virgen cu ON cu.id = cl.cuenta_id
@@ -102,6 +123,14 @@ SELECT
   COALESCE(cl.telefono, '')        AS telefono,
   COALESCE(cl.correo, '')          AS correo,
   COALESCE(cu.saldo, 0.00)         AS saldo,
+  CASE cl.tipoCliente
+    WHEN 'MENUDEO'     THEN 1
+    WHEN 'MAYOREO'     THEN 2
+    WHEN 'CREDITO'     THEN 3
+    WHEN 'NO_CREDITO'  THEN 4
+    WHEN 'PUNTO_VENTA' THEN 5
+    ELSE NULL
+  END                              AS precio_num,
   'punto_venta'                    AS sucursal
 FROM cliente_punto_venta cl
 LEFT JOIN cuenta_cliente_punto_venta cu ON cu.id = cl.cuentaClientePuntoVenta_id
@@ -111,9 +140,10 @@ ORDER BY sucursal, id;
 
 **Formato esperado del CSV:**
 ```
-id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,sucursal
-1,Juan,Pérez,García,555-1234,juan@mail.com,1500.00,virgen
-2,María,López,,555-5678,,0.00,punto_venta
+id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,precio_num,sucursal
+1,Juan,Pérez,García,555-1234,juan@mail.com,1500.00,2,virgen
+2,María,López,,555-5678,,0.00,1,punto_venta
+3,Carlos,Ruiz,,555-9999,,0.00,,virgen
 ```
 
 ---

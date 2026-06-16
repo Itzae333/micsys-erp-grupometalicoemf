@@ -485,9 +485,16 @@ function sendViaWindowsPort(buffer) {
 
   return new Promise((resolve, reject) => {
     fs.writeFile(portPath, buffer, (err) => {
-      err
-        ? reject(new Error(`No se pudo escribir en ${portPath}: ${err.message}`))
-        : resolve();
+      if (!err) return resolve();
+      if (err.code === 'ENOENT') {
+        reject(new Error(
+          `Puerto "${config.windowsPort}" no encontrado. ` +
+          `Verifica que la impresora esté conectada y actualiza "windowsPort" en printer.config.json ` +
+          `(ej. "COM3", "LPT1", "USB001"). Archivo: ${CONFIG_PATH}`
+        ));
+      } else {
+        reject(new Error(`No se pudo escribir en ${portPath}: ${err.message}`));
+      }
     });
   });
 }

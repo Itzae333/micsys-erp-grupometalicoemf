@@ -948,8 +948,8 @@ export default function VentasPage() {
                               enCarrito ? 'bg-green-50' : '',
                             )}
                           >
-                            <td className="px-4 py-2.5">
-                              <p className="font-semibold text-steel-900 leading-tight">
+                            <td className="px-4 py-2.5 min-w-0">
+                              <p className="font-semibold text-steel-900 leading-tight break-words">
                                 {descs.length > 0 ? descs.join(' · ') : art.clave}
                               </p>
                               <p className="text-meta text-steel-400">{art.clave}</p>
@@ -1009,10 +1009,10 @@ export default function VentasPage() {
                     <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
                       <tr>
                         <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
-                        <th className="text-right px-2 py-2.5 font-medium text-steel-600">Cant</th>
-                        <th className="text-right px-2 py-2.5 font-medium text-steel-600">Precio</th>
-                        <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
-                        <th className="px-2 py-2.5" />
+                        <th className="text-right px-2 py-2.5 font-medium text-steel-600 w-14">Cant</th>
+                        <th className="text-right px-2 py-2.5 font-medium text-steel-600 w-20">Precio</th>
+                        <th className="text-right px-4 py-2.5 font-medium text-steel-600 w-24">Sub</th>
+                        <th className="px-2 py-2.5 w-8" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-steel-100">
@@ -1020,8 +1020,8 @@ export default function VentasPage() {
                         const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
                         return (
                           <tr key={l.id} className={cn('bg-white', savingLinea === l.id && 'opacity-60')}>
-                            <td className="px-4 py-2.5">
-                              <p className="font-semibold text-steel-900 leading-tight">{d.length > 0 ? d.join(' · ') : l.clave}</p>
+                            <td className="px-4 py-2.5 min-w-0">
+                              <p className="font-semibold text-steel-900 leading-tight break-words">{d.length > 0 ? d.join(' · ') : l.clave}</p>
                               <p className="text-meta text-steel-400">{l.clave}</p>
                             </td>
                             <td className="px-2 py-2.5 text-right">
@@ -2193,7 +2193,7 @@ export default function VentasPage() {
               <p className="text-body-sm text-green-700 font-medium">🖨️ Ticket impreso · 2 copias</p>
             )}
             {postCobro.printStatus === 'error' && (
-              <p className="text-body-sm text-amber-700">⚠ Ticketera sin respuesta — usa el botón para reintentar</p>
+              <p className="text-body-sm text-amber-700">⚠ No se pudo imprimir — verifica que la ticketera esté encendida y el puerto configurado en printer.config.json</p>
             )}
             <p className="text-body-sm text-steel-500">¿Cómo deseas entregar el comprobante?</p>
             <div className="grid grid-cols-1 gap-2">

@@ -79,6 +79,7 @@ export class MigracionService {
           precio_2: toNum(row['precio2']),
           precio_3: toNum(row['precio3']),
           precio_4: toNum(row['precio4']),
+          precio_5: toNum(row['precio5']),
         };
 
         const existing = await this.prisma.articulo.findUnique({
@@ -124,8 +125,12 @@ export class MigracionService {
       }
 
       try {
-        const saldo = toNum(row['saldo']);
-        const email = cleanStr(row['correo']);
+        const saldo     = toNum(row['saldo']);
+        const email     = cleanStr(row['correo']);
+        const precioRaw = parseInt(row['precio_num'] ?? '', 10);
+        const precio_num = !isNaN(precioRaw) && precioRaw >= 1 && precioRaw <= 5
+          ? precioRaw
+          : null;
 
         // Busca duplicado por nombre dentro de la empresa
         const existing = await this.prisma.cliente.findFirst({
@@ -145,6 +150,7 @@ export class MigracionService {
             telefono: cleanStr(row['telefono']),
             email,
             saldo_pendiente: saldo,
+            ...(precio_num !== null ? { precio_num } : {}),
           },
         });
         result.insertados++;
