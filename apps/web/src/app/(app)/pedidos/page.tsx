@@ -156,7 +156,7 @@ export default function PedidosPage() {
     const p = await api.get<Pedido>(`/pedidos/${id}`);
     setPedidoActivo(p);
     setPedidos((prev) => prev.map((x) => x.id === id ? p : x));
-  }, [empresa, headers]);
+  }, [empresa]);
 
   // ── Seleccionar precio del artículo ────────────────────────
   function precioDeArticulo(art: Articulo): number {
