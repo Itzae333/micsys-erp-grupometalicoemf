@@ -77,6 +77,7 @@ export default function NotaDetallePage() {
   const [evError, setEvError] = useState<string | null>(null);
   const [uploadingEv, setUploadingEv] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Lightbox
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -197,26 +198,55 @@ export default function NotaDetallePage() {
   }
 
   // ── Evidencias ─────────────────────────────────────────────
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function compressImage(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = url;
+    });
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setEvError('Archivo demasiado grande. Máximo 5 MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setEvError('Archivo demasiado grande. Máximo 10 MB.');
       return;
     }
     setEvError(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setEvBase64(ev.target?.result as string);
-      setEvFileName(file.name);
-    };
-    reader.readAsDataURL(file);
+    if (file.type.startsWith('image/')) {
+      const compressed = await compressImage(file);
+      setEvBase64(compressed);
+      setEvFileName(file.name.replace(/\.[^.]+$/, '.jpg'));
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setEvBase64(ev.target?.result as string);
+        setEvFileName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   function closeDlgEvidencia() {
     setDlgEvidencia(false);
     setEvDesc(''); setEvUrl(''); setEvBase64(null); setEvFileName(null); setEvError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   }
 
   async function onAgregarEvidencia() {
@@ -812,21 +842,76 @@ export default function NotaDetallePage() {
 
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Imagen o archivo <span className="text-steel-400 font-normal">(JPG, PNG, PDF — máx. 5 MB)</span>
+              Imagen o archivo <span className="text-steel-400 font-normal">(JPG, PNG, PDF)</span>
             </label>
+
+            {/* Inputs ocultos */}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*,.pdf"
-              className="block w-full text-body-sm text-steel-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-steel-300 file:bg-steel-50 file:text-body-sm file:font-medium hover:file:bg-steel-100 cursor-pointer"
+              className="hidden"
               onChange={handleFileChange}
             />
-            {evBase64 && evFileName && (
-              <div className="mt-2 flex items-center gap-2">
-                {evBase64.startsWith('data:image') && (
-                  <img src={evBase64} alt="preview" className="h-12 w-12 rounded-md object-cover border border-steel-200" />
+            {/* capture="environment" = cámara trasera en móvil */}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {/* Botones de selección */}
+            {!evBase64 ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-2 h-20 border-2 border-dashed border-steel-300 rounded-xl text-body-sm text-steel-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                >
+                  <span className="text-xl">📎</span>
+                  <span>Galería / Archivo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-2 h-20 border-2 border-dashed border-steel-300 rounded-xl text-body-sm text-steel-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                >
+                  <span className="text-xl">📷</span>
+                  <span>Tomar foto</span>
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                {evBase64.startsWith('data:image') ? (
+                  <div className="relative rounded-xl overflow-hidden border border-steel-200 bg-steel-50">
+                    <img src={evBase64} alt="preview" className="w-full max-h-48 object-contain" />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/40 px-3 py-1.5 flex items-center justify-between">
+                      <p className="text-meta text-white truncate">{evFileName}</p>
+                      <button
+                        type="button"
+                        onClick={() => { setEvBase64(null); setEvFileName(null); if (fileInputRef.current) fileInputRef.current.value = ''; if (cameraInputRef.current) cameraInputRef.current.value = ''; }}
+                        className="text-white/80 hover:text-white text-xs ml-2 flex-shrink-0"
+                      >
+                        ✕ Quitar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 border border-steel-200 rounded-xl bg-steel-50">
+                    <span className="text-2xl">📄</span>
+                    <p className="text-body-sm text-steel-700 flex-1 truncate">{evFileName}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setEvBase64(null); setEvFileName(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                      className="text-steel-400 hover:text-brand-600 text-xs"
+                    >
+                      ✕ Quitar
+                    </button>
+                  </div>
                 )}
-                <p className="text-meta text-steel-500 truncate">{evFileName}</p>
               </div>
             )}
           </div>

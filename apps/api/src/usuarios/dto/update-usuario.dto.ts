@@ -16,4 +16,6 @@ export class UpdateUsuarioDto {
   @ApiPropertyOptional({ enum: RolUsuario }) @IsOptional() @IsEnum(RolUsuario) rol?: RolUsuario;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) ubicacion_ids?: string[];
   @ApiPropertyOptional() @IsOptional() @IsBoolean() activo?: boolean;
+  @ApiPropertyOptional({ type: [String], description: 'IPs permitidas (vacío = sin restricción)' })
+  @IsOptional() @IsArray() @IsString({ each: true }) allowed_ips?: string[];
 }

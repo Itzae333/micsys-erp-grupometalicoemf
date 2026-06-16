@@ -8,4 +8,5 @@ export interface JwtPayload {
   rol: RolUsuario;
   empresa_id: string;
   ubicacion_ids: string[];
+  allowed_ips: string[];
 }

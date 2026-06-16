@@ -47,6 +47,7 @@ export interface Usuario {
   rol: RolUsuario;
   activo: boolean;
   ultimo_acceso: string | null;
+  allowed_ips: string[];
   ubicaciones: { id: string; nombre: string; tipo: TipoUbicacion }[];
 }
 

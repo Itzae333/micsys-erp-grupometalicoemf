@@ -162,19 +162,22 @@ export default function HistorialLegacyPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 flex-shrink-0">
+      <div className="flex flex-wrap gap-3 flex-shrink-0 bg-white border border-steel-200 rounded-xl p-3">
+        {/* Búsqueda */}
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
           <Input
             className="pl-9"
-            placeholder="Buscar cliente..."
+            placeholder="Buscar cliente…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && cargar(1)}
           />
         </div>
+
+        {/* Sucursal */}
         <select
-          className="px-3 py-2 border border-steel-300 rounded-lg text-body-sm text-steel-700 bg-white"
+          className="h-9 px-3 border border-steel-300 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
           value={sucursal}
           onChange={(e) => setSucursal(e.target.value)}
         >
@@ -182,9 +185,35 @@ export default function HistorialLegacyPage() {
           <option value="virgen">Principal</option>
           <option value="punto_venta">Punto de venta</option>
         </select>
-        <Input type="date" className="w-36" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        <Input type="date" className="w-36" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <Button variant="secondary" onClick={() => cargar(1)} disabled={loading}>Buscar</Button>
+
+        {/* Fechas con label */}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] px-0.5">Desde</label>
+            <Input type="date" className="h-9 w-36" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <span className="text-steel-300 mt-4">—</span>
+          <div className="flex flex-col gap-0.5">
+            <label className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] px-0.5">Hasta</label>
+            <Input type="date" className="h-9 w-36" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex items-end gap-2">
+          <Button variant="secondary" onClick={() => cargar(1)} disabled={loading}>
+            <Search className="h-4 w-4 mr-1.5" />
+            Buscar
+          </Button>
+          {(q || sucursal || desde || hasta) && (
+            <Button
+              variant="secondary"
+              onClick={() => { setQ(''); setSucursal(''); setDesde(''); setHasta(''); }}
+              disabled={loading}
+            >
+              Limpiar
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Split view — apila en móvil, lado a lado en desktop */}

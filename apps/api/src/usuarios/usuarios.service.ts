@@ -33,6 +33,7 @@ export class UsuariosService {
         rol: true,
         activo: true,
         ultimo_acceso: true,
+        allowed_ips: true,
         empresa: { select: { id: true, nombre: true } },
         ubicaciones: {
           include: { ubicacion: { select: { id: true, nombre: true, tipo: true } } },
@@ -53,6 +54,7 @@ export class UsuariosService {
         rol: true,
         activo: true,
         ultimo_acceso: true,
+        allowed_ips: true,
         empresa_id: true,
         empresa: { select: { id: true, nombre: true } },
         ubicaciones: {

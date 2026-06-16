@@ -8,6 +8,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { EmpresaUbicacionGuard } from '../common/guards/empresa-ubicacion.guard';
+import { IpGuard } from '../common/guards/ip.guard';
 
 @Module({
   imports: [PassportModule, JwtModule.register({})],
@@ -18,6 +19,7 @@ import { EmpresaUbicacionGuard } from '../common/guards/empresa-ubicacion.guard'
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: EmpresaUbicacionGuard },
+    { provide: APP_GUARD, useClass: IpGuard },
   ],
   controllers: [AuthController],
   exports: [AuthService],

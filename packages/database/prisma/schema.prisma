@@ -102,6 +102,7 @@ model Usuario {
   rol            RolUsuario
   activo         Boolean    @default(true)
   ultimo_acceso  DateTime?
+  allowed_ips    String[]   @default([])
   created_at     DateTime   @default(now())
   updated_at     DateTime   @updatedAt
 

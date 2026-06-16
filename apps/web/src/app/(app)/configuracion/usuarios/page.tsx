@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Users, Pencil, KeyRound, UserX, CheckCircle2 } from 'lucide-react';
+import { Plus, Users, Pencil, KeyRound, UserX, CheckCircle2, Shield, X as XIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -35,6 +35,8 @@ const ROL_COLORS: Record<RolUsuario, string> = {
   JEFE_RH: 'bg-pink-50 text-pink-700',
 };
 
+const IPV4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
+
 const UsuarioSchema = z.object({
   nombre: z.string().min(2, 'Requerido'),
   apellidos: z.string().min(2, 'Requerido'),
@@ -50,6 +52,7 @@ const UsuarioSchema = z.object({
   ]),
   password: z.string().min(8, 'Mínimo 8 caracteres').optional().or(z.literal('')),
   ubicacion_ids: z.array(z.string()),
+  allowed_ips: z.array(z.string()),
 });
 
 const ResetPasswordSchema = z.object({
@@ -69,12 +72,13 @@ export default function UsuariosPage() {
   const [editing, setEditing] = useState<Usuario | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [ipInput, setIpInput] = useState('');
 
   const isSuperUsuario = me?.rol === 'SUPER_USUARIO';
 
   const userForm = useForm<UsuarioForm>({
     resolver: zodResolver(UsuarioSchema),
-    defaultValues: { ubicacion_ids: [] },
+    defaultValues: { ubicacion_ids: [], allowed_ips: [] },
   });
 
   const resetForm = useForm<ResetForm>({ resolver: zodResolver(ResetPasswordSchema) });
@@ -99,9 +103,10 @@ export default function UsuariosPage() {
   }, []);
 
   function openCreate() {
-    userForm.reset({ ubicacion_ids: [], rol: 'VENDEDOR' as RolUsuario });
+    userForm.reset({ ubicacion_ids: [], allowed_ips: [], rol: 'VENDEDOR' as RolUsuario });
     setEditing(null);
     setFormError(null);
+    setIpInput('');
     setDialogOpen(true);
   }
 
@@ -113,9 +118,11 @@ export default function UsuariosPage() {
       rol: u.rol,
       password: '',
       ubicacion_ids: u.ubicaciones.map((ub) => ub.id),
+      allowed_ips: u.allowed_ips ?? [],
     });
     setEditing(u);
     setFormError(null);
+    setIpInput('');
     setDialogOpen(true);
   }
 
@@ -135,6 +142,7 @@ export default function UsuariosPage() {
         email: data.email,
         rol: data.rol,
         ubicacion_ids: data.ubicacion_ids,
+        allowed_ips: data.allowed_ips,
       };
       if (!editing && data.password) {
         payload.password = data.password;
@@ -176,11 +184,25 @@ export default function UsuariosPage() {
   }
 
   const selectedUbicaciones = userForm.watch('ubicacion_ids') ?? [];
+  const allowedIps = userForm.watch('allowed_ips') ?? [];
+  const watchedRol = userForm.watch('rol');
+  const showIpSection = editing && !['SUPER_USUARIO', 'ADMIN'].includes(watchedRol ?? '');
 
   function toggleUbicacion(id: string) {
     const current = selectedUbicaciones;
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
     userForm.setValue('ubicacion_ids', next, { shouldValidate: true });
+  }
+
+  function addIp() {
+    const ip = ipInput.trim();
+    if (!ip || !IPV4_REGEX.test(ip) || allowedIps.includes(ip)) return;
+    userForm.setValue('allowed_ips', [...allowedIps, ip]);
+    setIpInput('');
+  }
+
+  function removeIp(ip: string) {
+    userForm.setValue('allowed_ips', allowedIps.filter((x) => x !== ip));
   }
 
   if (loading) {
@@ -266,11 +288,18 @@ export default function UsuariosPage() {
                     {u.ultimo_acceso ? formatFechaCorta(u.ultimo_acceso) : 'Nunca'}
                   </td>
                   <td className="px-4 py-3">
-                    {u.activo ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <span className="text-body-sm text-steel-400">Inactivo</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {u.activo ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <span className="text-body-sm text-steel-400">Inactivo</span>
+                      )}
+                      {u.allowed_ips?.length > 0 && (
+                        <span title={`Restringido a: ${u.allowed_ips.join(', ')}`}>
+                          <Shield className="h-3.5 w-3.5 text-steel-400" />
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
@@ -393,6 +422,58 @@ export default function UsuariosPage() {
                   </label>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Restricción por IP — solo al editar usuarios no-admin */}
+          {showIpSection && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Shield className="h-3.5 w-3.5 text-steel-500" />
+                <p className="text-body-sm font-medium text-steel-900">IPs permitidas</p>
+                <span className="text-[10px] text-steel-400 ml-1">vacío = sin restricción</span>
+              </div>
+
+              {/* IPs actuales */}
+              {allowedIps.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {allowedIps.map((ip) => (
+                    <span
+                      key={ip}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-steel-900 text-white text-body-sm rounded-md"
+                    >
+                      {ip}
+                      <button
+                        type="button"
+                        onClick={() => removeIp(ip)}
+                        className="hover:text-brand-300 transition-colors ml-0.5"
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Agregar IP */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="192.168.1.100"
+                  value={ipInput}
+                  onChange={(e) => setIpInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addIp())}
+                  className="font-mono text-body-sm"
+                />
+                <Button type="button" variant="secondary" onClick={addIp}>
+                  Agregar
+                </Button>
+              </div>
+              {allowedIps.length > 0 && (
+                <p className="text-meta text-steel-400 mt-1.5">
+                  El usuario solo podrá conectarse desde {allowedIps.length === 1 ? 'esta IP' : 'estas IPs'}.
+                  ADMIN y Super Usuario no tienen restricción de IP.
+                </p>
+              )}
             </div>
           )}
 

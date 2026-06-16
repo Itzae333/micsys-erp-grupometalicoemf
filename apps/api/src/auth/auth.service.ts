@@ -46,6 +46,7 @@ export class AuthService {
       rol: usuario.rol,
       empresa_id: usuario.empresa_id,
       ubicacion_ids: usuario.ubicaciones.map((u) => u.ubicacion_id),
+      allowed_ips: usuario.allowed_ips,
     };
 
     const access_token = await this.signAccessToken(payload);
@@ -100,6 +101,7 @@ export class AuthService {
       rol: usuario.rol,
       empresa_id: usuario.empresa_id,
       ubicacion_ids: usuario.ubicaciones.map((u) => u.ubicacion_id),
+      allowed_ips: usuario.allowed_ips,
     };
 
     const access_token = await this.signAccessToken(payload);
