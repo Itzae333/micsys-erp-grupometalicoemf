@@ -59,6 +59,19 @@ interface ListaResponse {
   pages: number;
 }
 
+const SUCURSAL_ALIAS: Record<string, string> = {
+  virgen:       'La Virgen',
+  santa:        'Santa',
+  tecamachalco: 'Tecamachalco',
+  tepeaca:      'Tepeaca',
+  punto_venta:  'Punto de Venta',
+  sin_sucursal: 'Sin sucursal',
+};
+
+function labelSucursal(s: string): string {
+  return SUCURSAL_ALIAS[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const ESTATUS_COLORS: Record<string, string> = {
   PAGADA:    'bg-green-50 text-green-700',
   CANCELADA: 'bg-red-50 text-red-600',
@@ -78,6 +91,7 @@ export default function HistorialLegacyPage() {
   const [sucursal, setSucursal]       = useState('');
   const [desde, setDesde]             = useState('');
   const [hasta, setHasta]             = useState('');
+  const [sucursales, setSucursales]   = useState<string[]>([]);
 
   const [selectedIdx, setSelectedIdx]       = useState(-1);
   const [detalle, setDetalle]               = useState<VentaDetalle | null>(null);
@@ -105,7 +119,10 @@ export default function HistorialLegacyPage() {
     }
   }
 
-  useEffect(() => { cargar(1); }, []);
+  useEffect(() => {
+    cargar(1);
+    api.get<string[]>('/migracion/ventas/sucursales').then(setSucursales).catch(() => {});
+  }, []);
 
   async function seleccionar(idx: number) {
     if (idx < 0 || idx >= ventas.length) return;
@@ -181,8 +198,9 @@ export default function HistorialLegacyPage() {
           onChange={(e) => setSucursal(e.target.value)}
         >
           <option value="">Todas las sucursales</option>
-          <option value="virgen">Principal</option>
-          <option value="punto_venta">Punto de venta</option>
+          {sucursales.map((s) => (
+            <option key={s} value={s}>{labelSucursal(s)}</option>
+          ))}
         </select>
 
         {/* Separador */}
@@ -279,7 +297,7 @@ export default function HistorialLegacyPage() {
                         </td>
                         <td className="px-3 py-2.5">
                           <span className="text-caption bg-steel-100 text-steel-600 px-2 py-0.5 rounded-full">
-                            {v.sucursal === 'virgen' ? 'Princ.' : 'PV'}
+                            {labelSucursal(v.sucursal)}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right font-medium text-steel-900">

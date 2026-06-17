@@ -33,6 +33,17 @@ function buildClave(row: Record<string, string>): string {
   return `LEGACY-${String(row['id'] ?? '0').padStart(6, '0')}`;
 }
 
+// Normaliza el valor de sucursal sin importar casing ni espacios del CSV.
+// Aplica alias explícitos para variantes conocidas; el resto se normaliza genéricamente
+// (minúsculas + espacios/guiones → guion_bajo) para soportar sucursales futuras.
+function normalizeSucursal(raw: string | undefined): string {
+  if (!raw?.trim()) return 'sin_sucursal';
+  const s = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  // Alias: variantes de "Punto de Venta"
+  if (s === 'punto_de_venta' || s === 'punto_venta') return 'punto_venta';
+  return s;
+}
+
 // Corrige mojibake (UTF-8 bytes almacenados como Latin-1: "AraÃ±a" → "Araña")
 // y descarta strings vacíos o el literal "null" que vienen del CSV legacy.
 function cleanStr(val: string | undefined): string | null {
@@ -176,7 +187,7 @@ export class MigracionService {
     const mapa = new Map<string, { header: Record<string, string>; lineas: Record<string, string>[]; fila: number }>();
     let filaActual = 2;
     for (const row of rows) {
-      const key = `${row['sucursal']}|${row['venta_id']}`;
+      const key = `${normalizeSucursal(row['sucursal'])}|${row['venta_id']}`;
       if (!mapa.has(key)) {
         mapa.set(key, { header: row, lineas: [], fila: filaActual });
       }
@@ -199,7 +210,7 @@ export class MigracionService {
 
     for (const [, { header, lineas, fila }] of mapa) {
       const legacyId = toInt(header['venta_id']);
-      const sucursal = header['sucursal'] || 'virgen';
+      const sucursal = normalizeSucursal(header['sucursal']);
       const key = `${sucursal}|${legacyId}`;
 
       if (importadosSet.has(key)) { result.omitidos++; continue; }
@@ -263,6 +274,16 @@ export class MigracionService {
     }
 
     return result;
+  }
+
+  async getSucursales(empresaId: string): Promise<string[]> {
+    const rows = await this.prisma.legacyVenta.findMany({
+      where: { empresa_id: empresaId },
+      select: { sucursal: true },
+      distinct: ['sucursal'],
+      orderBy: { sucursal: 'asc' },
+    });
+    return rows.map((r) => r.sucursal);
   }
 
   async listarVentas(empresaId: string, query: ListaVentasQuery) {

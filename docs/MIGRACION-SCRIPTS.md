@@ -154,11 +154,28 @@ id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,precio_num
 
 Exporta ventas históricas con sus líneas de carrito en un solo CSV denormalizado (una fila por artículo vendido).
 
-> `inventario_punto_venta` NO tiene tablas de color/material — usa `i.descripcion4` e `i.descripcion5` directamente.  
-> Cada venta aparece repetida tantas veces como artículos tenga. El ERP agrupa por `venta_id` al importar.
+> Cada venta aparece repetida tantas veces como artículos tenga. El ERP agrupa por `venta_id + sucursal` al importar.
+
+### Sucursales a migrar
+
+| Sucursal | Valor `sucursal` en CSV | Base de datos MetalAlpha | Tablas |
+|---|---|---|---|
+| La Virgen | `virgen` | `metalpha_virgen` (o similar) | `*_virgen` — color/material vía JOIN |
+| Santa | `santa` | `metalpha_santa` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
+| Tecamachalco | `tecamachalco` | `metalpha_tecamachalco` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
+| Tepeaca | `tepeaca` | `metalpha_tepeaca` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
+
+> Cada sucursal vive en su propia base de datos MetalAlpha con el mismo esquema.  
+> **No es posible hacer un UNION ALL** entre ellas en una sola query — se exporta un CSV por sucursal conectándose a cada DB por separado, y se suben los 4 CSVs al ERP uno por uno.  
+> El ERP detecta duplicados por `sucursal + venta_id`, así que puedes re-importar sin miedo.
+
+---
+
+### Script para La Virgen (color/material vía JOIN)
+
+Conéctate a la base de datos de **La Virgen** y ejecuta:
 
 ```sql
--- Ventas de la sucursal principal (inventario_virgen: color/material vía JOIN)
 SELECT
   v.id                                                         AS venta_id,
   v.fechaHoraVenta,
@@ -185,53 +202,65 @@ SELECT
   COALESCE(m.descripcion,  '')                                AS descripcion5,
   'virgen'                                                     AS sucursal
 FROM venta_virgen v
-LEFT JOIN cliente_virgen cl    ON cl.id = v.cliente_id
-JOIN  carrito_venta_virgen cv  ON cv.venta_id = v.id
-JOIN  inventario_virgen i      ON i.id = cv.inventario_id
-LEFT JOIN color_virgen    c    ON c.id = i.color_id
-LEFT JOIN material_virgen m    ON m.id = i.material_id
+LEFT JOIN cliente_virgen cl       ON cl.id = v.cliente_id
+JOIN  carrito_venta_virgen cv     ON cv.venta_id = v.id
+JOIN  inventario_virgen i         ON i.id = cv.inventario_id
+LEFT JOIN color_virgen    c       ON c.id = i.color_id
+LEFT JOIN material_virgen m       ON m.id = i.material_id
+ORDER BY v.id;
+```
 
-UNION ALL
+---
 
--- Ventas del punto de venta (inventario_punto_venta: descripcion4/5 directas, sin JOINs)
+### Script para Santa / Tecamachalco / Tepeaca (`descripcion4`/`5` directo)
+
+El esquema de tablas es el mismo en las 3 DBs. Conéctate a cada una y ejecuta este script **cambiando solo el literal de `sucursal`**:
+
+```sql
+-- Cambia 'santa' por 'tecamachalco' o 'tepeaca' según la DB a la que estés conectado
 SELECT
-  v.id,
+  v.id                                                         AS venta_id,
   v.fechaHoraVenta,
   v.total,
-  COALESCE(v.recibido,   0.00),
-  COALESCE(v.cambio,     0.00),
-  COALESCE(v.restan,     0.00),
-  COALESCE(v.estatusVenta, 'PAGADA'),
-  COALESCE(v.tipoPago,   'EFECTIVO'),
-  COALESCE(v.nota,       ''),
-  COALESCE(v.incidencia, ''),
+  COALESCE(v.recibido,   0.00)                                AS recibido,
+  COALESCE(v.cambio,     0.00)                                AS cambio,
+  COALESCE(v.restan,     0.00)                                AS restan,
+  COALESCE(v.estatusVenta, 'PAGADA')                          AS estatusVenta,
+  COALESCE(v.tipoPago,   'EFECTIVO')                          AS tipoPago,
+  COALESCE(v.nota,       '')                                  AS nota,
+  COALESCE(v.incidencia, '')                                  AS incidencia,
   TRIM(CONCAT(
     COALESCE(cl.nombre, ''),           ' ',
     COALESCE(cl.apellidoPaterno, ''),  ' ',
     COALESCE(cl.apellidoMaterno, '')
-  )),
-  COALESCE(cv.cantidad,   0),
-  COALESCE(cv.precioNeto, 0.00),
-  COALESCE(cv.total,      0.00),
-  COALESCE(i.descripcion1, ''),
-  COALESCE(i.descripcion2, ''),
-  COALESCE(i.descripcion3, ''),
-  COALESCE(i.descripcion4, ''),
-  COALESCE(i.descripcion5, ''),
-  'punto_venta'
+  ))                                                           AS cliente_nombre,
+  COALESCE(cv.cantidad,   0)                                  AS cantidad,
+  COALESCE(cv.precioNeto, 0.00)                               AS precioNeto,
+  COALESCE(cv.total,      0.00)                               AS linea_total,
+  COALESCE(i.descripcion1, '')                                AS descripcion1,
+  COALESCE(i.descripcion2, '')                                AS descripcion2,
+  COALESCE(i.descripcion3, '')                                AS descripcion3,
+  COALESCE(i.descripcion4, '')                                AS descripcion4,
+  COALESCE(i.descripcion5, '')                                AS descripcion5,
+  'santa'                                                      AS sucursal  -- ← cambiar aquí
 FROM venta_punto_venta v
 LEFT JOIN cliente_punto_venta cl         ON cl.id = v.cliente_id
 JOIN  carrito_venta_punto_venta cv       ON cv.venta_id = v.id
 JOIN  inventario_punto_venta i           ON i.id = cv.inventario_id
-
-ORDER BY sucursal, venta_id;
+ORDER BY v.id;
 ```
+
+| DB conectada | Cambiar literal a |
+|---|---|
+| metalpha_santa | `'santa'` |
+| metalpha_tecamachalco | `'tecamachalco'` |
+| metalpha_tepeaca | `'tepeaca'` |
 
 **Formato esperado del CSV:**
 ```
 venta_id,fechaHoraVenta,total,recibido,cambio,restan,estatusVenta,tipoPago,nota,incidencia,cliente_nombre,cantidad,precioNeto,linea_total,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,sucursal
 1,2024-03-15 10:30:00,500.00,500.00,0.00,0.00,PAGADA,EFECTIVO,,,Juan Pérez,2,25.00,50.00,Tubo Cuadrado,1x1,3mm,Negro,Acero,virgen
-2,2024-04-01 09:00:00,300.00,300.00,0.00,0.00,PAGADA,TARJETA,,,María López,3,100.00,300.00,Lámina,2x4,1mm,Galvanizada,,punto_venta
+2,2024-04-01 09:00:00,300.00,300.00,0.00,0.00,PAGADA,TARJETA,,,María López,3,100.00,300.00,Lámina,2x4,1mm,Galvanizada,,santa
 ```
 
 ---

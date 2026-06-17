@@ -119,7 +119,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/historial-legacy',
     label: 'Historial Legacy',
     icon: <History className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
+    roles: ['SUPER_USUARIO', 'ADMIN'],
   },
   {
     href: '/configuracion',
@@ -204,7 +204,7 @@ export function Sidebar() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          {empresa && (
+          {empresa && (['SUPER_USUARIO', 'ADMIN'] as RolUsuario[]).includes(usuario?.rol as RolUsuario) ? (
             <button
               onClick={() => setSwitcherOpen(true)}
               data-testid="context-switcher-btn"
@@ -218,6 +218,15 @@ export function Sidebar() {
               </div>
               <ChevronsUpDown className="h-3.5 w-3.5 text-steel-500 flex-shrink-0" />
             </button>
+          ) : empresa && (
+            <div className="w-full flex items-center gap-2 px-2 py-1.5 mt-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-body-sm font-medium truncate">{empresa.nombre}</p>
+                <p className="text-steel-500 text-meta truncate">
+                  {ubicacion?.nombre ?? 'Sin ubicación'}
+                </p>
+              </div>
+            </div>
           )}
           <ContextSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
         </div>
