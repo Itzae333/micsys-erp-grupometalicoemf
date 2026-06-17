@@ -8,9 +8,9 @@ export class CuentasService {
 
   // ─── Resumen: clientes con saldo pendiente ────────────────────
 
-  async getResumen(empresaId: string) {
+  async getResumen(ubicacionId: string) {
     const clientes = await this.prisma.cliente.findMany({
-      where: { empresa_id: empresaId, activo: true, saldo_pendiente: { gt: 0 } },
+      where: { ubicacion_id: ubicacionId, activo: true, saldo_pendiente: { gt: 0 } },
       orderBy: { saldo_pendiente: 'desc' },
       select: {
         id: true,
@@ -34,17 +34,17 @@ export class CuentasService {
 
   // ─── Detalle de cuenta de un cliente ─────────────────────────
 
-  async getCuenta(clienteId: string, empresaId: string, page = 1, limit = 50) {
+  async getCuenta(clienteId: string, ubicacionId: string, page = 1, limit = 50) {
     const cliente = await this.prisma.cliente.findFirst({
-      where: { id: clienteId, empresa_id: empresaId },
+      where: { id: clienteId, ubicacion_id: ubicacionId },
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
     const skip = (page - 1) * limit;
     const [total, movimientos] = await Promise.all([
-      this.prisma.movimientoCuenta.count({ where: { cliente_id: clienteId, empresa_id: empresaId } }),
+      this.prisma.movimientoCuenta.count({ where: { cliente_id: clienteId, ubicacion_id: ubicacionId } }),
       this.prisma.movimientoCuenta.findMany({
-        where: { cliente_id: clienteId, empresa_id: empresaId },
+        where: { cliente_id: clienteId, ubicacion_id: ubicacionId },
         orderBy: { created_at: 'desc' },
         skip,
         take: limit,
@@ -76,9 +76,9 @@ export class CuentasService {
 
   // ─── Registrar abono ─────────────────────────────────────────
 
-  async registrarAbono(clienteId: string, dto: AbonoDto, empresaId: string, usuarioId: string) {
+  async registrarAbono(clienteId: string, dto: AbonoDto, ubicacionId: string, usuarioId: string) {
     const cliente = await this.prisma.cliente.findFirst({
-      where: { id: clienteId, empresa_id: empresaId },
+      where: { id: clienteId, ubicacion_id: ubicacionId },
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
@@ -94,7 +94,7 @@ export class CuentasService {
     return this.prisma.$transaction(async (tx) => {
       const mov = await tx.movimientoCuenta.create({
         data: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           cliente_id: clienteId,
           tipo: 'ABONO',
           monto: dto.monto,
@@ -120,9 +120,9 @@ export class CuentasService {
 
   // ─── Ajuste manual ────────────────────────────────────────────
 
-  async registrarAjuste(clienteId: string, dto: AjusteDto, empresaId: string, usuarioId: string) {
+  async registrarAjuste(clienteId: string, dto: AjusteDto, ubicacionId: string, usuarioId: string) {
     const cliente = await this.prisma.cliente.findFirst({
-      where: { id: clienteId, empresa_id: empresaId },
+      where: { id: clienteId, ubicacion_id: ubicacionId },
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
@@ -133,7 +133,7 @@ export class CuentasService {
     return this.prisma.$transaction(async (tx) => {
       const mov = await tx.movimientoCuenta.create({
         data: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           cliente_id: clienteId,
           tipo: 'AJUSTE',
           monto: dto.monto,

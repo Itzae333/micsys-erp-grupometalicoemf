@@ -46,16 +46,15 @@ export class PedidosService {
 
   // ─── Listar ───────────────────────────────────────────────────
 
-  async findAll(empresaId: string, query: {
+  async findAll(ubicacionId: string, query: {
     estatus?: string; page?: number; limit?: number;
-    ubicacionId?: string; q?: string; desde?: string;
+    q?: string; desde?: string;
   } = {}) {
-    const { estatus, page = 1, limit = 50, ubicacionId, q, desde } = query;
+    const { estatus, page = 1, limit = 50, q, desde } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.PedidoWhereInput = { empresa_id: empresaId };
+    const where: Prisma.PedidoWhereInput = { ubicacion_id: ubicacionId };
     if (estatus) where.estatus = estatus as any;
-    if (ubicacionId) where.ubicacion_id = ubicacionId;
     if (desde) where.created_at = { gte: new Date(desde) };
     if (q) {
       const folioNum = parseInt(q, 10);
@@ -86,26 +85,25 @@ export class PedidosService {
     };
   }
 
-  async findOne(id: string, empresaId: string) {
-    const pedido = await this.findOneRaw(id, empresaId);
+  async findOne(id: string, ubicacionId: string) {
+    const pedido = await this.findOneRaw(id, ubicacionId);
     return this.serializePedido(pedido);
   }
 
   // ─── Crear pedido ─────────────────────────────────────────────
 
-  async create(dto: CreatePedidoDto, empresaId: string, ubicacionId: string, usuarioId: string) {
+  async create(dto: CreatePedidoDto, ubicacionId: string, usuarioId: string) {
     const cliente = await this.prisma.cliente.findFirst({
-      where: { id: dto.cliente_id, empresa_id: empresaId },
+      where: { id: dto.cliente_id, ubicacion_id: ubicacionId },
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    const folio = await this.nextFolio(empresaId);
+    const folio = await this.nextFolio(ubicacionId);
 
     const pedido = await this.prisma.$transaction(async (tx) => {
       const p = await tx.pedido.create({
         data: {
           folio,
-          empresa_id: empresaId,
           ubicacion_id: ubicacionId,
           usuario_id: usuarioId,
           cliente_id: dto.cliente_id,
@@ -118,7 +116,7 @@ export class PedidosService {
       if (dto.lineas && dto.lineas.length > 0) {
         for (const l of dto.lineas) {
           const art = await tx.articulo.findFirst({
-            where: { id: l.articulo_id, empresa_id: empresaId },
+            where: { id: l.articulo_id, ubicacion_id: ubicacionId },
           });
           if (!art) throw new NotFoundException(`Artículo ${l.articulo_id} no encontrado`);
 
@@ -147,14 +145,14 @@ export class PedidosService {
 
   // ─── Líneas ───────────────────────────────────────────────────
 
-  async addLinea(pedidoId: string, dto: AddLineaPedidoDto, empresaId: string) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+  async addLinea(pedidoId: string, dto: AddLineaPedidoDto, ubicacionId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
     if (pedido.estatus !== 'ABIERTO' && pedido.estatus !== 'PARCIAL') {
       throw new ForbiddenException('Solo se pueden agregar líneas a pedidos ABIERTO o PARCIAL');
     }
 
     const art = await this.prisma.articulo.findFirst({
-      where: { id: dto.articulo_id, empresa_id: empresaId },
+      where: { id: dto.articulo_id, ubicacion_id: ubicacionId },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     if (!art.activo) throw new BadRequestException('El artículo está inactivo');
@@ -177,11 +175,11 @@ export class PedidosService {
       await this.recalcPedido(tx, pedidoId);
     });
 
-    return this.findOne(pedidoId, empresaId);
+    return this.findOne(pedidoId, ubicacionId);
   }
 
-  async updateLinea(pedidoId: string, lineaId: string, dto: UpdateLineaPedidoDto, empresaId: string) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+  async updateLinea(pedidoId: string, lineaId: string, dto: UpdateLineaPedidoDto, ubicacionId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
     if (pedido.estatus !== 'ABIERTO' && pedido.estatus !== 'PARCIAL') {
       throw new ForbiddenException('Solo se pueden editar líneas de pedidos ABIERTO o PARCIAL');
     }
@@ -204,11 +202,11 @@ export class PedidosService {
       await this.recalcPedido(tx, pedidoId);
     });
 
-    return this.findOne(pedidoId, empresaId);
+    return this.findOne(pedidoId, ubicacionId);
   }
 
-  async removeLinea(pedidoId: string, lineaId: string, empresaId: string) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+  async removeLinea(pedidoId: string, lineaId: string, ubicacionId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
     if (pedido.estatus !== 'ABIERTO' && pedido.estatus !== 'PARCIAL') {
       throw new ForbiddenException('Solo se pueden eliminar líneas de pedidos ABIERTO o PARCIAL');
     }
@@ -223,7 +221,7 @@ export class PedidosService {
       await this.recalcPedido(tx, pedidoId);
     });
 
-    return this.findOne(pedidoId, empresaId);
+    return this.findOne(pedidoId, ubicacionId);
   }
 
   // ─── Anticipos ────────────────────────────────────────────────
@@ -231,11 +229,10 @@ export class PedidosService {
   async registrarAnticipo(
     pedidoId: string,
     dto: RegistrarAnticipoDto,
-    empresaId: string,
     ubicacionId: string,
     usuarioId: string,
   ) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
 
     if (pedido.estatus !== 'ABIERTO' && pedido.estatus !== 'PARCIAL') {
       throw new ForbiddenException('Solo se pueden registrar anticipos en pedidos ABIERTO o PARCIAL');
@@ -264,7 +261,6 @@ export class PedidosService {
         await tx.anticiposPedido.create({
           data: {
             pedido_id: pedidoId,
-            empresa_id: empresaId,
             ubicacion_id: ubicacionId,
             usuario_id: usuarioId,
             metodo: p.metodo,
@@ -287,7 +283,6 @@ export class PedidosService {
 
     const serialized = this.serializePedido(result);
 
-    // Payload para ticket de anticipo (enviado al print-bridge por el frontend)
     const ticketPayload = {
       tipo: 'anticipo_pedido',
       pedido: {
@@ -321,11 +316,10 @@ export class PedidosService {
   async liquidar(
     pedidoId: string,
     dto: LiquidarPedidoDto,
-    empresaId: string,
     ubicacionId: string,
     usuarioId: string,
   ) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
 
     if (pedido.estatus === 'LIQUIDADO') {
       throw new BadRequestException('El pedido ya está liquidado');
@@ -351,20 +345,17 @@ export class PedidosService {
 
     const nuevoTotalAnticipos = +(anticiposActuales + montoAdicional).toFixed(2);
 
-    // Obtener folio de notaVenta para esta empresa
     const ultimaNotaFolio = await this.prisma.notaVenta.findFirst({
-      where: { empresa_id: empresaId },
+      where: { ubicacion_id: ubicacionId },
       orderBy: { folio: 'desc' },
       select: { folio: true },
     });
     const folioNota = (ultimaNotaFolio?.folio ?? 0) + 1;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Crear NotaVenta en estatus PAGADA
       const nota = await tx.notaVenta.create({
         data: {
           folio: folioNota,
-          empresa_id: empresaId,
           ubicacion_id: ubicacionId,
           usuario_id: usuarioId,
           cliente_id: pedido.cliente_id,
@@ -376,7 +367,6 @@ export class PedidosService {
         },
       });
 
-      // Copiar líneas del pedido a la nota de venta
       for (const l of pedido.lineas) {
         await tx.notaVentaLinea.create({
           data: {
@@ -391,7 +381,6 @@ export class PedidosService {
         });
       }
 
-      // Crear registros de Pago por cada anticipo
       for (const ant of pedido.anticipos) {
         await tx.pago.create({
           data: {
@@ -403,14 +392,12 @@ export class PedidosService {
         });
       }
 
-      // Crear Pagos por pagos adicionales al liquidar
       for (const p of pagosFinal) {
         await tx.pago.create({
           data: { nota_id: nota.id, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null },
         });
       }
 
-      // Marcar pedido como LIQUIDADO
       await tx.pedido.update({
         where: { id: pedidoId },
         data: {
@@ -418,17 +405,14 @@ export class PedidosService {
           nota_venta_id: nota.id,
           total_anticipos: nuevoTotalAnticipos,
           cerrado_at: new Date(),
-          ...(montoAdicional > 0 ? {} : {}),
         },
       });
 
-      // Registrar anticipos adicionales si los hay
       if (pagosFinal.length > 0) {
         for (const p of pagosFinal) {
           await tx.anticiposPedido.create({
             data: {
               pedido_id: pedidoId,
-              empresa_id: empresaId,
               ubicacion_id: ubicacionId,
               usuario_id: usuarioId,
               metodo: p.metodo,
@@ -442,7 +426,6 @@ export class PedidosService {
       return nota;
     });
 
-    // Construir payload para ticket de venta con historial de anticipos
     const todosAnticipos = [
       ...pedido.anticipos.map((a) => ({
         fecha: a.created_at.toISOString(),
@@ -490,8 +473,8 @@ export class PedidosService {
 
   // ─── Cancelar ─────────────────────────────────────────────────
 
-  async cancelar(pedidoId: string, empresaId: string) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+  async cancelar(pedidoId: string, ubicacionId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
 
     if (pedido.estatus === 'LIQUIDADO') {
       throw new ForbiddenException('No se puede cancelar un pedido ya liquidado');
@@ -516,8 +499,8 @@ export class PedidosService {
 
   // ─── Evidencias ───────────────────────────────────────────────
 
-  async agregarEvidencia(pedidoId: string, dto: AgregarEvidenciaPedidoDto, empresaId: string, usuarioId: string) {
-    const pedido = await this.findOneRaw(pedidoId, empresaId);
+  async agregarEvidencia(pedidoId: string, dto: AgregarEvidenciaPedidoDto, ubicacionId: string, usuarioId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
 
     if (pedido.estatus === 'CANCELADO') {
       throw new ForbiddenException('No se pueden agregar evidencias a pedidos cancelados');
@@ -528,7 +511,6 @@ export class PedidosService {
     await this.prisma.evidenciaPedido.create({
       data: {
         pedido_id: pedidoId,
-        empresa_id: empresaId,
         tipo: 'COMPROBANTE_PAGO',
         descripcion: dto.descripcion ?? null,
         archivo_url: dto.archivo_url ?? null,
@@ -537,14 +519,14 @@ export class PedidosService {
       },
     });
 
-    return this.findOne(pedidoId, empresaId);
+    return this.findOne(pedidoId, ubicacionId);
   }
 
   // ─── Privados ─────────────────────────────────────────────────
 
-  private async findOneRaw(id: string, empresaId: string): Promise<PedidoRaw> {
+  private async findOneRaw(id: string, ubicacionId: string): Promise<PedidoRaw> {
     const pedido = await this.prisma.pedido.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
       include: PEDIDO_INCLUDE,
     });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
@@ -555,9 +537,9 @@ export class PedidosService {
     return cantidad * precio * (1 - descuento / 100);
   }
 
-  private async nextFolio(empresaId: string): Promise<number> {
+  private async nextFolio(ubicacionId: string): Promise<number> {
     const last = await this.prisma.pedido.findFirst({
-      where: { empresa_id: empresaId },
+      where: { ubicacion_id: ubicacionId },
       orderBy: { folio: 'desc' },
       select: { folio: true },
     });

@@ -6,19 +6,20 @@ import { Roles } from '../common/decorators/roles.decorator';
 @ApiTags('Reportes')
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: false })
 @Controller('reportes')
 export class ReportesController {
   constructor(private reportes: ReportesService) {}
 
   @Get('dashboard')
   @ApiOperation({ summary: 'KPIs del día y del mes para el dashboard principal' })
-  getDashboard(@Headers('x-empresa-id') empresaId: string) {
-    return this.reportes.getDashboard(empresaId);
+  getDashboard(@Headers('x-ubicacion-id') ubicacionId: string) {
+    return this.reportes.getDashboard(ubicacionId);
   }
 
   @Get('dashboard-global')
   @Roles('SUPER_USUARIO')
-  @ApiOperation({ summary: 'KPIs consolidados de todas las empresas — solo SUPER_USUARIO' })
+  @ApiOperation({ summary: 'KPIs consolidados de todas las ubicaciones — solo SUPER_USUARIO' })
   getDashboardGlobal() {
     return this.reportes.getDashboardGlobal();
   }
@@ -26,30 +27,28 @@ export class ReportesController {
   @Get('ventas')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Reporte de ventas por rango de fechas' })
-  @ApiQuery({ name: 'desde',       required: false })
-  @ApiQuery({ name: 'hasta',       required: false })
-  @ApiQuery({ name: 'ubicacionId', required: false })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
   getVentas(
-    @Headers('x-empresa-id') empresaId: string,
-    @Query('desde')       desde?: string,
-    @Query('hasta')       hasta?: string,
-    @Query('ubicacionId') ubicacionId?: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
   ) {
-    return this.reportes.getReporteVentas(empresaId, { desde, hasta, ubicacionId });
+    return this.reportes.getReporteVentas(ubicacionId, { desde, hasta });
   }
 
   @Get('inventario')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Reporte de inventario: bajo stock y movimientos del mes' })
-  getInventario(@Headers('x-empresa-id') empresaId: string) {
-    return this.reportes.getReporteInventario(empresaId);
+  getInventario(@Headers('x-ubicacion-id') ubicacionId: string) {
+    return this.reportes.getReporteInventario(ubicacionId);
   }
 
   @Get('credito')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Reporte de cartera de crédito y clientes con saldo' })
-  getCredito(@Headers('x-empresa-id') empresaId: string) {
-    return this.reportes.getReporteCredito(empresaId);
+  getCredito(@Headers('x-ubicacion-id') ubicacionId: string) {
+    return this.reportes.getReporteCredito(ubicacionId);
   }
 
   @Get('compras')
@@ -58,11 +57,11 @@ export class ReportesController {
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
   getCompras(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
   ) {
-    return this.reportes.getReporteCompras(empresaId, { desde, hasta });
+    return this.reportes.getReporteCompras(ubicacionId, { desde, hasta });
   }
 
   @Get('produccion')
@@ -94,16 +93,14 @@ export class ReportesController {
   @Get('corte-caja')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Corte de caja por rango de fechas' })
-  @ApiQuery({ name: 'desde',       required: false })
-  @ApiQuery({ name: 'hasta',       required: false })
-  @ApiQuery({ name: 'ubicacionId', required: false })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
   getCorteCaja(
-    @Headers('x-empresa-id') empresaId: string,
-    @Query('desde')       desde?: string,
-    @Query('hasta')       hasta?: string,
-    @Query('ubicacionId') ubicacionId?: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
   ) {
-    return this.reportes.getCorteCaja(empresaId, { desde, hasta, ubicacionId });
+    return this.reportes.getCorteCaja(ubicacionId, { desde, hasta });
   }
 
   @Get('auditoria')

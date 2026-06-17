@@ -1,5 +1,6 @@
-// GrupoMetalicoEMF ERP — Schema Prisma v1.0.0
-// Fase 1: Fundación — Auth, Empresas, Ubicaciones, Usuarios, ConfigColumnas
+// GrupoMetalicoEMF ERP — Schema Prisma v2.0.0
+// Arquitectura: datos operativos (inventario, clientes, ventas, pedidos, compras)
+// por UBICACION. Datos estructurales (usuarios, proveedores, RH) por EMPRESA.
 
 generator client {
   provider = "prisma-client-js"
@@ -25,28 +26,20 @@ model Empresa {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
-  ubicaciones              Ubicacion[]
-  usuarios                 Usuario[]
-  config_columnas          ConfigColumnasUbicacion[]
-  proveedores              Proveedor[]
-  articulos                Articulo[]
-  clientes                 Cliente[]
-  notas_venta              NotaVenta[]
-  movimientos_cuenta       MovimientoCuenta[]
-  movimientos_inventario   MovimientoInventario[]
-  ordenes_compra           OrdenCompra[]
-  movimientos_proveedor    MovimientoCuentaProveedor[]
-  empleados                Empleado[]
-  areas                    Area[]
-  registros_asistencia     RegistroAsistencia[]
-  ordenes_produccion       OrdenProduccion[]
-  solicitudes_edicion      SolicitudEdicionNota[]
-  evidencias_nota          EvidenciaNota[]
-  pedidos                  Pedido[]
-  anticipos_pedido         AnticiposPedido[]
-  legacy_ventas            LegacyVenta[]
-  remisiones_origen        Remision[] @relation("RemisionOrigenEmpresa")
-  remisiones_destino       Remision[] @relation("RemisionDestinoEmpresa")
+  // Datos estructurales — nivel empresa
+  ubicaciones           Ubicacion[]
+  usuarios              Usuario[]
+  config_columnas       ConfigColumnasUbicacion[]
+  proveedores           Proveedor[]
+  empleados             Empleado[]
+  areas                 Area[]
+  registros_asistencia  RegistroAsistencia[]
+  ordenes_produccion    OrdenProduccion[]
+  solicitudes_edicion   SolicitudEdicionNota[]
+  evidencias_nota       EvidenciaNota[]
+  legacy_ventas         LegacyVenta[]
+  remisiones_origen     Remision[] @relation("RemisionOrigenEmpresa")
+  remisiones_destino    Remision[] @relation("RemisionDestinoEmpresa")
 
   @@map("empresas")
 }
@@ -74,20 +67,27 @@ model Ubicacion {
   estado         String?
   cp             String?
   telefono       String?
+  logo_url       String?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  logo_url    String?
-
-  empresa         Empresa                 @relation(fields: [empresa_id], references: [id])
+  empresa         Empresa                   @relation(fields: [empresa_id], references: [id])
   usuarios        UsuarioUbicacion[]
   config_columnas ConfigColumnasUbicacion[]
-  notas_venta     NotaVenta[]
-  pedidos         Pedido[]
-  anticipos_pedido AnticiposPedido[]
-  remisiones_origen  Remision[] @relation("RemisionOrigenUbicacion")
-  remisiones_destino Remision[] @relation("RemisionDestinoUbicacion")
+
+  // Datos operativos — nivel ubicación
+  articulos              Articulo[]
+  clientes               Cliente[]
+  notas_venta            NotaVenta[]
+  movimientos_cuenta     MovimientoCuenta[]
+  movimientos_inventario MovimientoInventario[]
+  ordenes_compra         OrdenCompra[]
+  movimientos_proveedor  MovimientoCuentaProveedor[]
+  pedidos                Pedido[]
+  anticipos_pedido       AnticiposPedido[]
+  remisiones_origen      Remision[] @relation("RemisionOrigenUbicacion")
+  remisiones_destino     Remision[] @relation("RemisionDestinoUbicacion")
 
   @@map("ubicaciones")
 }
@@ -140,8 +140,6 @@ model Usuario {
   @@map("usuarios")
 }
 
-// Pivot usuario ↔ ubicación
-// Un usuario puede estar asignado a múltiples ubicaciones de su empresa
 model UsuarioUbicacion {
   id           String   @id @default(cuid())
   usuario_id   String
@@ -181,10 +179,8 @@ model RefreshToken {
 // ─────────────────────────────────────────────────────────────
 // CONFIGURACIÓN DE COLUMNAS POR UBICACIÓN
 // Define qué columnas de precio/existencia/descripción están
-// activas en una empresa+ubicación y cómo se llaman en el frontend.
-// Es el núcleo del inventario parametrizable.
-// MÁXIMOS (inamovibles después de Fase 2):
-//   - 10 precios, 5 existencias, 5 descripciones
+// activas y cómo se llaman. Máximos inamovibles:
+//   10 precios, 5 existencias, 5 descripciones
 // ─────────────────────────────────────────────────────────────
 
 model ConfigColumnasUbicacion {
@@ -192,10 +188,10 @@ model ConfigColumnasUbicacion {
   empresa_id   String
   ubicacion_id String
   tipo         TipoColumna
-  numero       Int         // 1..10 para PRECIO; 1..5 para EXISTENCIA y DESCRIPCION
-  label        String      // "Mayoreo", "Crédito", "Existencia Planta", etc.
+  numero       Int
+  label        String
   activa       Boolean     @default(true)
-  orden        Int         // posición en la tabla de inventario
+  orden        Int
   created_at   DateTime    @default(now())
   updated_at   DateTime    @updatedAt
 
@@ -213,18 +209,18 @@ enum TipoColumna {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PROVEEDORES
+// PROVEEDORES — nivel EMPRESA (compartido entre sucursales)
 // ─────────────────────────────────────────────────────────────
 
 model Proveedor {
-  id           String   @id @default(cuid())
-  empresa_id   String
-  nombre       String
-  razon_social String?
-  rfc          String?
-  telefono     String?
-  email        String?
-  direccion    String?
+  id              String   @id @default(cuid())
+  empresa_id      String
+  nombre          String
+  razon_social    String?
+  rfc             String?
+  telefono        String?
+  email           String?
+  direccion       String?
   activo          Boolean  @default(true)
   saldo_pendiente Decimal  @default(0) @db.Decimal(12, 2)
   created_at      DateTime @default(now())
@@ -240,36 +236,36 @@ model Proveedor {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ARTÍCULOS (INVENTARIO)
+// ARTÍCULOS — nivel UBICACIÓN
+// Cada sucursal tiene su propio catálogo independiente.
 // precio_1..10    → slots controlados por ConfigColumnasUbicacion PRECIO
-// existencia_1..5 → slots controlados por ConfigColumnasUbicacion EXISTENCIA
-// Máximos inamovibles post Fase 2: 10 precios, 5 existencias.
+// existencia_1..5 → sub-almacenes dentro de la ubicación
 // ─────────────────────────────────────────────────────────────
 
 model Articulo {
-  id            String   @id @default(cuid())
-  empresa_id    String
-  clave         String
-  activo        Boolean  @default(true)
-  imagen_url    String?
-  proveedor_id  String?
+  id           String  @id @default(cuid())
+  ubicacion_id String
+  clave        String
+  activo       Boolean @default(true)
+  imagen_url   String?
+  proveedor_id String?
 
-  precio_1      Decimal? @db.Decimal(12, 2)
-  precio_2      Decimal? @db.Decimal(12, 2)
-  precio_3      Decimal? @db.Decimal(12, 2)
-  precio_4      Decimal? @db.Decimal(12, 2)
-  precio_5      Decimal? @db.Decimal(12, 2)
-  precio_6      Decimal? @db.Decimal(12, 2)
-  precio_7      Decimal? @db.Decimal(12, 2)
-  precio_8      Decimal? @db.Decimal(12, 2)
-  precio_9      Decimal? @db.Decimal(12, 2)
-  precio_10     Decimal? @db.Decimal(12, 2)
+  precio_1  Decimal? @db.Decimal(12, 2)
+  precio_2  Decimal? @db.Decimal(12, 2)
+  precio_3  Decimal? @db.Decimal(12, 2)
+  precio_4  Decimal? @db.Decimal(12, 2)
+  precio_5  Decimal? @db.Decimal(12, 2)
+  precio_6  Decimal? @db.Decimal(12, 2)
+  precio_7  Decimal? @db.Decimal(12, 2)
+  precio_8  Decimal? @db.Decimal(12, 2)
+  precio_9  Decimal? @db.Decimal(12, 2)
+  precio_10 Decimal? @db.Decimal(12, 2)
 
-  existencia_1  Decimal? @db.Decimal(12, 3)
-  existencia_2  Decimal? @db.Decimal(12, 3)
-  existencia_3  Decimal? @db.Decimal(12, 3)
-  existencia_4  Decimal? @db.Decimal(12, 3)
-  existencia_5  Decimal? @db.Decimal(12, 3)
+  existencia_1 Decimal? @db.Decimal(12, 3)
+  existencia_2 Decimal? @db.Decimal(12, 3)
+  existencia_3 Decimal? @db.Decimal(12, 3)
+  existencia_4 Decimal? @db.Decimal(12, 3)
+  existencia_5 Decimal? @db.Decimal(12, 3)
 
   descripcion_1 String?
   descripcion_2 String?
@@ -277,10 +273,10 @@ model Articulo {
   descripcion_4 String?
   descripcion_5 String?
 
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  empresa                Empresa              @relation(fields: [empresa_id], references: [id])
+  ubicacion              Ubicacion            @relation(fields: [ubicacion_id], references: [id])
   proveedor              Proveedor?           @relation(fields: [proveedor_id], references: [id])
   lineas_venta           NotaVentaLinea[]
   lineas_pedido          PedidoLinea[]
@@ -289,17 +285,17 @@ model Articulo {
   ordenes_produccion     OrdenProduccion[]
   remision_lineas        RemisionLinea[]
 
-  @@unique([empresa_id, clave])
+  @@unique([ubicacion_id, clave])
   @@map("articulos")
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 3 — VENTAS
+// VENTAS — nivel UBICACIÓN
 // ─────────────────────────────────────────────────────────────
 
 model Cliente {
   id           String  @id @default(cuid())
-  empresa_id   String
+  ubicacion_id String
   nombre       String
   apellidos    String?
   razon_social String?
@@ -316,10 +312,10 @@ model Cliente {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  empresa      Empresa            @relation(fields: [empresa_id], references: [id])
-  notas        NotaVenta[]
-  pedidos      Pedido[]
-  movimientos  MovimientoCuenta[]
+  ubicacion   Ubicacion          @relation(fields: [ubicacion_id], references: [id])
+  notas       NotaVenta[]
+  pedidos     Pedido[]
+  movimientos MovimientoCuenta[]
 
   @@map("clientes")
 }
@@ -344,16 +340,14 @@ enum MetodoPago {
 model NotaVenta {
   id           String      @id @default(cuid())
   folio        Int
-  empresa_id   String
   ubicacion_id String
   usuario_id   String
   cliente_id   String?
 
   estatus   EstatusNota @default(ABIERTA)
-
-  subtotal  Decimal @db.Decimal(12, 2)
-  descuento Decimal @default(0) @db.Decimal(12, 2)
-  total     Decimal @db.Decimal(12, 2)
+  subtotal  Decimal     @db.Decimal(12, 2)
+  descuento Decimal     @default(0) @db.Decimal(12, 2)
+  total     Decimal     @db.Decimal(12, 2)
 
   es_credito        Boolean   @default(false)
   fecha_vencimiento DateTime?
@@ -363,18 +357,18 @@ model NotaVenta {
   updated_at DateTime  @updatedAt
   cerrada_at DateTime?
 
-  empresa   Empresa   @relation(fields: [empresa_id], references: [id])
   ubicacion Ubicacion @relation(fields: [ubicacion_id], references: [id])
   usuario   Usuario   @relation(fields: [usuario_id], references: [id])
   cliente   Cliente?  @relation(fields: [cliente_id], references: [id])
-  lineas             NotaVentaLinea[]
-  pagos              Pago[]
-  movimientos        MovimientoCuenta[]
-  solicitudes_edicion SolicitudEdicionNota[]
-  evidencias         EvidenciaNota[]
-  pedido_origen      Pedido?
 
-  @@unique([empresa_id, folio])
+  lineas              NotaVentaLinea[]
+  pagos               Pago[]
+  movimientos         MovimientoCuenta[]
+  solicitudes_edicion SolicitudEdicionNota[]
+  evidencias          EvidenciaNota[]
+  pedido_origen       Pedido?
+
+  @@unique([ubicacion_id, folio])
   @@map("notas_venta")
 }
 
@@ -382,8 +376,7 @@ model NotaVentaLinea {
   id          String @id @default(cuid())
   nota_id     String
   articulo_id String
-
-  clave         String
+  clave       String
 
   cantidad        Decimal @db.Decimal(12, 3)
   precio_unitario Decimal @db.Decimal(12, 2)
@@ -412,7 +405,7 @@ model Pago {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 4 — CRÉDITO Y CUENTAS
+// CRÉDITO Y CUENTAS — nivel UBICACIÓN
 // ─────────────────────────────────────────────────────────────
 
 enum TipoMovimientoCuenta {
@@ -423,7 +416,7 @@ enum TipoMovimientoCuenta {
 
 model MovimientoCuenta {
   id            String               @id @default(cuid())
-  empresa_id    String
+  ubicacion_id  String
   cliente_id    String
   tipo          TipoMovimientoCuenta
   monto         Decimal              @db.Decimal(12, 2)
@@ -434,20 +427,18 @@ model MovimientoCuenta {
   usuario_id    String
   created_at    DateTime             @default(now())
 
-  empresa  Empresa    @relation(fields: [empresa_id], references: [id])
-  cliente  Cliente    @relation(fields: [cliente_id], references: [id])
-  nota     NotaVenta? @relation(fields: [nota_id], references: [id])
-  usuario  Usuario    @relation(fields: [usuario_id], references: [id])
+  ubicacion Ubicacion  @relation(fields: [ubicacion_id], references: [id])
+  cliente   Cliente    @relation(fields: [cliente_id], references: [id])
+  nota      NotaVenta? @relation(fields: [nota_id], references: [id])
+  usuario   Usuario    @relation(fields: [usuario_id], references: [id])
 
-  @@index([empresa_id, cliente_id, created_at])
+  @@index([ubicacion_id, cliente_id, created_at])
   @@map("movimientos_cuenta")
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 5 — ENTRADAS Y SALIDAS (MOVIMIENTOS DE INVENTARIO)
-// existencia_num 1..5 corresponde a existencia_1..existencia_5
-// en Articulo. La transferencia crea un par OUT+IN con mismo
-// referencia_id para mantener trazabilidad.
+// MOVIMIENTOS DE INVENTARIO — nivel UBICACIÓN
+// existencia_num 1..5 = sub-almacén dentro de la ubicación
 // ─────────────────────────────────────────────────────────────
 
 enum TipoMovimientoInventario {
@@ -461,7 +452,7 @@ enum TipoMovimientoInventario {
 
 model MovimientoInventario {
   id               String                   @id @default(cuid())
-  empresa_id       String
+  ubicacion_id     String
   articulo_id      String
   tipo             TipoMovimientoInventario
   existencia_num   Int
@@ -474,22 +465,18 @@ model MovimientoInventario {
   usuario_id       String
   created_at       DateTime                 @default(now())
 
-  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
+  ubicacion Ubicacion  @relation(fields: [ubicacion_id], references: [id])
   articulo  Articulo   @relation(fields: [articulo_id], references: [id])
   proveedor Proveedor? @relation(fields: [proveedor_id], references: [id])
   usuario   Usuario    @relation(fields: [usuario_id], references: [id])
 
-  @@index([empresa_id, articulo_id, created_at])
-  @@index([empresa_id, created_at])
+  @@index([ubicacion_id, articulo_id, created_at])
+  @@index([ubicacion_id, created_at])
   @@map("movimientos_inventario")
 }
 
 // ─────────────────────────────────────────────────────────────
-// REMISIONES — MOVIMIENTOS MULTI-ARTÍCULO ENTRE UBICACIONES/EMPRESAS
-// Flujo: BORRADOR → EN_TRANSITO → RECIBIDA_COMPLETA / RECIBIDA_PARCIAL
-// Al ENVIAR descuenta existencias en origen.
-// Al RECIBIR suma existencias en destino usando articulo_clave para
-// hacer lookup cross-empresa.
+// REMISIONES — transferencias entre ubicaciones
 // ─────────────────────────────────────────────────────────────
 
 enum EstatusRemision {
@@ -518,9 +505,9 @@ model Remision {
   created_at         DateTime        @default(now())
   updated_at         DateTime        @updatedAt
 
-  empresa_origen  Empresa   @relation("RemisionOrigenEmpresa",   fields: [empresa_origen_id],  references: [id])
+  empresa_origen  Empresa   @relation("RemisionOrigenEmpresa",    fields: [empresa_origen_id],  references: [id])
   ub_origen       Ubicacion @relation("RemisionOrigenUbicacion",  fields: [ub_origen_id],       references: [id])
-  empresa_destino Empresa   @relation("RemisionDestinoEmpresa",  fields: [empresa_destino_id], references: [id])
+  empresa_destino Empresa   @relation("RemisionDestinoEmpresa",   fields: [empresa_destino_id], references: [id])
   ub_destino      Ubicacion @relation("RemisionDestinoUbicacion", fields: [ub_destino_id],      references: [id])
   creado_por      Usuario   @relation("RemisionCreador",          fields: [creado_por_id],      references: [id])
   enviado_por     Usuario?  @relation("RemisionEnviador",         fields: [enviado_por_id],     references: [id])
@@ -528,8 +515,8 @@ model Remision {
 
   lineas RemisionLinea[]
 
-  @@index([empresa_origen_id,  estatus, created_at])
-  @@index([empresa_destino_id, estatus, created_at])
+  @@index([ub_origen_id, estatus, created_at])
+  @@index([ub_destino_id, estatus, created_at])
   @@map("remisiones")
 }
 
@@ -551,9 +538,7 @@ model RemisionLinea {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 6 — COMPRAS Y CUENTAS POR PAGAR
-// Flujo OC: BORRADOR → APROBADA → RECIBIDA_PARCIAL → RECIBIDA
-// Recibir OC dispara Entradas F5 y genera CARGO al proveedor.
+// COMPRAS Y CUENTAS POR PAGAR — nivel UBICACIÓN
 // ─────────────────────────────────────────────────────────────
 
 enum EstatusOrdenCompra {
@@ -573,7 +558,7 @@ enum TipoMovimientoProveedor {
 model OrdenCompra {
   id            String             @id @default(cuid())
   folio         Int
-  empresa_id    String
+  ubicacion_id  String
   proveedor_id  String
   estatus       EstatusOrdenCompra @default(BORRADOR)
   subtotal      Decimal            @db.Decimal(12, 2)
@@ -585,14 +570,15 @@ model OrdenCompra {
   created_at    DateTime           @default(now())
   updated_at    DateTime           @updatedAt
 
-  empresa    Empresa    @relation(fields: [empresa_id], references: [id])
-  proveedor  Proveedor  @relation(fields: [proveedor_id], references: [id])
-  usuario    Usuario    @relation(fields: [usuario_id], references: [id])
-  lineas     OrdenCompraLinea[]
+  ubicacion Ubicacion  @relation(fields: [ubicacion_id], references: [id])
+  proveedor Proveedor  @relation(fields: [proveedor_id], references: [id])
+  usuario   Usuario    @relation(fields: [usuario_id], references: [id])
+
+  lineas                OrdenCompraLinea[]
   movimientos_proveedor MovimientoCuentaProveedor[]
 
-  @@unique([empresa_id, folio])
-  @@index([empresa_id, estatus, created_at])
+  @@unique([ubicacion_id, folio])
+  @@index([ubicacion_id, estatus, created_at])
   @@map("ordenes_compra")
 }
 
@@ -616,7 +602,7 @@ model OrdenCompraLinea {
 
 model MovimientoCuentaProveedor {
   id            String                  @id @default(cuid())
-  empresa_id    String
+  ubicacion_id  String
   proveedor_id  String
   tipo          TipoMovimientoProveedor
   monto         Decimal                 @db.Decimal(12, 2)
@@ -627,20 +613,17 @@ model MovimientoCuentaProveedor {
   usuario_id    String
   created_at    DateTime                @default(now())
 
-  empresa   Empresa      @relation(fields: [empresa_id], references: [id])
+  ubicacion Ubicacion    @relation(fields: [ubicacion_id], references: [id])
   proveedor Proveedor    @relation(fields: [proveedor_id], references: [id])
   orden     OrdenCompra? @relation(fields: [orden_id], references: [id])
   usuario   Usuario      @relation(fields: [usuario_id], references: [id])
 
-  @@index([empresa_id, proveedor_id, created_at])
+  @@index([ubicacion_id, proveedor_id, created_at])
   @@map("movimientos_cuenta_proveedor")
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 7 — RECURSOS HUMANOS
-// Empleados + Áreas (catálogo) + Asistencia + Órdenes de Producción.
-// Áreas definen tipo de pago (POR_HORA / POR_PIEZA) y las sanciones.
-// Un empleado puede trabajar en distintas áreas cada día.
+// RECURSOS HUMANOS — nivel EMPRESA
 // ─────────────────────────────────────────────────────────────
 
 enum TipoPago {
@@ -663,8 +646,6 @@ enum EstatusProduccion {
   CANCELADA
 }
 
-// Catálogo de áreas de trabajo por empresa.
-// Solo define el nombre y el tipo de pago. Las sanciones se configuran por empleado.
 model Area {
   id         String   @id @default(cuid())
   empresa_id String
@@ -695,10 +676,9 @@ model Empleado {
   telefono       String?
   fecha_ingreso  DateTime @db.Date
   activo         Boolean  @default(true)
-  // Sanciones propias del empleado (el admin define el monto para cada quien)
-  descuento_por_30min  Decimal? @db.Decimal(10, 2)  // aplica en áreas POR_HORA
-  minimo_piezas_semana Int?                          // aplica en áreas POR_PIEZA
-  sancion_por_pieza    Decimal? @db.Decimal(10, 2)  // aplica en áreas POR_PIEZA
+  descuento_por_30min  Decimal? @db.Decimal(10, 2)
+  minimo_piezas_semana Int?
+  sancion_por_pieza    Decimal? @db.Decimal(10, 2)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
@@ -715,16 +695,13 @@ model RegistroAsistencia {
   id                String            @id @default(cuid())
   empresa_id        String
   empleado_id       String
-  area_id           String?           // área donde trabajó ese día (puede diferir de la default)
+  area_id           String?
   fecha             DateTime          @db.Date
   hora_entrada      DateTime?
   hora_salida       DateTime?
   estatus           EstatusAsistencia @default(PRESENTE)
-  // Para POR_HORA: minutos tarde para calcular sanción
   minutos_tarde     Int?
-  // Para POR_PIEZA: piezas realizadas ese día
   piezas_realizadas Int?
-  // Sanción calculada automáticamente al registrar
   sancion_monto     Decimal?          @db.Decimal(10, 2)
   sancion_concepto  String?
   observaciones     String?
@@ -768,7 +745,7 @@ model OrdenProduccion {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FASE 8 — EDICIÓN CON APROBACIÓN Y EVIDENCIAS
+// EDICIÓN CON APROBACIÓN Y EVIDENCIAS — admin nivel EMPRESA
 // ─────────────────────────────────────────────────────────────
 
 enum EstatusSolicitudEdicion {
@@ -784,8 +761,6 @@ enum TipoEvidencia {
   TICKET_REEDITADO
 }
 
-// Solicitud para reabrir una nota pagada. Admin aprueba/rechaza.
-// Al aprobar se revierte inventario, pagos y saldo automáticamente.
 model SolicitudEdicionNota {
   id               String                  @id @default(cuid())
   nota_id          String
@@ -801,14 +776,12 @@ model SolicitudEdicionNota {
   nota         NotaVenta @relation(fields: [nota_id], references: [id])
   empresa      Empresa   @relation(fields: [empresa_id], references: [id])
   solicitante  Usuario   @relation("SolicitudSolicitante", fields: [solicitante_id], references: [id])
-  aprobado_por Usuario?  @relation("SolicitudAprobador",  fields: [aprobado_por_id],  references: [id])
+  aprobado_por Usuario?  @relation("SolicitudAprobador",   fields: [aprobado_por_id], references: [id])
 
   @@index([empresa_id, estatus, created_at])
   @@map("solicitudes_edicion_nota")
 }
 
-// Evidencias adjuntas a una nota: ticket original antes de edición,
-// comprobantes de pago (tarjeta, transferencia), imágenes, etc.
 model EvidenciaNota {
   id            String        @id @default(cuid())
   nota_id       String
@@ -829,9 +802,7 @@ model EvidenciaNota {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PEDIDOS CON ANTICIPOS
-// Flujo: ABIERTO → PARCIAL (con anticipos) → LIQUIDADO (se crea NotaVenta)
-// Los anticipos aparecen en corte de caja separados de las ventas.
+// PEDIDOS CON ANTICIPOS — nivel UBICACIÓN
 // ─────────────────────────────────────────────────────────────
 
 enum EstatusPedido {
@@ -844,7 +815,6 @@ enum EstatusPedido {
 model Pedido {
   id              String        @id @default(cuid())
   folio           Int
-  empresa_id      String
   ubicacion_id    String
   usuario_id      String
   cliente_id      String
@@ -859,7 +829,6 @@ model Pedido {
   updated_at      DateTime      @updatedAt
   cerrado_at      DateTime?
 
-  empresa    Empresa    @relation(fields: [empresa_id], references: [id])
   ubicacion  Ubicacion  @relation(fields: [ubicacion_id], references: [id])
   usuario    Usuario    @relation(fields: [usuario_id], references: [id])
   cliente    Cliente    @relation(fields: [cliente_id], references: [id])
@@ -869,8 +838,8 @@ model Pedido {
   anticipos  AnticiposPedido[]
   evidencias EvidenciaPedido[]
 
-  @@unique([empresa_id, folio])
-  @@index([empresa_id, estatus, created_at])
+  @@unique([ubicacion_id, folio])
+  @@index([ubicacion_id, estatus, created_at])
   @@map("pedidos")
 }
 
@@ -895,7 +864,6 @@ model PedidoLinea {
 model AnticiposPedido {
   id           String     @id @default(cuid())
   pedido_id    String
-  empresa_id   String
   ubicacion_id String
   usuario_id   String
   metodo       MetodoPago
@@ -904,18 +872,16 @@ model AnticiposPedido {
   created_at   DateTime   @default(now())
 
   pedido    Pedido    @relation(fields: [pedido_id], references: [id])
-  empresa   Empresa   @relation(fields: [empresa_id], references: [id])
   ubicacion Ubicacion @relation(fields: [ubicacion_id], references: [id])
   usuario   Usuario   @relation(fields: [usuario_id], references: [id])
 
-  @@index([empresa_id, ubicacion_id, created_at])
+  @@index([ubicacion_id, created_at])
   @@map("anticipos_pedido")
 }
 
 model EvidenciaPedido {
   id            String        @id @default(cuid())
   pedido_id     String
-  empresa_id    String
   tipo          TipoEvidencia
   descripcion   String?
   archivo_url   String?
@@ -931,7 +897,7 @@ model EvidenciaPedido {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LEGACY — Histórico MetalAlpha (solo lectura, no se modifica)
+// LEGACY — Histórico (solo lectura)
 // ─────────────────────────────────────────────────────────────
 
 model LegacyVenta {
@@ -995,6 +961,5 @@ model AuditLog {
 
   @@index([empresa_id, created_at(sort: Desc)])
   @@index([entidad, entidad_id])
-  @@index([usuario_id])
   @@map("audit_logs")
 }

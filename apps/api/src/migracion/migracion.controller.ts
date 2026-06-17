@@ -28,6 +28,7 @@ const MAX_CSV_SIZE = 20 * 1024 * 1024; // 20 MB
 @ApiTags('Migración')
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: false })
 @Controller('migracion')
 export class MigracionController {
   constructor(private migracion: MigracionService) {}
@@ -38,7 +39,7 @@ export class MigracionController {
   @ApiOperation({ summary: 'Importar inventario desde CSV legacy (MetalAlpha)' })
   @UseInterceptors(FileInterceptor('archivo'))
   importarInventario(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE })],
@@ -46,7 +47,7 @@ export class MigracionController {
     )
     archivo: Express.Multer.File,
   ) {
-    return this.migracion.importarInventario(archivo.buffer, empresaId);
+    return this.migracion.importarInventario(archivo.buffer, ubicacionId);
   }
 
   @Post('clientes')
@@ -55,7 +56,7 @@ export class MigracionController {
   @ApiOperation({ summary: 'Importar clientes desde CSV legacy (MetalAlpha)' })
   @UseInterceptors(FileInterceptor('archivo'))
   importarClientes(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [new MaxFileSizeValidator({ maxSize: MAX_CSV_SIZE })],
@@ -63,7 +64,7 @@ export class MigracionController {
     )
     archivo: Express.Multer.File,
   ) {
-    return this.migracion.importarClientes(archivo.buffer, empresaId);
+    return this.migracion.importarClientes(archivo.buffer, ubicacionId);
   }
 
   @Post('ventas')

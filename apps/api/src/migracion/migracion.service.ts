@@ -49,7 +49,7 @@ function cleanStr(val: string | undefined): string | null {
 export class MigracionService {
   constructor(private prisma: PrismaService) {}
 
-  async importarInventario(buffer: Buffer, empresaId: string): Promise<ImportResult> {
+  async importarInventario(buffer: Buffer, ubicacionId: string): Promise<ImportResult> {
     const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
@@ -64,7 +64,7 @@ export class MigracionService {
       try {
         const data = {
           clave,
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           descripcion_1: cleanStr(row['descripcion1']),
           descripcion_2: cleanStr(row['descripcion2']),
           descripcion_3: cleanStr(row['descripcion3']),
@@ -83,7 +83,7 @@ export class MigracionService {
         };
 
         const existing = await this.prisma.articulo.findUnique({
-          where: { empresa_id_clave: { empresa_id: empresaId, clave } },
+          where: { ubicacion_id_clave: { ubicacion_id: ubicacionId, clave } },
           select: { id: true },
         });
 
@@ -102,7 +102,7 @@ export class MigracionService {
     return result;
   }
 
-  async importarClientes(buffer: Buffer, empresaId: string): Promise<ImportResult> {
+  async importarClientes(buffer: Buffer, ubicacionId: string): Promise<ImportResult> {
     const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
@@ -132,9 +132,9 @@ export class MigracionService {
           ? precioRaw
           : null;
 
-        // Busca duplicado por nombre dentro de la empresa
+        // Busca duplicado por nombre dentro de la ubicación
         const existing = await this.prisma.cliente.findFirst({
-          where: { empresa_id: empresaId, nombre: nombreCompleto },
+          where: { ubicacion_id: ubicacionId, nombre: nombreCompleto },
           select: { id: true },
         });
 
@@ -145,7 +145,7 @@ export class MigracionService {
 
         await this.prisma.cliente.create({
           data: {
-            empresa_id: empresaId,
+            ubicacion_id: ubicacionId,
             nombre: nombreCompleto,
             telefono: cleanStr(row['telefono']),
             email,

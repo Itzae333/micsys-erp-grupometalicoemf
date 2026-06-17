@@ -30,11 +30,11 @@ type ExistenciaField = typeof EXISTENCIA_FIELDS[number];
 export class ArticulosService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(empresaId: string, query: ListQuery = {}) {
+  async findAll(ubicacionId: string, query: ListQuery = {}) {
     const { q, page = 1, limit = 50, activo, proveedorId } = query;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = { empresa_id: empresaId };
+    const where: Record<string, unknown> = { ubicacion_id: ubicacionId };
     if (activo !== undefined) where['activo'] = activo;
     if (proveedorId) where['proveedor_id'] = proveedorId;
     if (q) {
@@ -71,43 +71,43 @@ export class ArticulosService {
     };
   }
 
-  async findOne(id: string, empresaId: string) {
+  async findOne(id: string, ubicacionId: string) {
     const art = await this.prisma.articulo.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
       include: { proveedor: { select: { id: true, nombre: true } } },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     return this.serialize(art);
   }
 
-  async findByClave(clave: string, empresaId: string) {
+  async findByClave(clave: string, ubicacionId: string) {
     const art = await this.prisma.articulo.findUnique({
-      where: { empresa_id_clave: { empresa_id: empresaId, clave } },
+      where: { ubicacion_id_clave: { ubicacion_id: ubicacionId, clave } },
       include: { proveedor: { select: { id: true, nombre: true } } },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     return this.serialize(art);
   }
 
-  async create(dto: CreateArticuloDto, empresaId: string) {
+  async create(dto: CreateArticuloDto, ubicacionId: string) {
     const exists = await this.prisma.articulo.findUnique({
-      where: { empresa_id_clave: { empresa_id: empresaId, clave: dto.clave } },
+      where: { ubicacion_id_clave: { ubicacion_id: ubicacionId, clave: dto.clave } },
     });
     if (exists) throw new ConflictException(`La clave "${dto.clave}" ya existe`);
 
     const art = await this.prisma.articulo.create({
-      data: { ...dto, empresa_id: empresaId },
+      data: { ...dto, ubicacion_id: ubicacionId },
       include: { proveedor: { select: { id: true, nombre: true } } },
     });
     return this.serialize(art);
   }
 
-  async update(id: string, dto: Partial<CreateArticuloDto> & { activo?: boolean }, empresaId: string) {
-    await this.findOne(id, empresaId);
+  async update(id: string, dto: Partial<CreateArticuloDto> & { activo?: boolean }, ubicacionId: string) {
+    await this.findOne(id, ubicacionId);
 
     if (dto.clave) {
       const conflict = await this.prisma.articulo.findFirst({
-        where: { empresa_id: empresaId, clave: dto.clave, NOT: { id } },
+        where: { ubicacion_id: ubicacionId, clave: dto.clave, NOT: { id } },
       });
       if (conflict) throw new ConflictException(`La clave "${dto.clave}" ya existe`);
     }
@@ -120,8 +120,8 @@ export class ArticulosService {
     return this.serialize(art);
   }
 
-  async updatePrecios(id: string, precios: Partial<Record<PrecioField, number>>, empresaId: string) {
-    await this.findOne(id, empresaId);
+  async updatePrecios(id: string, precios: Partial<Record<PrecioField, number>>, ubicacionId: string) {
+    await this.findOne(id, ubicacionId);
     const art = await this.prisma.articulo.update({
       where: { id },
       data: precios,
@@ -130,8 +130,8 @@ export class ArticulosService {
     return this.serialize(art);
   }
 
-  async updateExistencias(id: string, existencias: Partial<Record<ExistenciaField, number>>, empresaId: string) {
-    await this.findOne(id, empresaId);
+  async updateExistencias(id: string, existencias: Partial<Record<ExistenciaField, number>>, ubicacionId: string) {
+    await this.findOne(id, ubicacionId);
     const art = await this.prisma.articulo.update({
       where: { id },
       data: existencias,
@@ -140,8 +140,8 @@ export class ArticulosService {
     return this.serialize(art);
   }
 
-  async deactivate(id: string, empresaId: string) {
-    await this.findOne(id, empresaId);
+  async deactivate(id: string, ubicacionId: string) {
+    await this.findOne(id, ubicacionId);
     const art = await this.prisma.articulo.update({
       where: { id },
       data: { activo: false },

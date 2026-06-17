@@ -8,7 +8,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @ApiTags('Movimientos de Inventario')
 @ApiBearerAuth()
-@ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: true })
 @Controller('movimientos')
 export class MovimientosController {
   constructor(private movimientos: MovimientosService) {}
@@ -20,13 +20,13 @@ export class MovimientosController {
   @ApiQuery({ name: 'page',       required: false })
   @ApiQuery({ name: 'limit',      required: false })
   listar(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('tipo')       tipo?: string,
     @Query('articuloId') articuloId?: string,
     @Query('page')       page?: string,
     @Query('limit')      limit?: string,
   ) {
-    return this.movimientos.listar(empresaId, {
+    return this.movimientos.listar(ubicacionId, {
       tipo,
       articuloId,
       page:  page  ? Number(page)                  : 1,
@@ -38,43 +38,43 @@ export class MovimientosController {
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Registrar entrada de mercancía (aumenta existencia)' })
   registrarEntrada(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Body() dto: EntradaDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.movimientos.registrarEntrada(dto, empresaId, user.sub);
+    return this.movimientos.registrarEntrada(dto, ubicacionId, user.sub);
   }
 
   @Post('salida')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Registrar salida interna (reduce existencia)' })
   registrarSalida(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Body() dto: SalidaDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.movimientos.registrarSalida(dto, empresaId, user.sub);
+    return this.movimientos.registrarSalida(dto, ubicacionId, user.sub);
   }
 
   @Post('transferencia')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Transferir cantidad entre slots de existencia' })
   registrarTransferencia(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Body() dto: TransferenciaDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.movimientos.registrarTransferencia(dto, empresaId, user.sub);
+    return this.movimientos.registrarTransferencia(dto, ubicacionId, user.sub);
   }
 
   @Post('ajuste')
   @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Ajuste de inventario por conteo físico (solo ADMIN/SUPER)' })
   registrarAjuste(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Body() dto: AjusteDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.movimientos.registrarAjuste(dto, empresaId, user.sub);
+    return this.movimientos.registrarAjuste(dto, ubicacionId, user.sub);
   }
 }

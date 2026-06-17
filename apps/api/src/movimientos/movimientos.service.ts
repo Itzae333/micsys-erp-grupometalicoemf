@@ -18,13 +18,13 @@ export class MovimientosService {
 
   // ─── Listar ───────────────────────────────────────────────────
 
-  async listar(empresaId: string, query: {
+  async listar(ubicacionId: string, query: {
     tipo?: string; articuloId?: string; page?: number; limit?: number;
   } = {}) {
     const { tipo, articuloId, page = 1, limit = 50 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.MovimientoInventarioWhereInput = { empresa_id: empresaId };
+    const where: Prisma.MovimientoInventarioWhereInput = { ubicacion_id: ubicacionId };
     if (tipo) where.tipo = tipo as any;
     if (articuloId) where.articulo_id = articuloId;
 
@@ -50,10 +50,9 @@ export class MovimientosService {
 
   // ─── Registrar entrada ────────────────────────────────────────
 
-  async registrarEntrada(dto: EntradaDto, empresaId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, empresaId);
+  async registrarEntrada(dto: EntradaDto, ubicacionId: string, usuarioId: string) {
+    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
     if (!(articulo as any).activo) throw new BadRequestException('El artículo está inactivo');
-    if (dto.proveedor_id) await this.checkProveedor(dto.proveedor_id, empresaId);
 
     const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
     const cantidadDespues = cantidadAntes + dto.cantidad;
@@ -61,7 +60,7 @@ export class MovimientosService {
     return this.prisma.$transaction(async (tx) => {
       const mov = await tx.movimientoInventario.create({
         data: {
-          empresa_id:      empresaId,
+          ubicacion_id:    ubicacionId,
           articulo_id:     dto.articulo_id,
           tipo:            'ENTRADA',
           existencia_num:  dto.existencia_num,
@@ -86,8 +85,8 @@ export class MovimientosService {
 
   // ─── Registrar salida ─────────────────────────────────────────
 
-  async registrarSalida(dto: SalidaDto, empresaId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, empresaId);
+  async registrarSalida(dto: SalidaDto, ubicacionId: string, usuarioId: string) {
+    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
 
     const cantidadAntes   = this.getExistencia(articulo, dto.existencia_num);
     const cantidadDespues = cantidadAntes - dto.cantidad;
@@ -95,7 +94,7 @@ export class MovimientosService {
     return this.prisma.$transaction(async (tx) => {
       const mov = await tx.movimientoInventario.create({
         data: {
-          empresa_id:      empresaId,
+          ubicacion_id:    ubicacionId,
           articulo_id:     dto.articulo_id,
           tipo:            'SALIDA',
           existencia_num:  dto.existencia_num,
@@ -119,12 +118,8 @@ export class MovimientosService {
 
   // ─── Registrar transferencia ──────────────────────────────────
 
-  async registrarTransferencia(dto: TransferenciaDto, empresaId: string, usuarioId: string) {
-    // if (dto.existencia_num_origen === dto.existencia_num_destino) {
-    //   throw new BadRequestException('El slot de origen y destino deben ser diferentes');
-    // }
-
-    const articulo = await this.findArticulo(dto.articulo_id, empresaId);
+  async registrarTransferencia(dto: TransferenciaDto, ubicacionId: string, usuarioId: string) {
+    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
 
     const cantAntes    = this.getExistencia(articulo, dto.existencia_num_origen);
     const cantAntesDst = this.getExistencia(articulo, dto.existencia_num_destino);
@@ -135,7 +130,7 @@ export class MovimientosService {
     return this.prisma.$transaction(async (tx) => {
       const out = await tx.movimientoInventario.create({
         data: {
-          empresa_id:      empresaId,
+          ubicacion_id:    ubicacionId,
           articulo_id:     dto.articulo_id,
           tipo:            'TRANSFERENCIA_OUT',
           existencia_num:  dto.existencia_num_origen,
@@ -151,7 +146,7 @@ export class MovimientosService {
 
       await tx.movimientoInventario.create({
         data: {
-          empresa_id:      empresaId,
+          ubicacion_id:    ubicacionId,
           articulo_id:     dto.articulo_id,
           tipo:            'TRANSFERENCIA_IN',
           existencia_num:  dto.existencia_num_destino,
@@ -178,8 +173,8 @@ export class MovimientosService {
 
   // ─── Registrar ajuste ─────────────────────────────────────────
 
-  async registrarAjuste(dto: AjusteDto, empresaId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, empresaId);
+  async registrarAjuste(dto: AjusteDto, ubicacionId: string, usuarioId: string) {
+    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
 
     const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
     const delta = dto.cantidad_nueva - cantidadAntes;
@@ -188,7 +183,7 @@ export class MovimientosService {
     return this.prisma.$transaction(async (tx) => {
       const mov = await tx.movimientoInventario.create({
         data: {
-          empresa_id:      empresaId,
+          ubicacion_id:    ubicacionId,
           articulo_id:     dto.articulo_id,
           tipo,
           existencia_num:  dto.existencia_num,
@@ -212,19 +207,12 @@ export class MovimientosService {
 
   // ─── Privados ─────────────────────────────────────────────────
 
-  private async findArticulo(articuloId: string, empresaId: string) {
+  private async findArticulo(articuloId: string, ubicacionId: string) {
     const art = await this.prisma.articulo.findFirst({
-      where: { id: articuloId, empresa_id: empresaId },
+      where: { id: articuloId, ubicacion_id: ubicacionId },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     return art;
-  }
-
-  private async checkProveedor(proveedorId: string, empresaId: string) {
-    const prov = await this.prisma.proveedor.findFirst({
-      where: { id: proveedorId, empresa_id: empresaId },
-    });
-    if (!prov) throw new NotFoundException('Proveedor no encontrado');
   }
 
   private getExistencia(articulo: Record<string, unknown>, num: number): number {

@@ -46,11 +46,18 @@ export class ReportesService {
 
   // ── Dashboard ──────────────────────────────────────────────
 
-  async getDashboard(empresaId: string) {
+  async getDashboard(ubicacionId: string) {
     const hoy = new Date();
     const iniHoy = startOfDay(hoy);
     const finHoy = endOfDay(hoy);
     const iniMes = startOfMonth(hoy);
+
+    // Get empresa_id from ubicacion for structural queries
+    const ubicacion = await this.prisma.ubicacion.findUnique({
+      where: { id: ubicacionId },
+      select: { empresa_id: true },
+    });
+    const empresaId = ubicacion?.empresa_id ?? '';
 
     const [
       ventasHoy,
@@ -65,7 +72,7 @@ export class ReportesService {
     ] = await Promise.all([
       this.prisma.notaVenta.aggregate({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
           created_at: { gte: iniHoy, lte: finHoy },
         },
@@ -74,7 +81,7 @@ export class ReportesService {
       }),
       this.prisma.notaVenta.aggregate({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
           created_at: { gte: iniMes },
         },
@@ -82,10 +89,10 @@ export class ReportesService {
         _count: true,
       }),
       this.prisma.notaVenta.count({
-        where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'PENDIENTE'] } },
+        where: { ubicacion_id: ubicacionId, estatus: { in: ['ABIERTA', 'PENDIENTE'] } },
       }),
       this.prisma.cliente.count({
-        where: { empresa_id: empresaId, saldo_pendiente: { gt: 0 } },
+        where: { ubicacion_id: ubicacionId, saldo_pendiente: { gt: 0 } },
       }),
       this.prisma.ordenProduccion.count({
         where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'EN_PROCESO'] } },
@@ -95,7 +102,7 @@ export class ReportesService {
       }),
       this.prisma.movimientoInventario.count({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           tipo: 'ENTRADA',
           created_at: { gte: iniHoy, lte: finHoy },
         },
@@ -104,7 +111,7 @@ export class ReportesService {
         by: ['articulo_id', 'clave'],
         where: {
           nota: {
-            empresa_id: empresaId,
+            ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO'] },
             created_at: { gte: iniMes },
           },
@@ -119,7 +126,7 @@ export class ReportesService {
           CAST(SUM(total) AS FLOAT8)                          AS total,
           CAST(COUNT(*) AS INT4)                              AS count
         FROM notas_venta
-        WHERE empresa_id = ${empresaId}
+        WHERE ubicacion_id = ${ubicacionId}
           AND estatus IN ('PAGADA', 'CREDITO')
           AND created_at >= NOW() - INTERVAL '7 days'
         GROUP BY DATE_TRUNC('day', created_at)
@@ -165,28 +172,34 @@ export class ReportesService {
     const finHoy = endOfDay(hoy);
     const iniMes = startOfMonth(hoy);
 
-    const empresas = await this.prisma.empresa.findMany({
-      select: { id: true, nombre: true },
-      orderBy: { nombre: 'asc' },
+    const ubicaciones = await this.prisma.ubicacion.findMany({
+      select: {
+        id: true,
+        nombre: true,
+        empresa: { select: { id: true, nombre: true } },
+      },
+      orderBy: [{ empresa: { nombre: 'asc' } }, { nombre: 'asc' }],
     });
 
-    const resumenPorEmpresa = await Promise.all(
-      empresas.map(async (emp) => {
+    const resumenPorUbicacion = await Promise.all(
+      ubicaciones.map(async (ub) => {
         const [hoyAgg, mesAgg, creditos] = await Promise.all([
           this.prisma.notaVenta.aggregate({
-            where: { empresa_id: emp.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniHoy, lte: finHoy } },
+            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniHoy, lte: finHoy } },
             _sum: { total: true }, _count: true,
           }),
           this.prisma.notaVenta.aggregate({
-            where: { empresa_id: emp.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniMes } },
+            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniMes } },
             _sum: { total: true }, _count: true,
           }),
-          this.prisma.cliente.count({ where: { empresa_id: emp.id, saldo_pendiente: { gt: 0 } } }),
+          this.prisma.cliente.count({ where: { ubicacion_id: ub.id, saldo_pendiente: { gt: 0 } } }),
         ]);
 
         return {
-          empresa_id:    emp.id,
-          empresa_nombre: emp.nombre,
+          ubicacion_id:    ub.id,
+          ubicacion_nombre: ub.nombre,
+          empresa_id:      ub.empresa.id,
+          empresa_nombre:  ub.empresa.nombre,
           ventas_hoy:   { total: dec(hoyAgg._sum?.total), count: hoyAgg._count },
           ventas_mes:   { total: dec(mesAgg._sum?.total), count: mesAgg._count },
           clientes_con_saldo: creditos,
@@ -194,13 +207,13 @@ export class ReportesService {
       }),
     );
 
-    const totalHoy = resumenPorEmpresa.reduce((s, e) => s + e.ventas_hoy.total, 0);
-    const totalMes = resumenPorEmpresa.reduce((s, e) => s + e.ventas_mes.total, 0);
+    const totalHoy = resumenPorUbicacion.reduce((s, e) => s + e.ventas_hoy.total, 0);
+    const totalMes = resumenPorUbicacion.reduce((s, e) => s + e.ventas_mes.total, 0);
 
     return {
       total_hoy:  +totalHoy.toFixed(2),
       total_mes:  +totalMes.toFixed(2),
-      empresas:   resumenPorEmpresa.map((e) => ({
+      ubicaciones: resumenPorUbicacion.map((e) => ({
         ...e,
         ventas_hoy: { ...e.ventas_hoy, total: +e.ventas_hoy.total.toFixed(2) },
         ventas_mes: { ...e.ventas_mes, total: +e.ventas_mes.total.toFixed(2) },
@@ -211,16 +224,15 @@ export class ReportesService {
   // ── Ventas ─────────────────────────────────────────────────
 
   async getReporteVentas(
-    empresaId: string,
-    opts: { desde?: string; hasta?: string; ubicacionId?: string },
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
   ) {
     const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
     const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
 
     const baseWhere: Prisma.NotaVentaWhereInput = {
-      empresa_id: empresaId,
+      ubicacion_id: ubicacionId,
       created_at: { gte: desde, lte: hasta },
-      ...(opts.ubicacionId ? { ubicacion_id: opts.ubicacionId } : {}),
     };
     const cerradasWhere: Prisma.NotaVentaWhereInput = {
       ...baseWhere,
@@ -244,7 +256,7 @@ export class ReportesService {
           by: ['metodo'],
           where: {
             nota: {
-              empresa_id: empresaId,
+              ubicacion_id: ubicacionId,
               estatus: { in: ['PAGADA', 'CREDITO'] },
               created_at: { gte: desde, lte: hasta },
             },
@@ -266,7 +278,7 @@ export class ReportesService {
             CAST(SUM(total) AS FLOAT8)                          AS total,
             CAST(COUNT(*) AS INT4)                              AS count
           FROM notas_venta
-          WHERE empresa_id = ${empresaId}
+          WHERE ubicacion_id = ${ubicacionId}
             AND estatus IN ('PAGADA', 'CREDITO')
             AND created_at >= ${desde}
             AND created_at <= ${hasta}
@@ -319,13 +331,13 @@ export class ReportesService {
 
   // ── Inventario ─────────────────────────────────────────────
 
-  async getReporteInventario(empresaId: string) {
+  async getReporteInventario(ubicacionId: string) {
     const iniMes = startOfMonth(new Date());
 
     const [bajoStock, movPorTipo, topMovidosRaw, articulosTotal] = await Promise.all([
       this.prisma.articulo.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           activo: true,
           existencia_1: { gt: 0, lte: 10 },
         },
@@ -338,19 +350,19 @@ export class ReportesService {
       }),
       this.prisma.movimientoInventario.groupBy({
         by: ['tipo'],
-        where: { empresa_id: empresaId, created_at: { gte: iniMes } },
+        where: { ubicacion_id: ubicacionId, created_at: { gte: iniMes } },
         _sum: { cantidad: true },
         _count: { _all: true },
       }),
       this.prisma.movimientoInventario.groupBy({
         by: ['articulo_id'],
-        where: { empresa_id: empresaId, created_at: { gte: iniMes } },
+        where: { ubicacion_id: ubicacionId, created_at: { gte: iniMes } },
         _count: { _all: true },
         _sum: { cantidad: true },
         orderBy: { _count: { articulo_id: 'desc' } },
         take: 10,
       }),
-      this.prisma.articulo.count({ where: { empresa_id: empresaId, activo: true } }),
+      this.prisma.articulo.count({ where: { ubicacion_id: ubicacionId, activo: true } }),
     ]);
 
     const articuloIds = topMovidosRaw.map((m) => m.articulo_id);
@@ -381,10 +393,10 @@ export class ReportesService {
 
   // ── Crédito ────────────────────────────────────────────────
 
-  async getReporteCredito(empresaId: string) {
+  async getReporteCredito(ubicacionId: string) {
     const [topDeudores, cartera, vencidas] = await Promise.all([
       this.prisma.cliente.findMany({
-        where: { empresa_id: empresaId, saldo_pendiente: { gt: 0 } },
+        where: { ubicacion_id: ubicacionId, saldo_pendiente: { gt: 0 } },
         select: {
           id: true, nombre: true, apellidos: true, razon_social: true,
           saldo_pendiente: true, limite_credito: true, precio_num: true,
@@ -393,13 +405,13 @@ export class ReportesService {
         take: 15,
       }),
       this.prisma.cliente.aggregate({
-        where: { empresa_id: empresaId, saldo_pendiente: { gt: 0 } },
+        where: { ubicacion_id: ubicacionId, saldo_pendiente: { gt: 0 } },
         _sum: { saldo_pendiente: true },
         _count: true,
       }),
       this.prisma.notaVenta.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus: 'CREDITO',
           fecha_vencimiento: { lte: new Date() },
         },
@@ -423,29 +435,36 @@ export class ReportesService {
   // ── Compras ────────────────────────────────────────────────
 
   async getReporteCompras(
-    empresaId: string,
+    ubicacionId: string,
     opts: { desde?: string; hasta?: string },
   ) {
     const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
     const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
     const rango = { gte: desde, lte: hasta };
 
+    // Get empresa for proveedor queries (structural data)
+    const ubicacion = await this.prisma.ubicacion.findUnique({
+      where: { id: ubicacionId },
+      select: { empresa_id: true },
+    });
+    const empresaId = ubicacion?.empresa_id ?? '';
+
     const [resumen, porEstatus, topProveedoresRaw, cxpRaw] = await Promise.all([
       this.prisma.ordenCompra.aggregate({
-        where: { empresa_id: empresaId, created_at: rango },
+        where: { ubicacion_id: ubicacionId, created_at: rango },
         _sum: { total: true },
         _count: true,
       }),
       this.prisma.ordenCompra.groupBy({
         by: ['estatus'],
-        where: { empresa_id: empresaId, created_at: rango },
+        where: { ubicacion_id: ubicacionId, created_at: rango },
         _count: { _all: true },
         _sum: { total: true },
       }),
       this.prisma.ordenCompra.groupBy({
         by: ['proveedor_id'],
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus: { in: ['APROBADA', 'RECIBIDA_PARCIAL', 'RECIBIDA'] },
           created_at: rango,
         },
@@ -569,16 +588,15 @@ export class ReportesService {
   // ── Corte de caja ──────────────────────────────────────────
 
   async getCorteCaja(
-    empresaId: string,
-    opts: { desde?: string; hasta?: string; ubicacionId?: string },
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
   ) {
     const desde = opts.desde ? new Date(opts.desde) : startOfDay(new Date());
     const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
 
     const baseWhere = {
-      empresa_id: empresaId,
+      ubicacion_id: ubicacionId,
       created_at: { gte: desde, lte: hasta },
-      ...(opts.ubicacionId ? { ubicacion_id: opts.ubicacionId } : {}),
     };
 
     const [notas, pagosGrouped, abonosAgg] = await Promise.all([
@@ -594,10 +612,9 @@ export class ReportesService {
         by: ['metodo'],
         where: {
           nota: {
-            empresa_id: empresaId,
+            ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO'] },
             created_at: { gte: desde, lte: hasta },
-            ...(opts.ubicacionId ? { ubicacion_id: opts.ubicacionId } : {}),
           },
         },
         _sum: { monto: true },
@@ -605,9 +622,9 @@ export class ReportesService {
       }),
       this.prisma.movimientoCuenta.aggregate({
         where: {
-          empresa_id: empresaId,
-          tipo:       'ABONO',
-          created_at: { gte: desde, lte: hasta },
+          ubicacion_id: ubicacionId,
+          tipo:         'ABONO',
+          created_at:   { gte: desde, lte: hasta },
         },
         _sum:   { monto: true },
         _count: true,

@@ -375,8 +375,8 @@ export class RhService {
   }
 
   async crearOrden(dto: CreateOrdenProduccionDto, empresaId: string, usuarioId: string) {
-    const articulo = await this.prisma.articulo.findFirst({ where: { id: dto.articulo_id, empresa_id: empresaId } });
-    if (!articulo) throw new NotFoundException('Artículo no encontrado en esta empresa');
+    const articulo = await this.prisma.articulo.findFirst({ where: { id: dto.articulo_id } });
+    if (!articulo) throw new NotFoundException('Artículo no encontrado');
 
     const op = await this.prisma.$transaction(async (tx) => {
       const agg = await tx.ordenProduccion.aggregate({ where: { empresa_id: empresaId }, _max: { folio: true } });

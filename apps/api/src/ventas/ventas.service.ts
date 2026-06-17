@@ -38,16 +38,15 @@ export class VentasService {
 
   // ─── Listar ───────────────────────────────────────────────────
 
-  async findAll(empresaId: string, query: {
+  async findAll(ubicacionId: string, query: {
     estatus?: string; page?: number; limit?: number;
-    ubicacionId?: string; q?: string; desde?: string;
+    q?: string; desde?: string;
   } = {}) {
-    const { estatus, page = 1, limit = 50, ubicacionId, q, desde } = query;
+    const { estatus, page = 1, limit = 50, q, desde } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.NotaVentaWhereInput = { empresa_id: empresaId };
+    const where: Prisma.NotaVentaWhereInput = { ubicacion_id: ubicacionId };
     if (estatus) where.estatus = estatus as any;
-    if (ubicacionId) where.ubicacion_id = ubicacionId;
     if (desde) where.created_at = { gte: new Date(desde) };
     if (q) {
       const folioNum = parseInt(q, 10);
@@ -78,21 +77,20 @@ export class VentasService {
     };
   }
 
-  async findOne(id: string, empresaId: string) {
-    const nota = await this.findOneRaw(id, empresaId);
+  async findOne(id: string, ubicacionId: string) {
+    const nota = await this.findOneRaw(id, ubicacionId);
     return this.serializeNota(nota);
   }
 
   // ─── Crear nota ───────────────────────────────────────────────
 
-  async create(dto: CreateNotaDto, empresaId: string, ubicacionId: string, usuarioId: string) {
-    const folio = await this.nextFolio(empresaId);
+  async create(dto: CreateNotaDto, ubicacionId: string, usuarioId: string) {
+    const folio = await this.nextFolio(ubicacionId);
 
     const nota = await this.prisma.$transaction(async (tx) => {
       const n = await tx.notaVenta.create({
         data: {
           folio,
-          empresa_id: empresaId,
           ubicacion_id: ubicacionId,
           usuario_id: usuarioId,
           cliente_id: dto.cliente_id ?? null,
@@ -106,7 +104,7 @@ export class VentasService {
       if (dto.lineas && dto.lineas.length > 0) {
         for (const l of dto.lineas) {
           const art = await tx.articulo.findFirst({
-            where: { id: l.articulo_id, empresa_id: empresaId },
+            where: { id: l.articulo_id, ubicacion_id: ubicacionId },
           });
           if (!art) throw new NotFoundException(`Artículo ${l.articulo_id} no encontrado`);
 
@@ -134,14 +132,14 @@ export class VentasService {
 
   // ─── Líneas ───────────────────────────────────────────────────
 
-  async addLinea(notaId: string, dto: AddLineaDto, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async addLinea(notaId: string, dto: AddLineaDto, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
     if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
       throw new ForbiddenException('Solo se pueden agregar líneas a notas ABIERTA o COTIZACION');
     }
 
     const art = await this.prisma.articulo.findFirst({
-      where: { id: dto.articulo_id, empresa_id: empresaId },
+      where: { id: dto.articulo_id, ubicacion_id: ubicacionId },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     if (!art.activo) throw new BadRequestException('El artículo está inactivo');
@@ -163,11 +161,11 @@ export class VentasService {
       await this.recalcNota(tx, notaId);
     });
 
-    return this.findOne(notaId, empresaId);
+    return this.findOne(notaId, ubicacionId);
   }
 
-  async updateLinea(notaId: string, lineaId: string, dto: UpdateLineaDto, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async updateLinea(notaId: string, lineaId: string, dto: UpdateLineaDto, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
     if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
       throw new ForbiddenException('Solo se pueden editar líneas de notas ABIERTA o COTIZACION');
     }
@@ -190,11 +188,11 @@ export class VentasService {
       await this.recalcNota(tx, notaId);
     });
 
-    return this.findOne(notaId, empresaId);
+    return this.findOne(notaId, ubicacionId);
   }
 
-  async removeLinea(notaId: string, lineaId: string, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async removeLinea(notaId: string, lineaId: string, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
     if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
       throw new ForbiddenException('Solo se pueden eliminar líneas de notas ABIERTA o COTIZACION');
     }
@@ -209,13 +207,13 @@ export class VentasService {
       await this.recalcNota(tx, notaId);
     });
 
-    return this.findOne(notaId, empresaId);
+    return this.findOne(notaId, ubicacionId);
   }
 
   // ─── Cerrar / Cobrar ─────────────────────────────────────────
 
-  async cerrar(notaId: string, dto: CerrarNotaDto, empresaId: string, usuarioId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async cerrar(notaId: string, dto: CerrarNotaDto, ubicacionId: string, usuarioId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
 
     if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'PENDIENTE') {
       throw new ForbiddenException(`No se puede cobrar una nota en estatus ${nota.estatus}`);
@@ -228,14 +226,12 @@ export class VentasService {
     const totalNota = Number(nota.total);
     const diferencia = +Math.max(0, totalNota - totalPagado).toFixed(2);
 
-    // Pago parcial sin cliente asignado → no se puede registrar crédito
     if (diferencia > 0 && !nota.cliente_id) {
       throw new BadRequestException(
         `Se requiere cliente asignado para registrar el saldo restante ($${diferencia.toFixed(2)}) a crédito`,
       );
     }
 
-    // Si hay diferencia positiva → crédito automático
     const esCredito = diferencia > 0;
     const nuevoEstatus: 'PAGADA' | 'CREDITO' = esCredito ? 'CREDITO' : 'PAGADA';
 
@@ -261,7 +257,7 @@ export class VentasService {
 
         await tx.movimientoCuenta.create({
           data: {
-            empresa_id: empresaId,
+            ubicacion_id: ubicacionId,
             cliente_id: nota.cliente_id,
             tipo: 'CARGO',
             monto: diferencia,
@@ -296,8 +292,8 @@ export class VentasService {
 
   // ─── Marcar como pendiente de pago ───────────────────────────
 
-  async marcarPendiente(notaId: string, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async marcarPendiente(notaId: string, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
     if (nota.estatus !== 'ABIERTA') {
       throw new BadRequestException('Solo se pueden marcar como pendiente notas ABIERTA');
     }
@@ -314,8 +310,8 @@ export class VentasService {
 
   // ─── Convertir cotización a nota abierta ──────────────────────
 
-  async convertirAVenta(notaId: string, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async convertirAVenta(notaId: string, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
     if (nota.estatus !== 'COTIZACION') {
       throw new BadRequestException('Solo se pueden convertir cotizaciones a notas de venta');
     }
@@ -329,8 +325,8 @@ export class VentasService {
 
   // ─── Cancelar ─────────────────────────────────────────────────
 
-  async cancelar(notaId: string, empresaId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async cancelar(notaId: string, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
 
     if (nota.estatus === 'PAGADA' || nota.estatus === 'CANCELADA') {
       throw new ForbiddenException(`No se puede cancelar una nota en estatus ${nota.estatus}`);
@@ -354,9 +350,9 @@ export class VentasService {
 
   // ─── Privados ─────────────────────────────────────────────────
 
-  private async findOneRaw(id: string, empresaId: string): Promise<NotaRaw> {
+  private async findOneRaw(id: string, ubicacionId: string): Promise<NotaRaw> {
     const nota = await this.prisma.notaVenta.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
       include: NOTA_INCLUDE,
     });
     if (!nota) throw new NotFoundException('Nota de venta no encontrada');
@@ -367,9 +363,9 @@ export class VentasService {
     return cantidad * precio * (1 - descuento / 100);
   }
 
-  private async nextFolio(empresaId: string): Promise<number> {
+  private async nextFolio(ubicacionId: string): Promise<number> {
     const last = await this.prisma.notaVenta.findFirst({
-      where: { empresa_id: empresaId },
+      where: { ubicacion_id: ubicacionId },
       orderBy: { folio: 'desc' },
       select: { folio: true },
     });
@@ -416,8 +412,8 @@ export class VentasService {
 
   // ─── Abonar a nota en crédito ────────────────────────────────
 
-  async abonar(notaId: string, dto: AbonarNotaDto, empresaId: string, usuarioId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+  async abonar(notaId: string, dto: AbonarNotaDto, ubicacionId: string, usuarioId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
 
     if (nota.estatus !== 'CREDITO') {
       throw new ForbiddenException('Solo se pueden registrar abonos en notas con estatus CRÉDITO');
@@ -449,7 +445,7 @@ export class VentasService {
 
       await tx.movimientoCuenta.create({
         data: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           cliente_id: nota.cliente_id!,
           tipo: 'ABONO',
           monto: abonoReal,
@@ -482,7 +478,12 @@ export class VentasService {
   // ─── Evidencias ───────────────────────────────────────────
 
   async agregarEvidencia(notaId: string, dto: AgregarEvidenciaDto, empresaId: string, usuarioId: string) {
-    const nota = await this.findOneRaw(notaId, empresaId);
+    // findOneRaw sin empresa para localizar la nota por id solo
+    const nota = await this.prisma.notaVenta.findFirst({
+      where: { id: notaId },
+      include: NOTA_INCLUDE,
+    });
+    if (!nota) throw new NotFoundException('Nota de venta no encontrada');
 
     if (!['PAGADA', 'CREDITO'].includes(nota.estatus)) {
       throw new ForbiddenException('Solo se pueden agregar evidencias a notas PAGADA o CRÉDITO');
@@ -510,7 +511,7 @@ export class VentasService {
       },
     });
 
-    return this.findOne(notaId, empresaId);
+    return this.serializeNota(nota);
   }
 
   // ─── Enviar email ─────────────────────────────────────────
@@ -523,9 +524,12 @@ export class VentasService {
       );
     }
 
-    const nota = await this.findOneRaw(id, empresaId);
+    const nota = await this.prisma.notaVenta.findFirst({
+      where: { id },
+      include: NOTA_INCLUDE,
+    });
+    if (!nota) throw new NotFoundException('Nota de venta no encontrada');
 
-    // Fetch empresa y ubicacion para el encabezado del email
     const [empresa, ubicacion] = await Promise.all([
       this.prisma.empresa.findUnique({ where: { id: empresaId } }),
       nota.ubicacion_id
@@ -614,7 +618,6 @@ export class VentasService {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:24px 0;">
 <tr><td align="center">
 <table width="620" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-  <!-- Cabecera -->
   <tr><td style="background:#111;padding:24px 32px;text-align:center;">
     ${logoHtml}
     <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;letter-spacing:1px;">${(ubicacion?.razon_social ?? empresa?.nombre ?? '').toUpperCase()}</p>
@@ -622,11 +625,9 @@ export class VentasService {
     ${rfcTel ? `<p style="margin:6px 0 0;color:#888;font-size:11px;">${rfcTel}</p>` : ''}
     ${direccion ? `<p style="margin:4px 0 0;color:#888;font-size:11px;">${direccion}</p>` : ''}
   </td></tr>
-  <!-- Tipo doc -->
   <tr><td style="background:${esCotizacion ? '#2563eb' : '#16a34a'};padding:10px 32px;text-align:center;">
     <p style="margin:0;color:#fff;font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">${esCotizacion ? 'COTIZACIÓN' : 'COMPROBANTE DE VENTA'} ${folioStr}</p>
   </td></tr>
-  <!-- Info -->
   <tr><td style="padding:20px 32px 0;">
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr>
@@ -635,7 +636,6 @@ export class VentasService {
       </tr>
     </table>
   </td></tr>
-  <!-- Artículos -->
   <tr><td style="padding:16px 32px 0;">
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <thead>
@@ -657,9 +657,7 @@ export class VentasService {
       </tfoot>
     </table>
   </td></tr>
-  <!-- Observaciones -->
   ${nota.observaciones ? `<tr><td style="padding:16px 32px 0;font-size:12px;color:#555;">Observaciones: ${nota.observaciones}</td></tr>` : ''}
-  <!-- Pie -->
   <tr><td style="padding:20px 32px 24px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
     ${esCotizacion ? '<p style="margin:0 0 4px;font-size:11px;color:#888;">Esta cotización es válida por 30 días a partir de su emisión.</p>' : ''}
     <p style="margin:0;font-size:11px;color:#aaa;">¡Gracias por su preferencia!</p>
@@ -672,16 +670,15 @@ export class VentasService {
   // ─── Corte de caja ────────────────────────────────────────────
 
   async getCorteCaja(
-    empresaId: string,
-    query: { desde?: string; hasta?: string; ubicacionId?: string },
+    ubicacionId: string,
+    query: { desde?: string; hasta?: string },
   ) {
-    const { desde, hasta, ubicacionId } = query;
+    const { desde, hasta } = query;
 
     const where: Prisma.NotaVentaWhereInput = {
-      empresa_id: empresaId,
+      ubicacion_id: ubicacionId,
       estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'CANCELADA'] as any[] },
     };
-    if (ubicacionId) where.ubicacion_id = ubicacionId;
     if (desde || hasta) {
       where.created_at = {
         ...(desde ? { gte: new Date(desde) } : {}),
@@ -689,8 +686,7 @@ export class VentasService {
       };
     }
 
-    const whereAnticipos: Prisma.AnticiposPedidoWhereInput = { empresa_id: empresaId };
-    if (ubicacionId) whereAnticipos.ubicacion_id = ubicacionId;
+    const whereAnticipos: Prisma.AnticiposPedidoWhereInput = { ubicacion_id: ubicacionId };
     if (desde || hasta) {
       whereAnticipos.created_at = {
         ...(desde ? { gte: new Date(desde) } : {}),
@@ -739,7 +735,6 @@ export class VentasService {
 
       const notaTotal = Number(nota.total);
 
-      // Pagos no-efectivo se registran al monto exacto (tarjeta/transferencia/depósito no generan cambio)
       let nonCashSum = 0;
       for (const pago of nota.pagos) {
         if (pago.metodo === 'EFECTIVO') continue;
@@ -751,7 +746,6 @@ export class VentasService {
         nonCashSum = +(nonCashSum + monto).toFixed(2);
       }
 
-      // Efectivo real = nota.total − pagos no-efectivo (el excedente fue cambio devuelto)
       const hasEfectivo = nota.pagos.some((p) => p.metodo === 'EFECTIVO');
       const efectivoReal = hasEfectivo ? Math.max(0, +(notaTotal - nonCashSum).toFixed(2)) : 0;
 
@@ -763,7 +757,6 @@ export class VentasService {
       totalCobrado = +(totalCobrado + nonCashSum + efectivoReal).toFixed(2);
     }
 
-    // Agregar anticipos de pedidos
     const metodoAnticipos: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
       TARJETA:      { count: 0, total: 0 },
@@ -784,7 +777,7 @@ export class VentasService {
     return {
       desde: desde ?? null,
       hasta: hasta ?? null,
-      ubicacion_id: ubicacionId ?? null,
+      ubicacion_id: ubicacionId,
       total_cobrado: totalCobrado,
       por_metodo: metodos,
       por_estatus: porEstatus,

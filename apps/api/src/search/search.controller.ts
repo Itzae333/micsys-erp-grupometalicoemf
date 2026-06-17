@@ -5,6 +5,7 @@ import { SearchService } from './search.service';
 @ApiTags('Search')
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: true })
 @Controller('search')
 export class SearchController {
   constructor(private svc: SearchService) {}
@@ -14,10 +15,11 @@ export class SearchController {
   @ApiQuery({ name: 'q',     required: true })
   @ApiQuery({ name: 'limit', required: false })
   buscar(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-empresa-id')   empresaId:   string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('q')     q:     string,
     @Query('limit') limit?: string,
   ) {
-    return this.svc.buscar(empresaId, q, limit ? Math.min(Number(limit), 10) : 5);
+    return this.svc.buscar(empresaId, ubicacionId, q, limit ? Math.min(Number(limit), 10) : 5);
   }
 }

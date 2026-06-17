@@ -6,8 +6,8 @@ import type { CreateClienteDto, UpdateClienteDto } from './dto/create-cliente.dt
 export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(empresaId: string, q?: string) {
-    const where: Record<string, unknown> = { empresa_id: empresaId };
+  async findAll(ubicacionId: string, q?: string) {
+    const where: Record<string, unknown> = { ubicacion_id: ubicacionId };
     if (q) {
       where['OR'] = [
         { nombre: { contains: q, mode: 'insensitive' } },
@@ -26,36 +26,36 @@ export class ClientesService {
     return clientes.map((c) => this.serialize(c));
   }
 
-  async findOne(id: string, empresaId: string) {
+  async findOne(id: string, ubicacionId: string) {
     const c = await this.prisma.cliente.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
     });
     if (!c) throw new NotFoundException('Cliente no encontrado');
     return this.serialize(c);
   }
 
-  async create(dto: CreateClienteDto, empresaId: string) {
+  async create(dto: CreateClienteDto, ubicacionId: string) {
     const c = await this.prisma.cliente.create({
-      data: { ...dto, empresa_id: empresaId },
+      data: { ...dto, ubicacion_id: ubicacionId },
     });
     return this.serialize(c);
   }
 
-  async update(id: string, dto: UpdateClienteDto, empresaId: string) {
-    await this.findOne(id, empresaId);
+  async update(id: string, dto: UpdateClienteDto, ubicacionId: string) {
+    await this.findOne(id, ubicacionId);
     const c = await this.prisma.cliente.update({ where: { id }, data: dto });
     return this.serialize(c);
   }
 
-  async getCuenta(id: string, empresaId: string, page = 1, limit = 30) {
-    const cliente = await this.prisma.cliente.findFirst({ where: { id, empresa_id: empresaId } });
+  async getCuenta(id: string, ubicacionId: string, page = 1, limit = 30) {
+    const cliente = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
     if (!cliente) throw new Error('Cliente no encontrado');
 
     const skip = (page - 1) * limit;
     const [total, movimientos] = await Promise.all([
-      this.prisma.movimientoCuenta.count({ where: { cliente_id: id, empresa_id: empresaId } }),
+      this.prisma.movimientoCuenta.count({ where: { cliente_id: id, ubicacion_id: ubicacionId } }),
       this.prisma.movimientoCuenta.findMany({
-        where: { cliente_id: id, empresa_id: empresaId },
+        where: { cliente_id: id, ubicacion_id: ubicacionId },
         orderBy: { created_at: 'desc' },
         skip,
         take: limit,
@@ -83,16 +83,16 @@ export class ClientesService {
 
   async abonarCuenta(
     id: string,
-    empresaId: string,
+    ubicacionId: string,
     dto: { monto: number; metodo: string; referencia?: string },
     usuarioId: string,
   ) {
-    const cliente = await this.prisma.cliente.findFirst({ where: { id, empresa_id: empresaId } });
+    const cliente = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
     // Notas en crédito ordenadas de más antigua a más nueva
     const notas = await this.prisma.notaVenta.findMany({
-      where: { cliente_id: id, empresa_id: empresaId, estatus: 'CREDITO' },
+      where: { cliente_id: id, ubicacion_id: ubicacionId, estatus: 'CREDITO' },
       orderBy: { created_at: 'asc' },
       include: { pagos: { select: { monto: true } } },
     });
@@ -139,7 +139,7 @@ export class ClientesService {
         const saldoClienteDespues = Math.max(0, +(saldoClienteActual - montoPago).toFixed(2));
         await tx.movimientoCuenta.create({
           data: {
-            empresa_id: empresaId,
+            ubicacion_id: ubicacionId,
             cliente_id: id,
             tipo: 'ABONO',
             monto: montoPago,
@@ -167,8 +167,8 @@ export class ClientesService {
     };
   }
 
-  async toggleActivo(id: string, empresaId: string) {
-    const raw = await this.prisma.cliente.findFirst({ where: { id, empresa_id: empresaId } });
+  async toggleActivo(id: string, ubicacionId: string) {
+    const raw = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
     if (!raw) throw new NotFoundException('Cliente no encontrado');
     const updated = await this.prisma.cliente.update({
       where: { id },

@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class SearchService {
   constructor(private prisma: PrismaService) {}
 
-  async buscar(empresaId: string, q: string, limit = 5) {
+  async buscar(empresaId: string, ubicacionId: string, q: string, limit = 5) {
     if (!q || q.trim().length < 2) return { results: [] };
 
     const term = q.trim();
@@ -14,7 +14,7 @@ export class SearchService {
     const [notas, articulos, clientes, proveedores, empleados] = await Promise.all([
       this.prisma.notaVenta.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           OR: [
             { folio: isNaN(Number(term)) ? undefined : Number(term) },
             { cliente: { nombre: ilike } },
@@ -32,7 +32,7 @@ export class SearchService {
 
       this.prisma.articulo.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           OR: [
             { clave: ilike },
             { descripcion_1: ilike },
@@ -46,7 +46,7 @@ export class SearchService {
 
       this.prisma.cliente.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           OR: [
             { nombre: ilike },
             { apellidos: ilike },
@@ -59,6 +59,7 @@ export class SearchService {
         orderBy: { nombre: 'asc' },
       }),
 
+      // Proveedores son nivel empresa
       this.prisma.proveedor.findMany({
         where: {
           empresa_id: empresaId,
@@ -69,6 +70,7 @@ export class SearchService {
         orderBy: { nombre: 'asc' },
       }),
 
+      // Empleados son nivel empresa
       this.prisma.empleado.findMany({
         where: {
           empresa_id: empresaId,

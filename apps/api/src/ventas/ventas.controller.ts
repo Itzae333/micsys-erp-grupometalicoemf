@@ -11,7 +11,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @ApiTags('Ventas')
 @ApiBearerAuth()
-@ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: true })
 @Controller('ventas')
 export class VentasController {
   constructor(private ventas: VentasService) {}
@@ -21,36 +21,31 @@ export class VentasController {
   @ApiOperation({ summary: 'Corte de caja — resumen de ventas y métodos de pago por rango de fechas' })
   @ApiQuery({ name: 'desde', required: false, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'hasta', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'ubicacionId', required: false })
   getCorteCaja(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
-    @Query('ubicacionId') ubicacionId?: string,
   ) {
-    return this.ventas.getCorteCaja(empresaId, { desde, hasta, ubicacionId });
+    return this.ventas.getCorteCaja(ubicacionId, { desde, hasta });
   }
 
   @Get()
   @ApiOperation({ summary: 'Lista de notas de venta con filtros y paginación' })
   @ApiQuery({ name: 'estatus', required: false })
-  @ApiQuery({ name: 'ubicacionId', required: false })
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'desde', required: false, description: 'ISO date — filtra notas creadas desde esta fecha' })
   findAll(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('estatus') estatus?: string,
-    @Query('ubicacionId') ubicacionId?: string,
     @Query('q') q?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('desde') desde?: string,
   ) {
-    return this.ventas.findAll(empresaId, {
+    return this.ventas.findAll(ubicacionId, {
       estatus,
-      ubicacionId,
       q,
       desde,
       page: page ? Number(page) : 1,
@@ -60,100 +55,98 @@ export class VentasController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalle de nota de venta' })
-  findOne(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
-    return this.ventas.findOne(id, empresaId);
+  findOne(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.ventas.findOne(id, ubicacionId);
   }
 
   @Post()
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Crear nota de venta' })
-  @ApiHeader({ name: 'x-ubicacion-id', required: true })
   create(
-    @Headers('x-empresa-id') empresaId: string,
     @Headers('x-ubicacion-id') ubicacionId: string,
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateNotaDto,
   ) {
-    return this.ventas.create(dto, empresaId, ubicacionId, user.sub);
+    return this.ventas.create(dto, ubicacionId, user.sub);
   }
 
   @Post(':id/lineas')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Agregar línea a nota de venta' })
   addLinea(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
     @Body() dto: AddLineaDto,
   ) {
-    return this.ventas.addLinea(id, dto, empresaId);
+    return this.ventas.addLinea(id, dto, ubicacionId);
   }
 
   @Patch(':id/lineas/:lineaId')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Actualizar cantidad/precio/descuento de una línea' })
   updateLinea(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
     @Param('lineaId') lineaId: string,
     @Body() dto: UpdateLineaDto,
   ) {
-    return this.ventas.updateLinea(id, lineaId, dto, empresaId);
+    return this.ventas.updateLinea(id, lineaId, dto, ubicacionId);
   }
 
   @Delete(':id/lineas/:lineaId')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Eliminar línea de nota de venta' })
   removeLinea(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
     @Param('lineaId') lineaId: string,
   ) {
-    return this.ventas.removeLinea(id, lineaId, empresaId);
+    return this.ventas.removeLinea(id, lineaId, ubicacionId);
   }
 
   @Post(':id/cerrar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Cerrar/cobrar nota de venta con pagos' })
   cerrar(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
     @Body() dto: CerrarNotaDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.ventas.cerrar(id, dto, empresaId, user.sub);
+    return this.ventas.cerrar(id, dto, ubicacionId, user.sub);
   }
 
   @Patch(':id/pendiente')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Marcar nota como pendiente de pago (se cobrará al entregar)' })
-  marcarPendiente(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
-    return this.ventas.marcarPendiente(id, empresaId);
+  marcarPendiente(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.ventas.marcarPendiente(id, ubicacionId);
   }
 
   @Patch(':id/convertir')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Convertir cotización a nota de venta activa' })
-  convertir(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
-    return this.ventas.convertirAVenta(id, empresaId);
+  convertir(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.ventas.convertirAVenta(id, ubicacionId);
   }
 
   @Patch(':id/cancelar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Cancelar nota de venta' })
-  cancelar(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
-    return this.ventas.cancelar(id, empresaId);
+  cancelar(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.ventas.cancelar(id, ubicacionId);
   }
 
   @Post(':id/abonar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Registrar abono en una nota con estatus CRÉDITO' })
   abonar(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
     @Body() dto: AbonarNotaDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.ventas.abonar(id, dto, empresaId, user.sub);
+    return this.ventas.abonar(id, dto, ubicacionId, user.sub);
   }
 
   @Post(':id/evidencias')

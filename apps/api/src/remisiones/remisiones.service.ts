@@ -131,16 +131,16 @@ export class RemisionesService {
     await this.prisma.$transaction(async (tx) => {
       for (const linea of rem.lineas) {
         const art = await tx.articulo.findFirst({
-          where: { id: linea.articulo_id, empresa_id: rem.empresa_origen_id },
+          where: { id: linea.articulo_id, ubicacion_id: rem.ub_origen_id },
         });
-        if (!art) throw new NotFoundException(`Artículo ${linea.articulo_clave} no encontrado en empresa origen`);
+        if (!art) throw new NotFoundException(`Artículo ${linea.articulo_clave} no encontrado en ubicación origen`);
 
         const cantAntes   = Number((art as any)[`existencia_${linea.slot_origen}`] ?? 0);
         const cantDespues = cantAntes - Number(linea.cantidad_enviada);
 
         await tx.movimientoInventario.create({
           data: {
-            empresa_id:      rem.empresa_origen_id,
+            ubicacion_id:    rem.ub_origen_id,
             articulo_id:     linea.articulo_id,
             tipo:            'SALIDA',
             existencia_num:  linea.slot_origen,
@@ -196,7 +196,7 @@ export class RemisionesService {
 
         // Lookup artículo en empresa destino por clave
         const artDst = await tx.articulo.findFirst({
-          where: { clave: linea.articulo_clave, empresa_id: rem.empresa_destino_id },
+          where: { clave: linea.articulo_clave, ubicacion_id: rem.ub_destino_id },
         });
 
         if (artDst && cantRecibida > 0) {
@@ -205,7 +205,7 @@ export class RemisionesService {
 
           await tx.movimientoInventario.create({
             data: {
-              empresa_id:       rem.empresa_destino_id,
+              ubicacion_id:     rem.ub_destino_id,
               articulo_id:      artDst.id,
               tipo:             'ENTRADA',
               existencia_num:   linea.slot_destino,

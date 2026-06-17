@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -38,7 +38,7 @@ export class ComprasService {
 
   // ── Órdenes de Compra ───────────────────────────────────────
 
-  async listarOrdenes(empresaId: string, query: {
+  async listarOrdenes(ubicacionId: string, query: {
     estatus?: string; proveedorId?: string; page?: number; limit?: number;
   }) {
     const page  = Math.max(1, query.page  ?? 1);
@@ -46,7 +46,7 @@ export class ComprasService {
     const skip  = (page - 1) * limit;
 
     const where = {
-      empresa_id: empresaId,
+      ubicacion_id: ubicacionId,
       ...(query.estatus    ? { estatus: query.estatus as EstatusOrdenCompra } : {}),
       ...(query.proveedorId ? { proveedor_id: query.proveedorId } : {}),
     };
@@ -75,9 +75,9 @@ export class ComprasService {
     };
   }
 
-  async getOrden(id: string, empresaId: string) {
+  async getOrden(id: string, ubicacionId: string) {
     const orden = await this.prisma.ordenCompra.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
       include: {
         proveedor: { select: { id: true, nombre: true, razon_social: true, rfc: true } },
         usuario:   { select: { id: true, nombre: true, apellidos: true } },
@@ -91,18 +91,18 @@ export class ComprasService {
     return this.ser(orden);
   }
 
-  async crearOrden(dto: CreateOrdenCompraDto, empresaId: string, usuarioId: string) {
+  async crearOrden(dto: CreateOrdenCompraDto, ubicacionId: string, usuarioId: string) {
     if (!dto.lineas || dto.lineas.length === 0) {
       throw new BadRequestException('La orden debe tener al menos una línea');
     }
 
     const articuloIds = dto.lineas.map(l => l.articulo_id);
     const articulos = await this.prisma.articulo.findMany({
-      where: { id: { in: articuloIds }, empresa_id: empresaId },
+      where: { id: { in: articuloIds }, ubicacion_id: ubicacionId },
       select: { id: true, clave: true, descripcion_1: true, descripcion_2: true },
     });
     if (articulos.length !== articuloIds.length) {
-      throw new BadRequestException('Uno o más artículos no pertenecen a la empresa');
+      throw new BadRequestException('Uno o más artículos no pertenecen a la ubicación');
     }
 
     const artMap = new Map(articulos.map(a => [a.id, a]));
@@ -124,7 +124,7 @@ export class ComprasService {
 
     const orden = await this.prisma.$transaction(async (tx) => {
       const last = await tx.ordenCompra.findFirst({
-        where: { empresa_id: empresaId },
+        where: { ubicacion_id: ubicacionId },
         orderBy: { folio: 'desc' },
         select: { folio: true },
       });
@@ -133,7 +133,7 @@ export class ComprasService {
       return tx.ordenCompra.create({
         data: {
           folio,
-          empresa_id:   empresaId,
+          ubicacion_id: ubicacionId,
           proveedor_id: dto.proveedor_id,
           subtotal,
           total:        subtotal,
@@ -152,8 +152,8 @@ export class ComprasService {
     return this.ser(orden);
   }
 
-  async aprobarOrden(id: string, empresaId: string, usuarioId: string) {
-    const orden = await this.getOrdenRaw(id, empresaId);
+  async aprobarOrden(id: string, ubicacionId: string, usuarioId: string) {
+    const orden = await this.getOrdenRaw(id, ubicacionId);
     if (orden.estatus !== 'BORRADOR') {
       throw new BadRequestException('Solo se puede aprobar una OC en estado BORRADOR');
     }
@@ -165,9 +165,9 @@ export class ComprasService {
     return this.ser(updated);
   }
 
-  async recibirOrden(id: string, dto: RecibirOrdenCompraDto, empresaId: string, usuarioId: string) {
+  async recibirOrden(id: string, dto: RecibirOrdenCompraDto, ubicacionId: string, usuarioId: string) {
     const orden = await this.prisma.ordenCompra.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
       include: { lineas: true, proveedor: true },
     });
     if (!orden) throw new NotFoundException('Orden de compra no encontrada');
@@ -193,13 +193,11 @@ export class ComprasService {
 
         const nuevaRecibida = yaRecibida + aCobrar;
 
-        // Actualizar linea
         await tx.ordenCompraLinea.update({
           where: { id: recibo.linea_id },
           data: { cantidad_recibida: nuevaRecibida },
         });
 
-        // Crear Entrada en inventario (F5)
         const articulo = await tx.articulo.findUnique({
           where: { id: linea.articulo_id },
           select: { [`existencia_${linea.existencia_num}`]: true },
@@ -215,7 +213,7 @@ export class ComprasService {
 
         await tx.movimientoInventario.create({
           data: {
-            empresa_id:      empresaId,
+            ubicacion_id:    ubicacionId,
             articulo_id:     linea.articulo_id,
             tipo:            'ENTRADA',
             existencia_num:  linea.existencia_num,
@@ -232,14 +230,12 @@ export class ComprasService {
         montoRecibidoAhora += aCobrar * Number(linea.precio_unitario);
       }
 
-      // Determinar nuevo estatus
       const lineasActualizadas = await tx.ordenCompraLinea.findMany({ where: { orden_id: id } });
       const todasRecibidas = lineasActualizadas.every(
         l => Number(l.cantidad_recibida) >= Number(l.cantidad_solicitada),
       );
       const nuevoEstatus = todasRecibidas ? 'RECIBIDA' : 'RECIBIDA_PARCIAL';
 
-      // Si hay monto recibido, registrar CARGO al proveedor
       if (montoRecibidoAhora > 0) {
         const proveedor = await tx.proveedor.findUnique({
           where: { id: orden.proveedor_id },
@@ -255,7 +251,7 @@ export class ComprasService {
 
         await tx.movimientoCuentaProveedor.create({
           data: {
-            empresa_id:    empresaId,
+            ubicacion_id:  ubicacionId,
             proveedor_id:  orden.proveedor_id,
             tipo:          'CARGO',
             monto:         montoRecibidoAhora,
@@ -284,8 +280,8 @@ export class ComprasService {
     return this.ser(resultado);
   }
 
-  async cancelarOrden(id: string, empresaId: string) {
-    const orden = await this.getOrdenRaw(id, empresaId);
+  async cancelarOrden(id: string, ubicacionId: string) {
+    const orden = await this.getOrdenRaw(id, ubicacionId);
     if (orden.estatus === 'RECIBIDA') {
       throw new BadRequestException('No se puede cancelar una OC ya recibida');
     }
@@ -300,9 +296,9 @@ export class ComprasService {
     return this.ser(updated);
   }
 
-  private async getOrdenRaw(id: string, empresaId: string): Promise<OrdenCompra> {
+  private async getOrdenRaw(id: string, ubicacionId: string): Promise<OrdenCompra> {
     const orden = await this.prisma.ordenCompra.findFirst({
-      where: { id, empresa_id: empresaId },
+      where: { id, ubicacion_id: ubicacionId },
     });
     if (!orden) throw new NotFoundException('Orden de compra no encontrada');
     return orden;
@@ -310,7 +306,7 @@ export class ComprasService {
 
   // ── Cuentas por Pagar ───────────────────────────────────────
 
-  async getCuentaProveedor(proveedorId: string, empresaId: string, query: {
+  async getCuentaProveedor(proveedorId: string, ubicacionId: string, query: {
     page?: number; limit?: number;
   }) {
     const page  = Math.max(1, query.page  ?? 1);
@@ -318,12 +314,12 @@ export class ComprasService {
     const skip  = (page - 1) * limit;
 
     const proveedor = await this.prisma.proveedor.findFirst({
-      where: { id: proveedorId, empresa_id: empresaId },
+      where: { id: proveedorId },
       select: { id: true, nombre: true, razon_social: true, rfc: true, telefono: true, saldo_pendiente: true },
     });
     if (!proveedor) throw new NotFoundException('Proveedor no encontrado');
 
-    const where = { empresa_id: empresaId, proveedor_id: proveedorId };
+    const where = { ubicacion_id: ubicacionId, proveedor_id: proveedorId };
 
     const [movimientos, total] = await this.prisma.$transaction([
       this.prisma.movimientoCuentaProveedor.findMany({
@@ -352,11 +348,11 @@ export class ComprasService {
   async registrarAbono(
     proveedorId: string,
     dto: AbonoProveedorDto,
-    empresaId: string,
+    ubicacionId: string,
     usuarioId: string,
   ) {
     const proveedor = await this.prisma.proveedor.findFirst({
-      where: { id: proveedorId, empresa_id: empresaId },
+      where: { id: proveedorId },
       select: { id: true, saldo_pendiente: true },
     });
     if (!proveedor) throw new NotFoundException('Proveedor no encontrado');
@@ -371,7 +367,7 @@ export class ComprasService {
       });
       return tx.movimientoCuentaProveedor.create({
         data: {
-          empresa_id:    empresaId,
+          ubicacion_id:  ubicacionId,
           proveedor_id:  proveedorId,
           tipo:          'ABONO',
           monto:         dto.monto,
@@ -389,11 +385,11 @@ export class ComprasService {
   async registrarAjuste(
     proveedorId: string,
     dto: AjusteCuentaProveedorDto,
-    empresaId: string,
+    ubicacionId: string,
     usuarioId: string,
   ) {
     const proveedor = await this.prisma.proveedor.findFirst({
-      where: { id: proveedorId, empresa_id: empresaId },
+      where: { id: proveedorId },
       select: { id: true, saldo_pendiente: true },
     });
     if (!proveedor) throw new NotFoundException('Proveedor no encontrado');
@@ -410,7 +406,7 @@ export class ComprasService {
       });
       return tx.movimientoCuentaProveedor.create({
         data: {
-          empresa_id:    empresaId,
+          ubicacion_id:  ubicacionId,
           proveedor_id:  proveedorId,
           tipo:          'AJUSTE',
           monto:         dto.monto,
