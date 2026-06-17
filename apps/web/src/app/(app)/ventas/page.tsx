@@ -40,7 +40,7 @@ type NuevaNotaForm = z.infer<typeof NuevaNotaSchema>;
 // ── Línea de captura rápida ──────────────────────────────────
 const LineaSchema = z.object({
   busqueda: z.string().min(1, 'Ingresa clave o descripción'),
-  cantidad: z.number({ coerce: true }).min(0.001, 'Cantidad inválida'),
+  cantidad: z.coerce.number().int('Solo números enteros').min(1, 'Cantidad mínima: 1'),
   precio_unitario: z.number({ coerce: true }).min(0, 'Precio inválido'),
   descuento: z.number({ coerce: true }).min(0).max(100).optional(),
 });
@@ -486,7 +486,7 @@ export default function VentasPage() {
 
   async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
     if (!notaActiva) return;
-    const parsed = parseFloat(rawValue);
+    const parsed = field === 'cantidad' ? parseInt(rawValue, 10) : parseFloat(rawValue);
     if (isNaN(parsed) || parsed <= 0) return;
     const orig = notaActiva.lineas.find((l) => l.id === lineaId);
     if (!orig) return;
@@ -1122,7 +1122,7 @@ export default function VentasPage() {
                             </td>
                             <td className="px-2 py-2.5 text-right">
                               <input
-                                type="number" step="0.001" min="0.001"
+                                type="number" step="1" min="1"
                                 disabled={savingLinea === l.id}
                                 className="w-14 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
                                 value={lineaDraft[l.id]?.cantidad ?? String(l.cantidad)}

@@ -173,6 +173,31 @@ function formatMoney(n) {
   return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + dec;
 }
 
+/** Formatea fecha sin depender de locale ICU (compatible con pkg) */
+function fmtDate(d) {
+  const dt = new Date(d);
+  const dd = String(dt.getDate()).padStart(2, '0');
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const yyyy = dt.getFullYear();
+  return dd + '/' + mm + '/' + yyyy;
+}
+function fmtTime(d) {
+  const dt = new Date(d);
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const min = String(dt.getMinutes()).padStart(2, '0');
+  return hh + ':' + min;
+}
+function fmtDateTime(d) { return fmtDate(d) + ' ' + fmtTime(d); }
+
+/** Igual que row() pero con puntos como relleno */
+function dotRow(left, right) {
+  const w = config.columns;
+  const r = norm(right);
+  const l = norm(left);
+  const fill = Math.max(2, w - l.length - r.length);
+  return Buffer.from(l.substring(0, w - r.length - 2) + '.'.repeat(fill) + r + '\n', 'latin1');
+}
+
 /**
  * Imprime el header de empresa/ubicación.
  * Si el ticket trae logo_escpos_b64, inserta el bitmap ESC/POS.
@@ -324,54 +349,54 @@ function buildEscPosBuffer(ticket) {
     push(center(rangoLabel));
     push(sep('='));
 
-    // Por método de pago
-    push(CMD.BOLD_ON, ln('POR METODO DE PAGO:'), CMD.BOLD_OFF);
-    let totalGeneral = 0;
-    for (const m of METODOS) {
-      const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
-      const label = (METODO_LABELS[m] ?? m) + ' (' + res.count + ')';
-      push(row('  ' + label, '$' + formatMoney(Number(res.total))));
-      totalGeneral += Number(res.total);
-    }
+    // ── Lista de ventas ─────────────────────────────────
+    push(CMD.BOLD_ON, ln('VENTAS'), CMD.BOLD_OFF);
     push(sep('-'));
-    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(row('TOTAL COBRADO', '$' + formatMoney(totalGeneral)));
-    push(CMD.NORMAL, CMD.BOLD_OFF, sep('='));
-
-    // Por estatus
-    push(CMD.BOLD_ON, ln('POR ESTATUS:'), CMD.BOLD_OFF);
-    for (const [est, res] of Object.entries(ticket.por_estatus ?? {})) {
-      push(row('  ' + norm(est) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
-    }
-    push(sep('-'));
-
-    // Detalle de notas
-    push(CMD.BOLD_ON, ln('DETALLE:'), CMD.BOLD_OFF);
     for (const n of (ticket.notas ?? [])) {
-      const hora = n.created_at ? new Date(n.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
-      const folioStr = '#' + String(n.folio).padStart(4, '0') + ' ' + hora;
-      push(row('  ' + folioStr, '$' + formatMoney(Number(n.total))));
-      push(ln('  ' + norm(n.cliente?.nombre ?? 'MOSTRADOR')));
-      for (const p of (n.pagos ?? [])) {
-        push(ln('    ' + norm(METODO_LABELS[p.metodo] ?? p.metodo) + ': $' + formatMoney(Number(p.monto))));
+      const folioStr = 'N' + String(n.folio).padStart(5, '0');
+      let mLabel;
+      if (n.estatus === 'CREDITO') {
+        mLabel = 'CREDITO';
+      } else if (!n.pagos || n.pagos.length === 0) {
+        mLabel = '';
+      } else if (n.pagos.length > 1) {
+        mLabel = 'MULTI_PAGO';
+      } else {
+        mLabel = norm(n.pagos[0].metodo ?? '');
       }
+      push(dotRow(folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? ' ' + mLabel : '')));
     }
-    // Anticipos de pedidos
-    if (ticket.anticipos_pedido && (ticket.anticipos_pedido.count > 0)) {
+    push(sep('-'));
+
+    // ── Anticipos de pedidos ────────────────────────────
+    if (ticket.anticipos_pedido && ticket.anticipos_pedido.count > 0) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('ANTICIPOS DE PEDIDOS:'), CMD.BOLD_OFF);
+      push(sep('-'));
       for (const m of METODOS) {
         const res = ticket.anticipos_pedido.por_metodo?.[m] ?? { count: 0, total: 0 };
         if (res.count === 0) continue;
-        const label = (METODO_LABELS[m] ?? m) + ' (' + res.count + ')';
-        push(row('  ' + label, '$' + formatMoney(Number(res.total))));
+        push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
       }
       push(sep('-'));
-      push(CMD.BOLD_ON, row('TOTAL ANTICIPOS', '$' + formatMoney(Number(ticket.anticipos_pedido.total ?? 0))), CMD.BOLD_OFF);
+      push(CMD.BOLD_ON, dotRow('TOTAL ANTICIPOS', '$' + formatMoney(Number(ticket.anticipos_pedido.total ?? 0))), CMD.BOLD_OFF);
     }
 
+    // ── Totales por método ──────────────────────────────
     push(sep('='));
-    push(CMD.ALIGN_CENTER, ln('Generado: ' + new Date().toLocaleString('es-MX')));
+    let totalGeneral = 0;
+    for (const m of METODOS) {
+      const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
+      totalGeneral += Number(res.total);
+      push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
+    }
+    push(sep('-'));
+    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+    push(dotRow('TOTAL COBRADO', '$' + formatMoney(totalGeneral)));
+    push(CMD.NORMAL, CMD.BOLD_OFF);
+
+    push(sep('='));
+    push(CMD.ALIGN_CENTER, ln('Generado: ' + fmtDateTime(new Date())));
     push(CMD.ALIGN_LEFT);
     push(CMD.FEED(config.cutFeedLines ?? 5));
     push(CMD.CUT(0));
@@ -398,7 +423,7 @@ function buildEscPosBuffer(ticket) {
     push(sep('='));
 
     const folioStr = '#' + String(ticket.pedido?.folio ?? '').padStart(4, '0');
-    const fecha = ticket.pedido?.fecha ? new Date(ticket.pedido.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+    const fecha = ticket.pedido?.fecha ? fmtDate(ticket.pedido.fecha) : '';
     push(row('Pedido ' + folioStr, fecha));
     push(ln('Cliente: ' + norm(ticket.pedido?.cliente_nombre ?? 'N/A')));
     push(sep('-'));
@@ -518,7 +543,7 @@ function buildEscPosBuffer(ticket) {
     push(CMD.BOLD_ON, ln('HISTORIAL DE ANTICIPOS:'), CMD.BOLD_OFF);
     let totalAnticipado = 0;
     for (const a of ticket.historial_anticipos) {
-      const fechaA = a.fecha ? new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+      const fechaA = a.fecha ? fmtDate(a.fecha) : '';
       push(row('  ' + fechaA + ' ' + norm(a.metodo), '$' + formatMoney(Number(a.monto))));
       totalAnticipado += Number(a.monto);
     }
