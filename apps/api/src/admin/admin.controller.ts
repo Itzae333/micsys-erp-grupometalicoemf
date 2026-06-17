@@ -101,6 +101,12 @@ export class AdminController {
         // ── Clientes ───────────────────────────────────────────
         const clientes      = await tx.cliente.deleteMany({});
 
+        // ── Legacy / Bitácora / Asistencias ────────────────────
+        const legacyLineas  = await tx.legacyVentaLinea.deleteMany({});
+        const legacyVentas  = await tx.legacyVenta.deleteMany({});
+        const asistencias   = await tx.registroAsistencia.deleteMany({});
+        const auditLogs     = await tx.auditLog.deleteMany({});
+
         return {
           evidencias_pedido:       evidPedido.count,
           anticipos_pedido:        anticPedido.count,
@@ -121,6 +127,10 @@ export class AdminController {
           movimientos_inventario:  movInv.count,
           articulos:               articulos.count,
           clientes:                clientes.count,
+          legacy_lineas:           legacyLineas.count,
+          legacy_ventas:           legacyVentas.count,
+          registros_asistencia:    asistencias.count,
+          audit_logs:              auditLogs.count,
         };
       },
       { timeout: 60_000 },

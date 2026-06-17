@@ -130,9 +130,9 @@ export default function SistemaPage() {
             </p>
             <div className="mt-3 space-y-1">
               <p className="text-meta font-semibold text-red-600 uppercase tracking-wide">Se elimina:</p>
-              <p className="text-meta text-steel-600">Clientes · Artículos · Ventas · Pedidos · Remisiones · Compras · Movimientos de inventario · Cuentas por cobrar</p>
+              <p className="text-meta text-steel-600">Clientes · Artículos · Ventas · Pedidos · Remisiones · Compras · Movimientos de inventario · Cuentas por cobrar · Historial legacy · Registros de asistencia · Bitácora</p>
               <p className="text-meta font-semibold text-green-700 uppercase tracking-wide mt-2">Se conserva:</p>
-              <p className="text-meta text-steel-600">Empresas · Ubicaciones · Usuarios · Configuración de columnas y precios · Proveedores · Empleados · Historial legacy</p>
+              <p className="text-meta text-steel-600">Empresas · Ubicaciones · Usuarios · Configuración de columnas y precios · Proveedores · Empleados</p>
             </div>
           </div>
         </div>
