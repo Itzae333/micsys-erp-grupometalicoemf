@@ -194,7 +194,7 @@ export class MigracionService {
     const result = { insertados: 0, actualizados: 0, omitidos: 0, lineas_insertadas: 0, errores: [] as { fila: number; motivo: string }[] };
 
     // Construir lista de pendientes (excluir ya importados)
-    type Pendiente = { data: Prisma.LegacyVentaCreateInput; lineasCount: number; fila: number };
+    type Pendiente = { data: Prisma.LegacyVentaUncheckedCreateInput; lineasCount: number; fila: number };
     const pendientes: Pendiente[] = [];
 
     for (const [, { header, lineas, fila }] of mapa) {
