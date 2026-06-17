@@ -429,7 +429,7 @@ export class RhService {
 
       await tx.movimientoInventario.create({
         data: {
-          empresa_id:       empresaId,
+          ubicacion_id:     op.articulo.ubicacion_id,
           articulo_id:      op.articulo_id,
           tipo:             'ENTRADA',
           existencia_num:   op.existencia_num,

@@ -4,14 +4,14 @@ import { NotificacionesService } from './notificaciones.service';
 
 @ApiTags('Notificaciones')
 @ApiBearerAuth()
-@ApiHeader({ name: 'x-empresa-id', required: true })
+@ApiHeader({ name: 'x-ubicacion-id', required: true })
 @Controller('notificaciones')
 export class NotificacionesController {
   constructor(private svc: NotificacionesService) {}
 
   @Get('resumen')
   @ApiOperation({ summary: 'Resumen de alertas activas para el usuario' })
-  getResumen(@Headers('x-empresa-id') empresaId: string) {
-    return this.svc.getResumen(empresaId);
+  getResumen(@Headers('x-ubicacion-id') ubicacionId: string) {
+    return this.svc.getResumen(ubicacionId);
   }
 }

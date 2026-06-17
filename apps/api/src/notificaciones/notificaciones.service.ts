@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class NotificacionesService {
   constructor(private prisma: PrismaService) {}
 
-  async getResumen(empresaId: string) {
+  async getResumen(ubicacionId: string) {
     const ahora      = new Date();
     const hace30dias = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
     const hace7dias  = new Date(ahora.getTime() -  7 * 24 * 60 * 60 * 1000);
@@ -14,7 +14,7 @@ export class NotificacionesService {
       // Notas de crédito con más de 30 días sin saldar
       this.prisma.notaVenta.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus:    'CREDITO',
           created_at: { lt: hace30dias },
         },
@@ -32,7 +32,7 @@ export class NotificacionesService {
       // Cotizaciones sin convertir con más de 7 días
       this.prisma.notaVenta.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus:    'COTIZACION',
           created_at: { lt: hace7dias },
         },
@@ -50,7 +50,7 @@ export class NotificacionesService {
       // Órdenes de compra sin recibir completamente
       this.prisma.ordenCompra.findMany({
         where: {
-          empresa_id: empresaId,
+          ubicacion_id: ubicacionId,
           estatus: { in: ['APROBADA', 'RECIBIDA_PARCIAL'] },
         },
         select: {
