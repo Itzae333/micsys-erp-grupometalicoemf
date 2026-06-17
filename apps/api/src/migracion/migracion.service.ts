@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { parse } from 'csv-parse/sync';
 
@@ -193,7 +194,7 @@ export class MigracionService {
     const result = { insertados: 0, actualizados: 0, omitidos: 0, lineas_insertadas: 0, errores: [] as { fila: number; motivo: string }[] };
 
     // Construir lista de pendientes (excluir ya importados)
-    type Pendiente = { data: Parameters<typeof this.prisma.legacyVenta.create>[0]['data']; lineasCount: number; fila: number };
+    type Pendiente = { data: Prisma.LegacyVentaCreateInput; lineasCount: number; fila: number };
     const pendientes: Pendiente[] = [];
 
     for (const [, { header, lineas, fila }] of mapa) {
@@ -244,7 +245,6 @@ export class MigracionService {
       try {
         await this.prisma.$transaction(
           lote.map((v) => this.prisma.legacyVenta.create({ data: v.data })),
-          { timeout: 30_000 },
         );
         result.insertados      += lote.length;
         result.lineas_insertadas += lote.reduce((s, v) => s + v.lineasCount, 0);
