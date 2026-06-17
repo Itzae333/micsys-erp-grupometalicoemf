@@ -7,8 +7,9 @@ import {
   IsEnum,
   IsArray,
   ArrayMinSize,
+  IsOptional,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RolUsuario } from '@grupometalicoemf/database';
 
 export class CreateUsuarioDto {
@@ -34,4 +35,7 @@ export class CreateUsuarioDto {
   @ArrayMinSize(1, { message: 'Asigna al menos una ubicación' })
   @IsString({ each: true })
   ubicacion_ids: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'IPs permitidas (vacío = sin restricción)' })
+  @IsOptional() @IsArray() @IsString({ each: true }) allowed_ips?: string[];
 }

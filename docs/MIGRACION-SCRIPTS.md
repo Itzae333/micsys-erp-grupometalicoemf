@@ -55,14 +55,13 @@ SELECT
   COALESCE(i.descripcion3, '')  AS descripcion3,
   COALESCE(i.descripcion4, '')  AS descripcion4,
   COALESCE(i.descripcion5, '')  AS descripcion5,
-  COALESCE(i.existencias1, 0)   AS existencias1,
-  COALESCE(i.existencias2, 0)   AS existencias2,
-  COALESCE(i.existencias3, 0)   AS existencias3,
-  COALESCE(i.precio1, 0.00)     AS precio1,
-  COALESCE(i.precio2, 0.00)     AS precio2,
+  0   AS existencias1,
+  0   AS existencias2,
+  0   AS existencias3,
+  COALESCE(i.precio2, 0.00)     AS precio1,
+  COALESCE(i.precio1, 0.00)     AS precio2,
   COALESCE(i.precio3, 0.00)     AS precio3,
-  COALESCE(i.precio4, 0.00)     AS precio4,
-  COALESCE(i.precio5, 0.00)     AS precio5
+  COALESCE(i.precio4, 0.00)     AS precio4
 FROM inventario_punto_venta i
 ORDER BY i.id;
 ```
@@ -101,7 +100,7 @@ SELECT
   COALESCE(cl.apellidoMaterno, '') AS apellidoMaterno,
   COALESCE(cl.telefono, '')        AS telefono,
   COALESCE(cl.correo, '')          AS correo,
-  COALESCE(cu.saldo, 0.00)         AS saldo,
+  0         AS saldo,
   CASE cl.tipoCliente
     WHEN 'MENUDEO'     THEN 1
     WHEN 'MAYOREO'     THEN 2
