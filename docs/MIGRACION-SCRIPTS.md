@@ -1,19 +1,25 @@
 # Scripts de exportación — MetalAlpha → ERP GrupoMetalicoEMF
 
-Ejecuta estas queries en el sistema legado MetalAlpha (MySQL/MariaDB) para generar los archivos CSV que se suben al panel de Configuración → Migración del nuevo ERP.
+Ejecuta estas queries en el sistema legado MetalAlpha (MySQL/MariaDB) para generar los archivos CSV que se suben al panel de **Configuración → Migración** del nuevo ERP.
 
-> **Diferencias entre sucursales:**
-> - `inventario_virgen` guarda color y material como FKs a catálogos separados, solo tiene `existencias1`.
-> - `inventario_punto_venta` guarda `descripcion4` y `descripcion5` como texto directo, tiene `existencias1..3` y NO tiene tablas de color/material.
-> - `cliente_punto_venta` usa el FK `cuentaClientePuntoVenta_id` (no `cuenta_id`).
+> **Cómo funciona la migración por ubicación:**
+> - **Inventario y Clientes:** cada CSV se sube mientras el admin está posicionado en la ubicación destino. No se mezclan datos de distintas ubicaciones en un mismo archivo — exporta un CSV por fuente y súbelo en la ubicación correspondiente.
+> - **Ventas históricas:** se consolidan a nivel empresa. El campo `sucursal` identifica el origen histórico y solo lo ve el admin.
+
+> **Diferencias técnicas entre fuentes:**
+> - `inventario_virgen`: color y material como FKs a catálogos separados, solo tiene `existencias1`.
+> - `inventario_punto_venta`: `descripcion4` y `descripcion5` como texto directo, tiene `existencias1..3`.
+> - `cliente_punto_venta`: usa FK `cuentaClientePuntoVenta_id` (no `cuenta_id`).
 
 ---
 
 ## 1. `inventario.csv`
 
-### Sucursal principal (`inventario_virgen`)
+Genera **un archivo por fuente** y súbelo en la ubicación correspondiente. No se necesita columna `sucursal`.
 
-Color y material se resuelven vía JOIN. Solo tiene `existencias1`; las columnas `existencias2` y `existencias3` se exportan como `0`.
+### Fuente: `inventario_virgen`
+
+Color y material se resuelven vía JOIN. Solo tiene `existencias1`; las demás se exportan como `0`.
 
 ```sql
 SELECT
@@ -30,17 +36,16 @@ SELECT
   COALESCE(i.precio2, 0.00)     AS precio2,
   COALESCE(i.precio3, 0.00)     AS precio3,
   COALESCE(i.precio4, 0.00)     AS precio4,
-  COALESCE(i.precio5, 0.00)     AS precio5,
-  'virgen'                      AS sucursal
+  COALESCE(i.precio5, 0.00)     AS precio5
 FROM inventario_virgen i
 LEFT JOIN color_virgen    c ON c.id = i.color_id
 LEFT JOIN material_virgen m ON m.id = i.material_id
 ORDER BY i.id;
 ```
 
-### Punto de venta (`inventario_punto_venta`)
+### Fuente: `inventario_punto_venta`
 
-`descripcion4` y `descripcion5` son columnas directas. Tiene `existencias1..3`. Sin JOINs de color/material.
+`descripcion4` y `descripcion5` son columnas directas. Sin JOINs de color/material.
 
 ```sql
 SELECT
@@ -57,29 +62,25 @@ SELECT
   COALESCE(i.precio2, 0.00)     AS precio2,
   COALESCE(i.precio3, 0.00)     AS precio3,
   COALESCE(i.precio4, 0.00)     AS precio4,
-  COALESCE(i.precio5, 0.00)     AS precio5,
-  'punto_venta'                 AS sucursal
+  COALESCE(i.precio5, 0.00)     AS precio5
 FROM inventario_punto_venta i
 ORDER BY i.id;
 ```
 
-> Si las dos sucursales **comparten** catálogo, exporta solo el de `inventario_virgen` y omite la segunda query.  
-> Si son catálogos **distintos**, exporta ambas y combina los dos archivos CSV (mismo encabezado) antes de subir.
-
-**Formato del CSV (encabezado unificado):**
+**Formato del CSV:**
 ```
-id,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,existencias1,existencias2,existencias3,precio1,precio2,precio3,precio4,precio5,sucursal
-1,Tubo Cuadrado,1x1,3mm,Negro,Acero,100,0,0,25.00,22.00,20.00,18.00,15.00,virgen
-2,Lámina Lisa,2x4,1mm,,,50,20,5,120.00,110.00,100.00,90.00,80.00,punto_venta
+id,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,existencias1,existencias2,existencias3,precio1,precio2,precio3,precio4,precio5
+1,Tubo Cuadrado,1x1,3mm,Negro,Acero,100,0,0,25.00,22.00,20.00,18.00,15.00
+2,Lámina Lisa,2x4,1mm,,,50,20,5,120.00,110.00,100.00,90.00,80.00
 ```
 
 ---
 
 ## 2. `clientes.csv`
 
-> La FK de `cliente_punto_venta` es `cuentaClientePuntoVenta_id` (no `cuenta_id`).
+Genera **un archivo por fuente** y súbelo en la ubicación correspondiente. No se necesita columna `sucursal`.
 
-El campo `tipoCliente` del legado se convierte a `precio_num` del ERP con esta equivalencia:
+El campo `tipoCliente` del legado se convierte a `precio_num` del ERP:
 
 | tipoCliente legacy | precio_num ERP | Lista de precio |
 |---|---|---|
@@ -90,8 +91,9 @@ El campo `tipoCliente` del legado se convierte a `precio_num` del ERP con esta e
 | `PUNTO_VENTA` | 5 | Punto de venta |
 | `PUEBLA`, `LOCAL`, `FABRICA` | *(vacío)* | Sin tipo asignado |
 
+### Fuente: `cliente_virgen`
+
 ```sql
--- Clientes de la sucursal principal
 SELECT
   cl.id,
   COALESCE(cl.nombre, '')          AS nombre,
@@ -107,14 +109,17 @@ SELECT
     WHEN 'NO_CREDITO'  THEN 4
     WHEN 'PUNTO_VENTA' THEN 5
     ELSE NULL
-  END                              AS precio_num,
-  'virgen'                         AS sucursal
+  END                              AS precio_num
 FROM cliente_virgen cl
 LEFT JOIN cuenta_cliente_virgen cu ON cu.id = cl.cuenta_id
+ORDER BY cl.id;
+```
 
-UNION ALL
+### Fuente: `cliente_punto_venta`
 
--- Clientes del punto de venta  (FK distinto: cuentaClientePuntoVenta_id)
+> La FK es `cuentaClientePuntoVenta_id` (no `cuenta_id`).
+
+```sql
 SELECT
   cl.id,
   COALESCE(cl.nombre, '')          AS nombre,
@@ -130,20 +135,18 @@ SELECT
     WHEN 'NO_CREDITO'  THEN 4
     WHEN 'PUNTO_VENTA' THEN 5
     ELSE NULL
-  END                              AS precio_num,
-  'punto_venta'                    AS sucursal
+  END                              AS precio_num
 FROM cliente_punto_venta cl
 LEFT JOIN cuenta_cliente_punto_venta cu ON cu.id = cl.cuentaClientePuntoVenta_id
-
-ORDER BY sucursal, id;
+ORDER BY cl.id;
 ```
 
 **Formato esperado del CSV:**
 ```
-id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,precio_num,sucursal
-1,Juan,Pérez,García,555-1234,juan@mail.com,1500.00,2,virgen
-2,María,López,,555-5678,,0.00,1,punto_venta
-3,Carlos,Ruiz,,555-9999,,0.00,,virgen
+id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,precio_num
+1,Juan,Pérez,García,555-1234,juan@mail.com,1500.00,2
+2,María,López,,555-5678,,0.00,1
+3,Carlos,Ruiz,,555-9999,,0.00,
 ```
 
 ---
