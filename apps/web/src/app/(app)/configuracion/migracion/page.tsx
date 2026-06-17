@@ -8,6 +8,7 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { cn } from '@/lib/utils';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+const VENTAS_CHUNK = 5_000; // ventas por petición (no filas)
 
 interface ImportResult {
   insertados: number;
@@ -53,19 +54,66 @@ const CONFIG: Record<TipoMigracion, {
   },
 };
 
+/** Agrupa filas del CSV en chunks de `chunkSize` ventas distintas. */
+function chunkearVentasCSV(text: string, chunkSize: number): string[] {
+  // Normaliza CRLF (MySQL Workbench exporta con \r\n)
+  const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  if (lines.length < 2) return [];
+
+  const header = lines[0];
+  const cols   = header.split(',');
+  const vidIdx = cols.indexOf('venta_id');
+  const sucIdx = cols.indexOf('sucursal');
+
+  // Agrupar filas por venta (mismo venta_id + sucursal)
+  const grupos = new Map<string, string[]>();
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    const key   = `${parts[sucIdx] ?? ''}|${parts[vidIdx] ?? ''}`;
+    if (!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key)!.push(lines[i]);
+  }
+
+  const entries = [...grupos.entries()];
+  const chunks: string[] = [];
+  for (let i = 0; i < entries.length; i += chunkSize) {
+    const slice = entries.slice(i, i + chunkSize);
+    const rows  = slice.flatMap(([, r]) => r);
+    chunks.push([header, ...rows].join('\n'));
+  }
+  return chunks;
+}
+
 function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
-  const cfg = CONFIG[tipo];
+  const cfg     = CONFIG[tipo];
   const fileRef = useRef<HTMLInputElement>(null);
-  const [archivo, setArchivo] = useState<File | null>(null);
-  const [cargando, setCargando] = useState(false);
+  const [archivo,   setArchivo]   = useState<File | null>(null);
+  const [cargando,  setCargando]  = useState(false);
+  const [progreso,  setProgreso]  = useState<string | null>(null);
   const [resultado, setResultado] = useState<ImportResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error,     setError]     = useState<string | null>(null);
+
+  async function postChunk(blob: Blob | File, extraHeaders: Record<string, string>): Promise<ImportResult> {
+    const token = useAuthStore.getState().accessToken;
+    const fd    = new FormData();
+    fd.append('archivo', blob, 'chunk.csv');
+
+    const res = await fetch(`${BASE_URL}/migracion/${tipo}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
+      body: fd,
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(e.message ?? `Error ${res.status}`);
+    }
+    return res.json() as Promise<ImportResult>;
+  }
 
   async function subir() {
     if (!archivo) return;
-    const token    = useAuthStore.getState().accessToken;
-    const contexto = useContextoStore.getState();
-    const empresa  = contexto.empresa;
+    const contexto  = useContextoStore.getState();
+    const empresa   = contexto.empresa;
     const ubicacion = contexto.ubicacion;
 
     if (cfg.nivelHeader === 'ubicacion' && !ubicacion?.id) {
@@ -77,39 +125,47 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
 
     setCargando(true);
     setResultado(null);
+    setProgreso(null);
     setError(null);
 
+    const baseHeaders: Record<string, string> = { 'x-empresa-id': empresa?.id ?? '' };
+    if (cfg.nivelHeader === 'ubicacion') baseHeaders['x-ubicacion-id'] = ubicacion!.id;
+
     try {
-      const fd = new FormData();
-      fd.append('archivo', archivo);
+      // Ventas: divide el CSV en lotes para evitar timeout del proxy
+      if (tipo === 'ventas') {
+        const text   = await archivo.text();
+        const chunks = chunkearVentasCSV(text, VENTAS_CHUNK);
 
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-        'x-empresa-id': empresa?.id ?? '',
-      };
-      if (cfg.nivelHeader === 'ubicacion') {
-        headers['x-ubicacion-id'] = ubicacion!.id;
+        if (chunks.length === 0) throw new Error('CSV vacío o sin filas de datos');
+
+        const acum: ImportResult = { insertados: 0, actualizados: 0, omitidos: 0, lineas_insertadas: 0, errores: [] };
+
+        for (let i = 0; i < chunks.length; i++) {
+          setProgreso(`Procesando lote ${i + 1} de ${chunks.length}…`);
+          const blob = new Blob([chunks[i]], { type: 'text/csv' });
+          const res  = await postChunk(blob, baseHeaders);
+          acum.insertados        += res.insertados;
+          acum.actualizados      += res.actualizados;
+          acum.omitidos          += res.omitidos;
+          acum.lineas_insertadas  = (acum.lineas_insertadas ?? 0) + (res.lineas_insertadas ?? 0);
+          acum.errores            = acum.errores.concat(res.errores);
+        }
+
+        setResultado(acum);
+      } else {
+        // Inventario / clientes: un solo POST
+        const res = await postChunk(archivo, baseHeaders);
+        setResultado(res);
       }
 
-      const res = await fetch(`${BASE_URL}/migracion/${tipo}`, {
-        method: 'POST',
-        headers,
-        body: fd,
-      });
-
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(e.message ?? `Error ${res.status}`);
-      }
-
-      const data = await res.json() as ImportResult;
-      setResultado(data);
       setArchivo(null);
       if (fileRef.current) fileRef.current.value = '';
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setCargando(false);
+      setProgreso(null);
     }
   }
 
@@ -157,12 +213,16 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
           className="shrink-0"
         >
           {cargando ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Procesando...</>
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {progreso ?? 'Procesando…'}</>
           ) : (
             <><Upload className="h-3.5 w-3.5" /> Importar</>
           )}
         </Button>
       </div>
+
+      {cargando && progreso && (
+        <p className="text-caption text-steel-500 text-center animate-pulse">{progreso}</p>
+      )}
 
       {resultado && (
         <div className="bg-white rounded-lg border border-green-200 p-3 flex flex-col gap-1.5">
@@ -184,9 +244,9 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
               omitidos
             </span>
           </div>
-          {resultado.lineas_insertadas !== undefined && (
+          {resultado.lineas_insertadas !== undefined && resultado.lineas_insertadas > 0 && (
             <p className="text-caption text-steel-500 text-center">
-              {resultado.lineas_insertadas} líneas de detalle importadas
+              {resultado.lineas_insertadas.toLocaleString()} líneas de detalle importadas
             </p>
           )}
           {resultado.errores.length > 0 && (

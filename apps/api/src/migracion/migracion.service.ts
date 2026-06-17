@@ -163,6 +163,8 @@ export class MigracionService {
   }
 
   async importarVentas(buffer: Buffer, empresaId: string): Promise<ImportResult & { lineas_insertadas: number }> {
+    const BATCH_SIZE = 200;
+
     const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
@@ -170,16 +172,18 @@ export class MigracionService {
     }) as Record<string, string>[];
 
     // Agrupar filas por venta_id + sucursal
-    const mapa = new Map<string, { header: Record<string, string>; lineas: Record<string, string>[] }>();
+    const mapa = new Map<string, { header: Record<string, string>; lineas: Record<string, string>[]; fila: number }>();
+    let filaActual = 2;
     for (const row of rows) {
       const key = `${row['sucursal']}|${row['venta_id']}`;
       if (!mapa.has(key)) {
-        mapa.set(key, { header: row, lineas: [] });
+        mapa.set(key, { header: row, lineas: [], fila: filaActual });
       }
       mapa.get(key)!.lineas.push(row);
+      filaActual++;
     }
 
-    // IDs ya importados para esta empresa (evita duplicados)
+    // IDs ya importados (evita duplicados en re-subidas parciales)
     const yaImportados = await this.prisma.legacyVenta.findMany({
       where: { empresa_id: empresaId },
       select: { legacy_id: true, sucursal: true },
@@ -187,60 +191,74 @@ export class MigracionService {
     const importadosSet = new Set(yaImportados.map((v) => `${v.sucursal}|${v.legacy_id}`));
 
     const result = { insertados: 0, actualizados: 0, omitidos: 0, lineas_insertadas: 0, errores: [] as { fila: number; motivo: string }[] };
-    let filaActual = 2;
 
-    for (const [, grupo] of mapa) {
-      const { header, lineas } = grupo;
+    // Construir lista de pendientes (excluir ya importados)
+    type Pendiente = { data: Parameters<typeof this.prisma.legacyVenta.create>[0]['data']; lineasCount: number; fila: number };
+    const pendientes: Pendiente[] = [];
+
+    for (const [, { header, lineas, fila }] of mapa) {
       const legacyId = toInt(header['venta_id']);
       const sucursal = header['sucursal'] || 'virgen';
       const key = `${sucursal}|${legacyId}`;
-      filaActual += lineas.length;
 
-      if (importadosSet.has(key)) {
-        result.omitidos++;
-        continue;
-      }
+      if (importadosSet.has(key)) { result.omitidos++; continue; }
 
-      try {
-        const fechaRaw = header['fechaHoraVenta'];
-        const fechaHora = fechaRaw ? new Date(fechaRaw) : new Date(0);
+      const fechaHora = header['fechaHoraVenta'] ? new Date(header['fechaHoraVenta']) : new Date(0);
 
-        await this.prisma.legacyVenta.create({
-          data: {
-            empresa_id: empresaId,
-            legacy_id: legacyId,
-            sucursal,
-            cliente_nombre: cleanStr(header['cliente_nombre']),
-            nota: cleanStr(header['nota']),
-            incidencia: cleanStr(header['incidencia']),
-            recibido: toNum(header['recibido']),
-            cambio: toNum(header['cambio']),
-            restan: toNum(header['restan']),
-            total: toNum(header['total']),
-            estatus: header['estatusVenta'] || 'PAGADA',
-            tipo_pago: header['tipoPago'] || 'EFECTIVO',
-            fecha_hora: fechaHora,
-            lineas: {
-              create: lineas.map((l) => ({
-                descripcion_1: cleanStr(l['descripcion1']),
-                descripcion_2: cleanStr(l['descripcion2']),
-                descripcion_3: cleanStr(l['descripcion3']),
-                // virgen: columnas color/material resueltas como descripcion4/5 en el CSV
-                // punto_venta: descripcion4/5 directas desde la tabla
-                color: cleanStr(l['descripcion4']),
-                material: cleanStr(l['descripcion5']),
-                cantidad: toNum(l['cantidad'], 1),
-                precio_neto: toNum(l['precioNeto']),
-                total: toNum(l['linea_total']),
-              })),
-            },
+      pendientes.push({
+        fila,
+        lineasCount: lineas.length,
+        data: {
+          empresa_id:     empresaId,
+          legacy_id:      legacyId,
+          sucursal,
+          cliente_nombre: cleanStr(header['cliente_nombre']),
+          nota:           cleanStr(header['nota']),
+          incidencia:     cleanStr(header['incidencia']),
+          recibido:       toNum(header['recibido']),
+          cambio:         toNum(header['cambio']),
+          restan:         toNum(header['restan']),
+          total:          toNum(header['total']),
+          estatus:        header['estatusVenta'] || 'PAGADA',
+          tipo_pago:      header['tipoPago'] || 'EFECTIVO',
+          fecha_hora:     fechaHora,
+          lineas: {
+            create: lineas.map((l) => ({
+              descripcion_1: cleanStr(l['descripcion1']),
+              descripcion_2: cleanStr(l['descripcion2']),
+              descripcion_3: cleanStr(l['descripcion3']),
+              color:         cleanStr(l['descripcion4']),
+              material:      cleanStr(l['descripcion5']),
+              cantidad:      toNum(l['cantidad'], 1),
+              precio_neto:   toNum(l['precioNeto']),
+              total:         toNum(l['linea_total']),
+            })),
           },
-        });
+        },
+      });
+    }
 
-        result.insertados++;
-        result.lineas_insertadas += lineas.length;
-      } catch (err) {
-        result.errores.push({ fila: filaActual, motivo: String((err as Error).message).slice(0, 120) });
+    // Procesar en lotes de BATCH_SIZE para evitar timeout
+    for (let i = 0; i < pendientes.length; i += BATCH_SIZE) {
+      const lote = pendientes.slice(i, i + BATCH_SIZE);
+      try {
+        await this.prisma.$transaction(
+          lote.map((v) => this.prisma.legacyVenta.create({ data: v.data })),
+          { timeout: 30_000 },
+        );
+        result.insertados      += lote.length;
+        result.lineas_insertadas += lote.reduce((s, v) => s + v.lineasCount, 0);
+      } catch {
+        // Si falla el lote completo, reintenta uno por uno para aislar el error
+        for (const v of lote) {
+          try {
+            await this.prisma.legacyVenta.create({ data: v.data });
+            result.insertados++;
+            result.lineas_insertadas += v.lineasCount;
+          } catch (err) {
+            result.errores.push({ fila: v.fila, motivo: String((err as Error).message).slice(0, 120) });
+          }
+        }
       }
     }
 
