@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Upload, CheckCircle2, AlertCircle, Loader2, FileText } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Loader2, FileText, MapPin, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
@@ -19,24 +19,37 @@ interface ImportResult {
 
 type TipoMigracion = 'inventario' | 'clientes' | 'ventas';
 
-const CONFIG: Record<TipoMigracion, { titulo: string; descripcion: string; archivo: string; color: string }> = {
+const CONFIG: Record<TipoMigracion, {
+  titulo: string;
+  descripcion: string;
+  archivo: string;
+  color: string;
+  nivelHeader: 'ubicacion' | 'empresa';
+  nivelLabel: string;
+}> = {
   inventario: {
     titulo: 'Inventario',
-    descripcion: 'Importa el catálogo de artículos desde inventario.csv',
+    descripcion: 'Importa el catálogo de artículos. Se asignan a la ubicación activa.',
     archivo: 'inventario.csv',
     color: 'border-brand-200 bg-brand-50',
+    nivelHeader: 'ubicacion',
+    nivelLabel: 'Por ubicación',
   },
   clientes: {
     titulo: 'Clientes',
-    descripcion: 'Importa clientes con su saldo de cuenta desde clientes.csv',
+    descripcion: 'Importa clientes con saldo. Se asignan a la ubicación activa.',
     archivo: 'clientes.csv',
     color: 'border-blue-200 bg-blue-50',
+    nivelHeader: 'ubicacion',
+    nivelLabel: 'Por ubicación',
   },
   ventas: {
     titulo: 'Ventas históricas',
-    descripcion: 'Importa el historial de ventas desde ventas_detalle.csv',
+    descripcion: 'Importa el historial de ventas legacy. Se consolida a nivel empresa (solo admin).',
     archivo: 'ventas_detalle.csv',
     color: 'border-amber-200 bg-amber-50',
+    nivelHeader: 'empresa',
+    nivelLabel: 'Por empresa',
   },
 };
 
@@ -50,9 +63,17 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
 
   async function subir() {
     if (!archivo) return;
-    const token = useAuthStore.getState().accessToken;
-    const empresa = useContextoStore.getState().empresa;
-    if (!empresa?.id) { setError('Sin empresa seleccionada'); return; }
+    const token    = useAuthStore.getState().accessToken;
+    const contexto = useContextoStore.getState();
+    const empresa  = contexto.empresa;
+    const ubicacion = contexto.ubicacion;
+
+    if (cfg.nivelHeader === 'ubicacion' && !ubicacion?.id) {
+      setError('Sin ubicación seleccionada'); return;
+    }
+    if (cfg.nivelHeader === 'empresa' && !empresa?.id) {
+      setError('Sin empresa seleccionada'); return;
+    }
 
     setCargando(true);
     setResultado(null);
@@ -62,12 +83,17 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
       const fd = new FormData();
       fd.append('archivo', archivo);
 
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        'x-empresa-id': empresa?.id ?? '',
+      };
+      if (cfg.nivelHeader === 'ubicacion') {
+        headers['x-ubicacion-id'] = ubicacion!.id;
+      }
+
       const res = await fetch(`${BASE_URL}/migracion/${tipo}`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'x-empresa-id': empresa.id,
-        },
+        headers,
         body: fd,
       });
 
@@ -87,16 +113,24 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
     }
   }
 
+  const NivelIcon = cfg.nivelHeader === 'ubicacion' ? MapPin : Building2;
+
   return (
     <div className={cn('rounded-xl border-2 p-6 flex flex-col gap-4', cfg.color)}>
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-body font-semibold text-steel-900">{cfg.titulo}</h3>
           <p className="text-body-sm text-steel-500 mt-0.5">{cfg.descripcion}</p>
         </div>
-        <span className="text-caption text-steel-400 font-mono bg-white/70 border border-steel-200 px-2 py-0.5 rounded">
-          {cfg.archivo}
-        </span>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="text-caption text-steel-400 font-mono bg-white/70 border border-steel-200 px-2 py-0.5 rounded">
+            {cfg.archivo}
+          </span>
+          <span className="flex items-center gap-1 text-caption text-steel-400">
+            <NivelIcon className="h-3 w-3" />
+            {cfg.nivelLabel}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -152,7 +186,7 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
           </div>
           {resultado.lineas_insertadas !== undefined && (
             <p className="text-caption text-steel-500 text-center">
-              {resultado.lineas_insertadas} líneas de carrito importadas
+              {resultado.lineas_insertadas} líneas de detalle importadas
             </p>
           )}
           {resultado.errores.length > 0 && (
@@ -184,16 +218,17 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
 }
 
 export default function MigracionPage() {
+  const ubicacion = useContextoStore((s) => s.ubicacion);
+
   return (
     <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6">
       <div>
         <h1 className="text-title font-bold text-steel-900">Migración de datos</h1>
         <p className="text-body-sm text-steel-500 mt-1">
-          Importa datos del sistema anterior. Usa los scripts en{' '}
-          <span className="font-mono text-caption bg-steel-100 px-1.5 py-0.5 rounded">
-            docs/MIGRACION-SCRIPTS.md
-          </span>{' '}
-          para generar los archivos CSV.
+          Importa datos del sistema anterior. Inventario y clientes se cargan a la ubicación activa
+          {ubicacion ? (
+            <span className="font-medium text-steel-700"> ({ubicacion.nombre})</span>
+          ) : null}.
         </p>
       </div>
 
