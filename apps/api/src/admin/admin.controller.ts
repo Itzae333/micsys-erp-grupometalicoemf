@@ -62,7 +62,7 @@ export class AdminController {
   }
 
   @Post('reset-parcial')
-  @Roles('SUPER_USUARIO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Borra datos operativos (ventas, pedidos, inventario, clientes) conservando empresas, ubicaciones, usuarios y configuración — solo SUPER_USUARIO' })
   async resetParcial() {

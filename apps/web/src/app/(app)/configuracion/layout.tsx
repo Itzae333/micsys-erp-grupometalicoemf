@@ -58,12 +58,12 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
       label: 'Auditoría',
       icon: <Shield className="h-3.5 w-3.5" />,
     },
-    ...(isSuperUsuario ? [{
+    {
       href: '/configuracion/sistema',
       matchPrefix: '/configuracion/sistema',
       label: 'Sistema',
       icon: <Database className="h-3.5 w-3.5" />,
-    }] : []),
+    },
   ];
 
   // En la pantalla de columnas ocultamos la sub-nav (tiene su propio breadcrumb)
