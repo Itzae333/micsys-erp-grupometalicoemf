@@ -2,6 +2,7 @@ import { Controller, Post, Res, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Roles } from '../common/decorators/roles.decorator';
+import { PrismaService } from '../prisma/prisma.service';
 import type { Response } from 'express';
 import { spawn } from 'child_process';
 
@@ -9,7 +10,10 @@ import { spawn } from 'child_process';
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminController {
-  constructor(private config: ConfigService) {}
+  constructor(
+    private config: ConfigService,
+    private prisma: PrismaService,
+  ) {}
 
   @Post('backup')
   @Roles('SUPER_USUARIO')
@@ -18,7 +22,6 @@ export class AdminController {
   async backup(@Res() res: Response) {
     const databaseUrl = this.config.get<string>('DATABASE_URL') ?? '';
 
-    // Parsear la DATABASE_URL para extraer los parámetros
     let pgArgs: string[] = [];
     try {
       const url = new URL(databaseUrl.replace('postgresql://', 'http://'));
@@ -49,24 +52,80 @@ export class AdminController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     const pg = spawn('pg_dump', pgArgs);
-
     pg.stdout.pipe(res);
-
-    pg.stderr.on('data', (chunk: Buffer) => {
-      console.error('[backup]', chunk.toString());
-    });
-
+    pg.stderr.on('data', (chunk: Buffer) => { console.error('[backup]', chunk.toString()); });
     pg.on('error', (err) => {
       console.error('[backup] pg_dump no encontrado:', err.message);
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'pg_dump no disponible en el servidor' });
-      }
+      if (!res.headersSent) res.status(500).json({ message: 'pg_dump no disponible en el servidor' });
     });
+    pg.on('close', (code) => { if (code !== 0 && !res.writableEnded) res.end(); });
+  }
 
-    pg.on('close', (code) => {
-      if (code !== 0 && !res.writableEnded) {
-        res.end();
-      }
-    });
+  @Post('reset-parcial')
+  @Roles('SUPER_USUARIO')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Borra datos operativos (ventas, pedidos, inventario, clientes) conservando empresas, ubicaciones, usuarios y configuración — solo SUPER_USUARIO' })
+  async resetParcial() {
+    const counts = await this.prisma.$transaction(
+      async (tx) => {
+        // ── Pedidos ────────────────────────────────────────────
+        const evidPedido    = await tx.evidenciaPedido.deleteMany({});
+        const anticPedido   = await tx.anticiposPedido.deleteMany({});
+        const linPedido     = await tx.pedidoLinea.deleteMany({});
+        const pedidos       = await tx.pedido.deleteMany({});
+
+        // ── Ventas ─────────────────────────────────────────────
+        const solicEdit     = await tx.solicitudEdicionNota.deleteMany({});
+        const evidNota      = await tx.evidenciaNota.deleteMany({});
+        const linNota       = await tx.notaVentaLinea.deleteMany({});
+        const pagos         = await tx.pago.deleteMany({});
+        const movCuenta     = await tx.movimientoCuenta.deleteMany({});
+        const notas         = await tx.notaVenta.deleteMany({});
+
+        // ── Remisiones ─────────────────────────────────────────
+        const linRemision   = await tx.remisionLinea.deleteMany({});
+        const remisiones    = await tx.remision.deleteMany({});
+
+        // ── Producción ─────────────────────────────────────────
+        const ordenProd     = await tx.ordenProduccion.deleteMany({});
+
+        // ── Compras ────────────────────────────────────────────
+        const linCompra     = await tx.ordenCompraLinea.deleteMany({});
+        const movProveedor  = await tx.movimientoCuentaProveedor.deleteMany({});
+        const ordCompra     = await tx.ordenCompra.deleteMany({});
+
+        // ── Inventario ─────────────────────────────────────────
+        const movInv        = await tx.movimientoInventario.deleteMany({});
+        const articulos     = await tx.articulo.deleteMany({});
+
+        // ── Clientes ───────────────────────────────────────────
+        const clientes      = await tx.cliente.deleteMany({});
+
+        return {
+          evidencias_pedido:       evidPedido.count,
+          anticipos_pedido:        anticPedido.count,
+          lineas_pedido:           linPedido.count,
+          pedidos:                 pedidos.count,
+          solicitudes_edicion:     solicEdit.count,
+          evidencias_nota:         evidNota.count,
+          lineas_venta:            linNota.count,
+          pagos:                   pagos.count,
+          movimientos_cuenta:      movCuenta.count,
+          notas_venta:             notas.count,
+          lineas_remision:         linRemision.count,
+          remisiones:              remisiones.count,
+          ordenes_produccion:      ordenProd.count,
+          lineas_compra:           linCompra.count,
+          movimientos_proveedor:   movProveedor.count,
+          ordenes_compra:          ordCompra.count,
+          movimientos_inventario:  movInv.count,
+          articulos:               articulos.count,
+          clientes:                clientes.count,
+        };
+      },
+      { timeout: 60_000 },
+    );
+
+    return { ok: true, eliminados: counts };
   }
 }
