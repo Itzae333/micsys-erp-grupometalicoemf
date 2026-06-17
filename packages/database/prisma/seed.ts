@@ -23,13 +23,13 @@ async function seedColumnas(empresaId: string, ubicacionId: string, prefix: stri
   }
 }
 
-async function seedMostrador(empresaId: string, id: string) {
+async function seedMostrador(ubicacionId: string, id: string) {
   await prisma.cliente.upsert({
     where: { id },
     update: { precio_num: 1, limite_credito: 0 },
     create: {
       id,
-      empresa_id: empresaId,
+      ubicacion_id: ubicacionId,
       nombre: 'MOSTRADOR',
       precio_num: 1,
       limite_credito: 0,
@@ -122,9 +122,9 @@ async function main() {
   await seedColumnas(laminasMonterrey.id, laminasMatriz.id, 'laminas-col');
 
   // ── Cliente Mostrador (precio_num=1 → Publico, crédito=0) ─
-  await seedMostrador(emfimifar.id,       'mostrador-emf-id');
-  await seedMostrador(metalicosLyeva.id,  'mostrador-lyeva-id');
-  await seedMostrador(laminasMonterrey.id, 'mostrador-laminas-id');
+  await seedMostrador(emfMatriz.id,    'mostrador-emf-id');
+  await seedMostrador(lyevaMatriz.id,  'mostrador-lyeva-id');
+  await seedMostrador(laminasMatriz.id, 'mostrador-laminas-id');
 
   // ── Super Usuario ─────────────────────────────────────────
   const superHash = await argon2.hash('SuperPass2026!');
