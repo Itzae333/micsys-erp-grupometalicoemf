@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -621,112 +622,6 @@ export default function VentasPage() {
     }
   }
 
-  // ── Generar PDF cotización en ventana de impresión ────────
-  function generateCotizacionPDF(nota: NotaVenta) {
-    const clienteNombre = nota.cliente
-      ? (nota.cliente.razon_social ?? `${nota.cliente.nombre}${nota.cliente.apellidos ? ' ' + nota.cliente.apellidos : ''}`)
-      : 'Público General';
-    const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
-    const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
-
-    const lineasHTML = nota.lineas.map((l) => {
-      const descs = [l.articulo?.descripcion_1, l.articulo?.descripcion_2,
-        l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5,
-      ].filter(Boolean).join(' · ');
-      return `<tr>
-        <td style="padding:7px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:12px;">${l.clave}</td>
-        <td style="padding:7px 8px;border-bottom:1px solid #eee;font-size:12px;color:#444;">${descs || '—'}</td>
-        <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;">${Number(l.cantidad).toLocaleString('es-MX')}</td>
-        <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;">$${Number(l.precio_unitario).toFixed(2)}</td>
-        <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;font-weight:bold;">$${Number(l.subtotal).toFixed(2)}</td>
-      </tr>`;
-    }).join('');
-
-    const rfcTel = [
-      ubicacion?.rfc ? `RFC: ${ubicacion.rfc}` : null,
-      ubicacion?.telefono ? `Tel: ${ubicacion.telefono}` : null,
-    ].filter(Boolean).join('  ·  ');
-
-    const html = `<!DOCTYPE html><html lang="es"><head>
-<meta charset="utf-8">
-<title>Cotización ${folioStr}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;color:#111;padding:24px;background:#f8f8f8}
-  .wrap{max-width:800px;margin:0 auto;background:#fff;padding:32px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
-  .no-print{text-align:center;margin-bottom:20px}
-  .no-print button{padding:10px 28px;margin:0 6px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
-  .btn-pdf{background:#111;color:#fff}
-  .btn-close{background:#eee;color:#333}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:20px;margin-bottom:20px}
-  .logo{max-height:70px;max-width:200px;object-fit:contain}
-  .empresa h1{font-size:20px;font-weight:bold;text-transform:uppercase;margin-bottom:4px}
-  .empresa p{font-size:11px;color:#555;margin-bottom:2px}
-  .badge{display:inline-block;background:#2563eb;color:#fff;padding:6px 16px;font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;border-radius:4px;margin-bottom:12px}
-  .meta{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px}
-  .cliente-box{background:#f5f5f5;border-left:3px solid #111;padding:10px 14px;margin-bottom:20px;font-size:13px}
-  table{width:100%;border-collapse:collapse}
-  thead th{background:#111;color:#fff;padding:8px;font-size:11px;font-weight:600;text-align:left;text-transform:uppercase}
-  thead th:last-child,thead th:nth-child(3),thead th:nth-child(4){text-align:right}
-  tfoot td{padding:8px;font-weight:bold;font-size:14px}
-  .total-row{background:#111;color:#fff}
-  .total-row td{padding:10px 8px!important;font-size:16px}
-  .footer{margin-top:24px;padding-top:16px;border-top:1px solid #ddd;font-size:11px;color:#888;text-align:center}
-  @media print{.no-print{display:none}body{background:#fff;padding:0}
-    .wrap{box-shadow:none;padding:16px;border-radius:0}@page{size:letter;margin:10mm}}
-</style></head>
-<body><div class="wrap">
-  <div class="no-print">
-    <button class="btn-pdf" onclick="window.print()">⬇ Guardar como PDF / Imprimir</button>
-    <button class="btn-close" onclick="window.close()">✕ Cerrar</button>
-  </div>
-  <div class="header">
-    <div>
-      ${empresa?.logo_url ? `<img src="${empresa.logo_url}" class="logo" alt="Logo">` : ''}
-      <span class="badge" style="margin-top:${empresa?.logo_url ? '8px' : '0'}">COTIZACIÓN ${folioStr}</span>
-    </div>
-    <div class="empresa" style="text-align:right">
-      <h1>${(ubicacion?.razon_social ?? empresa?.nombre ?? '').toUpperCase()}</h1>
-      ${ubicacion?.nombre ? `<p>${ubicacion.nombre}</p>` : ''}
-      ${rfcTel ? `<p>${rfcTel}</p>` : ''}
-      ${direccionUbicacion ? `<p>${direccionUbicacion}</p>` : ''}
-    </div>
-  </div>
-  <div class="meta">
-    <span>Fecha: <strong>${fechaStr}</strong></span>
-    <span>Válida por <strong>30 días</strong></span>
-  </div>
-  <div class="cliente-box">
-    <strong>Cliente:</strong> ${clienteNombre}
-  </div>
-  <table>
-    <thead><tr>
-      <th>Clave</th><th>Descripción</th>
-      <th style="text-align:right">Cant.</th>
-      <th style="text-align:right">Precio unit.</th>
-      <th style="text-align:right">Subtotal</th>
-    </tr></thead>
-    <tbody>${lineasHTML}</tbody>
-    <tfoot>
-      <tr><td colspan="4" style="text-align:right;padding:8px;border-top:2px solid #111">Subtotal</td>
-          <td style="text-align:right;padding:8px;border-top:2px solid #111">$${Number(nota.subtotal).toFixed(2)}</td></tr>
-      <tr class="total-row"><td colspan="4" style="text-align:right">TOTAL</td>
-          <td style="text-align:right">$${Number(nota.total).toFixed(2)}</td></tr>
-    </tfoot>
-  </table>
-  ${nota.observaciones ? `<p style="margin-top:16px;font-size:12px;color:#555"><strong>Obs:</strong> ${nota.observaciones}</p>` : ''}
-  <div class="footer">
-    <p>Esta cotización es válida por 30 días a partir de su emisión.</p>
-    <p style="margin-top:4px">¡Gracias por su preferencia!</p>
-  </div>
-</div></body></html>`;
-
-    const win = window.open('', '_blank', 'width=900,height=750,scrollbars=yes,resizable=yes');
-    if (!win) { alert('Activa las ventanas emergentes en tu navegador para generar el PDF.'); return; }
-    win.document.write(html);
-    win.document.close();
-    win.onload = () => { win.focus(); };
-  }
 
   // ── Enviar email ──────────────────────────────────────────
   async function sendEmailNota(
@@ -944,7 +839,7 @@ export default function VentasPage() {
             <div className="flex items-center gap-2 flex-shrink-0">
               {esCotizacionActiva && notaActiva.lineas.length > 0 && (
                 <>
-                  <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(notaActiva)}>PDF</Button>
+                  <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>PDF</Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1182,7 +1077,7 @@ export default function VentasPage() {
                 )}
                 {esCotizacionActiva && notaActiva.lineas.length > 0 && (
                   <div className="px-4 pb-4 flex gap-2">
-                    <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva)}>
+                    <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>
                       PDF
                     </Button>
                     <Button
@@ -1476,7 +1371,7 @@ export default function VentasPage() {
                   )}
                   {detalleNota.estatus === 'COTIZACION' && detalleNota.lineas.length > 0 && (
                     <>
-                      <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(detalleNota)}>
+                      <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(detalleNota, empresa, ubicacion)}>
                         PDF
                       </Button>
                       <Button size="sm" onClick={() => void convertirAVenta(detalleNota).then(async () => { await loadNotas(); void refreshDetalleNota(); })}>

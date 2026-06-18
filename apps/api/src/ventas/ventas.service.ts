@@ -567,101 +567,150 @@ export class VentasService {
     const esCotizacion = dto.tipo === 'cotizacion';
     const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
     const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
-    const total = Number(nota.total).toFixed(2);
+    const fmt = (n: number) => n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
     const clienteNombre = nota.cliente
       ? (nota.cliente.razon_social ?? `${nota.cliente.nombre}${nota.cliente.apellidos ? ' ' + nota.cliente.apellidos : ''}`)
-      : 'Público General';
+      : 'Público en general';
 
-    const logoHtml = empresa?.logo_url
-      ? `<img src="${empresa.logo_url}" alt="Logo" style="max-height:60px;max-width:200px;display:block;margin-bottom:8px;">`
+    // Logo: ubicacion primero, luego empresa
+    const rawLogoUrl = ubicacion?.logo_url ?? empresa?.logo_url ?? null;
+    const logoHtml = rawLogoUrl
+      ? `<img src="${rawLogoUrl}" alt="Logo" style="max-height:70px;max-width:180px;display:block;margin:0 auto 10px;">`
       : '';
 
-    const direccionParts = [ubicacion?.calle, ubicacion?.colonia, ubicacion?.municipio, ubicacion?.estado].filter(Boolean);
-    const direccion = direccionParts.length > 0 ? direccionParts.join(', ') : '';
-    const rfcTel = [
-      ubicacion?.rfc ? `RFC: ${ubicacion.rfc}` : null,
-      ubicacion?.telefono ? `Tel: ${ubicacion.telefono}` : null,
-    ].filter(Boolean).join('  ·  ');
+    const razonSocial = (ubicacion?.razon_social ?? empresa?.razon_social ?? empresa?.nombre ?? '').toUpperCase();
+    const infoLineas: string[] = [];
+    const rfc = ubicacion?.rfc ?? empresa?.rfc;
+    if (rfc) infoLineas.push(`RFC: ${rfc}`);
+    if (ubicacion?.telefono) infoLineas.push(`Tel: ${ubicacion.telefono}`);
 
-    const lineasHtml = nota.lineas.map((l) => {
+    const addrParts = [
+      ubicacion?.calle ? `${ubicacion.calle}${ubicacion.num_ext ? ' #' + ubicacion.num_ext : ''}` : null,
+      ubicacion?.colonia, ubicacion?.municipio,
+      ubicacion?.estado ?? null,
+    ].filter(Boolean);
+    const direccion = addrParts.join(', ');
+
+    const accentColor = esCotizacion ? '#2563eb' : '#16a34a';
+    const badgeLabel = esCotizacion ? 'COTIZACIÓN' : 'COMPROBANTE DE VENTA';
+
+    const lineasHtml = nota.lineas.map((l, idx) => {
       const descs = [l.articulo?.descripcion_1, l.articulo?.descripcion_2,
         (l.articulo as any)?.descripcion_3, (l.articulo as any)?.descripcion_4, (l.articulo as any)?.descripcion_5,
       ].filter(Boolean).join(' · ');
+      const bg = idx % 2 === 1 ? '#f8fafc' : '#ffffff';
       return `
         <tr>
-          <td style="padding:8px;border-bottom:1px solid #eee;font-family:monospace;font-size:12px;">${l.clave}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;color:#444;">${descs || '—'}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;">${Number(l.cantidad).toLocaleString('es-MX')}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;">$${Number(l.precio_unitario).toFixed(2)}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-size:12px;font-weight:bold;">$${Number(l.subtotal).toFixed(2)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-family:monospace;font-size:12px;font-weight:700;color:#0f172a;">${l.clave}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-size:12px;color:#475569;">${descs || '—'}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">${Number(l.cantidad).toLocaleString('es-MX')}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">$${fmt(Number(l.precio_unitario))}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:13px;font-weight:700;color:#0f172a;">$${fmt(Number(l.subtotal))}</td>
         </tr>`;
     }).join('');
+
+    // Totales
+    const subtotalRow = `<tr><td colspan="4" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
+    const descuentoRow = Number(nota.descuento) > 0
+      ? `<tr><td colspan="4" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
+      : '';
 
     let pagoHtml = '';
     if (!esCotizacion && dto.extra) {
       if (dto.extra.tipo_cierre === 'CREDITO') {
-        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-size:12px;">A crédito</td><td style="text-align:right;padding:6px 8px;font-size:12px;">$${total}</td></tr>`;
+        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else if (dto.extra.tipo_cierre === 'PENDIENTE') {
-        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-size:12px;">Pendiente de cobro</td><td style="text-align:right;padding:6px 8px;font-size:12px;">$${total}</td></tr>`;
+        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">Pendiente de cobro</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else {
         pagoHtml = (dto.extra.pagos ?? []).filter((p) => p.monto > 0).map((p) =>
-          `<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-size:12px;">${p.metodo}</td><td style="text-align:right;padding:6px 8px;font-size:12px;">$${Number(p.monto).toFixed(2)}</td></tr>`,
+          `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">${p.metodo}</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(p.monto))}</td></tr>`,
         ).join('');
         if (dto.extra.cambio && dto.extra.cambio > 0) {
-          pagoHtml += `<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-size:12px;color:#888;">Cambio</td><td style="text-align:right;padding:6px 8px;font-size:12px;color:#888;">$${Number(dto.extra.cambio).toFixed(2)}</td></tr>`;
+          pagoHtml += `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">Cambio</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">$${fmt(Number(dto.extra.cambio))}</td></tr>`;
         }
       }
     }
 
-    return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:24px 0;">
+    const totalRow = `<tr style="background:#0f172a;"><td colspan="4" style="padding:12px 8px;text-align:right;color:#f8fafc;font-weight:700;font-size:14px;letter-spacing:.5px;">TOTAL</td><td style="padding:12px 8px;text-align:right;color:#ffffff;font-weight:900;font-size:18px;">$${fmt(Number(nota.total))}</td></tr>`;
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#e2e8f0;padding:28px 0;">
 <tr><td align="center">
-<table width="620" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-  <tr><td style="background:#111;padding:24px 32px;text-align:center;">
+<table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.12);">
+
+  <!-- Header empresa -->
+  <tr><td style="background:#0f172a;padding:28px 36px;text-align:center;">
     ${logoHtml}
-    <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;letter-spacing:1px;">${(ubicacion?.razon_social ?? empresa?.nombre ?? '').toUpperCase()}</p>
-    ${ubicacion?.nombre ? `<p style="margin:4px 0 0;color:#aaa;font-size:12px;">${ubicacion.nombre}</p>` : ''}
-    ${rfcTel ? `<p style="margin:6px 0 0;color:#888;font-size:11px;">${rfcTel}</p>` : ''}
-    ${direccion ? `<p style="margin:4px 0 0;color:#888;font-size:11px;">${direccion}</p>` : ''}
+    <p style="margin:0;color:#f1f5f9;font-size:18px;font-weight:800;letter-spacing:1px;">${razonSocial}</p>
+    ${ubicacion?.nombre ? `<p style="margin:5px 0 0;color:#94a3b8;font-size:11px;">${ubicacion.nombre}</p>` : ''}
+    ${infoLineas.length > 0 ? `<p style="margin:6px 0 0;color:#64748b;font-size:11px;">${infoLineas.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>` : ''}
+    ${direccion ? `<p style="margin:4px 0 0;color:#64748b;font-size:11px;">${direccion}</p>` : ''}
   </td></tr>
-  <tr><td style="background:${esCotizacion ? '#2563eb' : '#16a34a'};padding:10px 32px;text-align:center;">
-    <p style="margin:0;color:#fff;font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">${esCotizacion ? 'COTIZACIÓN' : 'COMPROBANTE DE VENTA'} ${folioStr}</p>
-  </td></tr>
-  <tr><td style="padding:20px 32px 0;">
+
+  <!-- Badge folio -->
+  <tr><td style="background:${accentColor};padding:11px 36px;">
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="font-size:12px;color:#555;">Fecha: <strong style="color:#111;">${fechaStr}</strong></td>
-        <td style="font-size:12px;color:#555;text-align:right;">Cliente: <strong style="color:#111;">${clienteNombre}</strong></td>
+        <td style="color:#ffffff;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">${badgeLabel}&nbsp;&nbsp;${folioStr}</td>
+        <td style="color:#ffffff;font-size:11px;text-align:right;opacity:.85;">Fecha: ${fechaStr}</td>
       </tr>
     </table>
   </td></tr>
-  <tr><td style="padding:16px 32px 0;">
+
+  <!-- Caja cliente -->
+  ${nota.cliente ? `
+  <tr><td style="padding:16px 36px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border-left:3px solid ${accentColor};border-radius:0 4px 4px 0;">
+      <tr>
+        <td style="padding:10px 14px;">
+          <p style="margin:0;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#94a3b8;">Cliente</p>
+          <p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#0f172a;">${clienteNombre}</p>
+          ${nota.cliente.email ? `<p style="margin:2px 0 0;font-size:11px;color:#64748b;">${nota.cliente.email}</p>` : ''}
+        </td>
+        ${esCotizacion ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;">
+          <p style="margin:0;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#94a3b8;">Válida hasta</p>
+          <p style="margin:4px 0 0;font-size:12px;font-weight:600;color:${accentColor};">30 días</p>
+        </td>` : ''}
+      </tr>
+    </table>
+  </td></tr>` : ''}
+
+  <!-- Tabla de artículos -->
+  <tr><td style="padding:18px 36px 0;">
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <thead>
-        <tr style="background:#f5f5f5;">
-          <th style="padding:8px;text-align:left;font-size:11px;color:#666;font-weight:600;text-transform:uppercase;border-bottom:2px solid #e5e5e5;">Clave</th>
-          <th style="padding:8px;text-align:left;font-size:11px;color:#666;font-weight:600;text-transform:uppercase;border-bottom:2px solid #e5e5e5;">Descripción</th>
-          <th style="padding:8px;text-align:right;font-size:11px;color:#666;font-weight:600;text-transform:uppercase;border-bottom:2px solid #e5e5e5;">Cant.</th>
-          <th style="padding:8px;text-align:right;font-size:11px;color:#666;font-weight:600;text-transform:uppercase;border-bottom:2px solid #e5e5e5;">P.U.</th>
-          <th style="padding:8px;text-align:right;font-size:11px;color:#666;font-weight:600;text-transform:uppercase;border-bottom:2px solid #e5e5e5;">Subtotal</th>
+        <tr style="background:#0f172a;">
+          <th style="padding:9px 8px;text-align:left;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Clave</th>
+          <th style="padding:9px 8px;text-align:left;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Descripción</th>
+          <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Cant.</th>
+          <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">P.U.</th>
+          <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Subtotal</th>
         </tr>
       </thead>
       <tbody>${lineasHtml}</tbody>
-      <tfoot>
+      <tfoot style="border-top:2px solid #e2e8f0;">
+        ${subtotalRow}
+        ${descuentoRow}
         ${pagoHtml}
-        <tr style="background:#111;">
-          <td colspan="4" style="padding:10px 8px;text-align:right;color:#fff;font-weight:bold;font-size:14px;">TOTAL</td>
-          <td style="padding:10px 8px;text-align:right;color:#fff;font-weight:bold;font-size:16px;">$${total}</td>
-        </tr>
+        ${totalRow}
       </tfoot>
     </table>
   </td></tr>
-  ${nota.observaciones ? `<tr><td style="padding:16px 32px 0;font-size:12px;color:#555;">Observaciones: ${nota.observaciones}</td></tr>` : ''}
-  <tr><td style="padding:20px 32px 24px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
-    ${esCotizacion ? '<p style="margin:0 0 4px;font-size:11px;color:#888;">Esta cotización es válida por 30 días a partir de su emisión.</p>' : ''}
-    <p style="margin:0;font-size:11px;color:#aaa;">¡Gracias por su preferencia!</p>
+
+  <!-- Observaciones -->
+  ${nota.observaciones ? `<tr><td style="padding:14px 36px 0;"><div style="background:#fefce8;border-left:3px solid #eab308;padding:10px 14px;border-radius:0 4px 4px 0;font-size:12px;color:#713f12;"><strong>Observaciones:</strong> ${nota.observaciones}</div></td></tr>` : ''}
+
+  <!-- Footer -->
+  <tr><td style="padding:20px 36px 26px;text-align:center;border-top:1px solid #e2e8f0;margin-top:16px;">
+    ${esCotizacion ? `<p style="margin:0 0 5px;font-size:11px;color:#64748b;">Esta cotización es válida por 30 días a partir de su fecha de emisión.</p>
+    <p style="margin:0 0 5px;font-size:11px;color:#94a3b8;">Precios sujetos a cambio sin previo aviso.</p>` : ''}
+    <p style="margin:0;font-size:11px;color:#94a3b8;">¡Gracias por su preferencia!</p>
   </td></tr>
+
 </table>
 </td></tr></table>
 </body></html>`;
