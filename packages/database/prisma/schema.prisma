@@ -140,6 +140,7 @@ model Usuario {
   remisiones_recibidas   Remision[]                  @relation("RemisionReceptor")
   cargas_nota            CargaNota[]
   gastos                 Gasto[]
+  notas_canceladas       NotaVenta[]                 @relation("NotaCanceladaPor")
 
   @@map("usuarios")
 }
@@ -360,13 +361,19 @@ model NotaVenta {
   fecha_vencimiento DateTime?
   observaciones     String?
 
+  motivo_cancelacion           String?
+  motivo_cancelacion_comentario String?
+  cancelado_por_id             String?
+  cancelado_at                 DateTime?
+
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   cerrada_at DateTime?
 
-  ubicacion Ubicacion @relation(fields: [ubicacion_id], references: [id])
-  usuario   Usuario   @relation(fields: [usuario_id], references: [id])
-  cliente   Cliente?  @relation(fields: [cliente_id], references: [id])
+  ubicacion     Ubicacion @relation(fields: [ubicacion_id], references: [id])
+  usuario       Usuario   @relation(fields: [usuario_id], references: [id])
+  cliente       Cliente?  @relation(fields: [cliente_id], references: [id])
+  cancelado_por Usuario?  @relation("NotaCanceladaPor", fields: [cancelado_por_id], references: [id])
 
   lineas              NotaVentaLinea[]
   pagos               Pago[]

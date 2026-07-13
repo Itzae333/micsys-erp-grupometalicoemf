@@ -206,6 +206,10 @@ export interface NotaVenta {
   es_credito: boolean;
   fecha_vencimiento: string | null;
   observaciones: string | null;
+  motivo_cancelacion: string | null;
+  motivo_cancelacion_comentario: string | null;
+  cancelado_por_id: string | null;
+  cancelado_at: string | null;
   lineas: NotaVentaLinea[];
   pagos: Pago[];
   evidencias: EvidenciaNota[];
@@ -213,6 +217,14 @@ export interface NotaVenta {
   updated_at: string;
   cerrada_at: string | null;
 }
+
+export const MOTIVOS_CANCELACION: { value: string; label: string }[] = [
+  { value: 'CLIENTE_DESISTIO', label: 'El cliente desistió de la compra' },
+  { value: 'ERROR_CAPTURA', label: 'Error de captura' },
+  { value: 'PRODUCTO_NO_DISPONIBLE', label: 'Producto no disponible' },
+  { value: 'NOTA_DUPLICADA', label: 'Nota duplicada' },
+  { value: 'OTRO', label: 'Otro (especificar)' },
+];
 
 export type EstatusSolicitudEdicion = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA';
 

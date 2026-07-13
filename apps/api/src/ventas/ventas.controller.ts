@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { VentasService } from './ventas.service';
-import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
+import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
 import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
 import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -137,9 +137,14 @@ export class VentasController {
 
   @Patch(':id/cancelar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
-  @ApiOperation({ summary: 'Cancelar nota de venta' })
-  cancelar(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
-    return this.ventas.cancelar(id, ubicacionId);
+  @ApiOperation({ summary: 'Cancelar nota de venta (solo si no está pagada, requiere motivo)' })
+  cancelar(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @Body() dto: CancelarNotaDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ventas.cancelar(id, dto, ubicacionId, user.sub);
   }
 
   @Post(':id/abonar')

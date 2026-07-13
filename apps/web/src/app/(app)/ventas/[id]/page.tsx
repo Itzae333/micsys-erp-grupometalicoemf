@@ -7,8 +7,11 @@ import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota } from '@/lib/types/api';
+import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
@@ -77,6 +80,9 @@ export default function NotaDetallePage() {
   // Cancelar
   const [dlgCancelar, setDlgCancelar] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [motivoCancelacion, setMotivoCancelacion] = useState('');
+  const [comentarioCancelacion, setComentarioCancelacion] = useState('');
+  const [cancelarError, setCancelarError] = useState<string | null>(null);
 
   // Evidencias
   const [dlgEvidencia, setDlgEvidencia] = useState(false);
@@ -222,14 +228,35 @@ export default function NotaDetallePage() {
   }
 
   // ── Cancelar ───────────────────────────────────────────────
+  function openCancelar() {
+    setMotivoCancelacion('');
+    setComentarioCancelacion('');
+    setCancelarError(null);
+    setDlgCancelar(true);
+  }
+
   async function onCancelar() {
     if (!nota) return;
+    if (!motivoCancelacion) {
+      setCancelarError('Selecciona un motivo de cancelación');
+      return;
+    }
+    if (motivoCancelacion === 'OTRO' && !comentarioCancelacion.trim()) {
+      setCancelarError('Especifica el comentario para el motivo "Otro"');
+      return;
+    }
     setCancelando(true);
+    setCancelarError(null);
     try {
-      await api.patch(`/ventas/${nota.id}/cancelar`);
+      await api.patch(`/ventas/${nota.id}/cancelar`, {
+        motivo: motivoCancelacion,
+        comentario: comentarioCancelacion.trim() || undefined,
+      });
       setDlgCancelar(false);
       load();
-    } catch {} finally {
+    } catch (err) {
+      setCancelarError(err instanceof Error ? err.message : 'Error al cancelar');
+    } finally {
       setCancelando(false);
     }
   }
@@ -580,7 +607,7 @@ export default function NotaDetallePage() {
             </Button>
           )}
           {['ABIERTA', 'PENDIENTE'].includes(nota.estatus) && canCancel && (
-            <Button variant="ghost" onClick={() => setDlgCancelar(true)}>
+            <Button variant="ghost" onClick={openCancelar}>
               <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
               Cancelar
             </Button>
@@ -606,6 +633,24 @@ export default function NotaDetallePage() {
           <div>
             <p className="text-body font-semibold text-blue-800">Solicitud de edición enviada</p>
             <p className="text-body-sm text-blue-600">Esperando autorización del administrador por correo.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner CANCELADA */}
+      {nota.estatus === 'CANCELADA' && (
+        <div className="flex items-center gap-3 bg-steel-50 border border-steel-200 rounded-xl px-4 py-3 mb-4">
+          <XCircle className="h-5 w-5 text-steel-500 flex-shrink-0" />
+          <div>
+            <p className="text-body font-semibold text-steel-800">
+              Nota cancelada{nota.motivo_cancelacion && `: ${MOTIVOS_CANCELACION.find((m) => m.value === nota.motivo_cancelacion)?.label ?? nota.motivo_cancelacion}`}
+            </p>
+            {nota.motivo_cancelacion_comentario && (
+              <p className="text-body-sm text-steel-600">{nota.motivo_cancelacion_comentario}</p>
+            )}
+            {nota.cancelado_at && (
+              <p className="text-body-sm text-steel-500">{fmtFecha(nota.cancelado_at)}</p>
+            )}
           </div>
         </div>
       )}
@@ -1103,6 +1148,29 @@ export default function NotaDetallePage() {
         <p className="text-body text-steel-600 mb-4">
           Esta acción cancela la nota #{String(nota.folio).padStart(4, '0')} y no puede deshacerse.
         </p>
+        <div className="mb-3">
+          <label className="block text-body-sm font-medium text-steel-700 mb-1">Motivo de cancelación</label>
+          <Select
+            value={motivoCancelacion}
+            onChange={(e) => setMotivoCancelacion(e.target.value)}
+            placeholder="Selecciona un motivo"
+          >
+            {MOTIVOS_CANCELACION.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </Select>
+        </div>
+        {motivoCancelacion === 'OTRO' && (
+          <div className="mb-3">
+            <label className="block text-body-sm font-medium text-steel-700 mb-1">Comentario</label>
+            <Textarea
+              value={comentarioCancelacion}
+              onChange={(e) => setComentarioCancelacion(e.target.value)}
+              placeholder="Especifica el motivo de la cancelación"
+            />
+          </div>
+        )}
+        {cancelarError && <p className="text-body-sm text-brand-600 mb-3">{cancelarError}</p>}
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setDlgCancelar(false)}>No, mantener</Button>
           <Button type="button" variant="destructive" loading={cancelando} onClick={onCancelar}>

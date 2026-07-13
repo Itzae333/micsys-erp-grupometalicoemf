@@ -54,6 +54,23 @@ export class CerrarNotaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() fecha_vencimiento?: string;
 }
 
+export const MOTIVOS_CANCELACION = [
+  'CLIENTE_DESISTIO',
+  'ERROR_CAPTURA',
+  'PRODUCTO_NO_DISPONIBLE',
+  'NOTA_DUPLICADA',
+  'OTRO',
+] as const;
+
+export class CancelarNotaDto {
+  @ApiProperty({ enum: MOTIVOS_CANCELACION, description: 'Motivo de cancelación del catálogo' })
+  @IsEnum(MOTIVOS_CANCELACION)
+  motivo: typeof MOTIVOS_CANCELACION[number];
+
+  @ApiPropertyOptional({ description: 'Comentario adicional; obligatorio cuando motivo es OTRO' })
+  @IsOptional() @IsString() comentario?: string;
+}
+
 export class AbonarNotaDto {
   @ApiProperty({ type: [PagoDto], description: 'Pagos a registrar en el abono' })
   @IsArray()

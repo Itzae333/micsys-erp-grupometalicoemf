@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
+import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
 import type { Prisma } from '@grupometalicoemf/database';
 
 const NOTA_INCLUDE = {
@@ -388,11 +388,15 @@ export class VentasService {
 
   // ─── Cancelar ─────────────────────────────────────────────────
 
-  async cancelar(notaId: string, ubicacionId: string) {
+  async cancelar(notaId: string, dto: CancelarNotaDto, ubicacionId: string, usuarioId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
 
     if (nota.estatus === 'PAGADA' || nota.estatus === 'CANCELADA') {
       throw new ForbiddenException(`No se puede cancelar una nota en estatus ${nota.estatus}`);
+    }
+
+    if (dto.motivo === 'OTRO' && !dto.comentario?.trim()) {
+      throw new BadRequestException('El comentario es obligatorio cuando el motivo es "Otro"');
     }
 
     if (nota.estatus === 'CREDITO' && nota.cliente_id) {
@@ -404,7 +408,13 @@ export class VentasService {
 
     const result = await this.prisma.notaVenta.update({
       where: { id: notaId },
-      data: { estatus: 'CANCELADA' },
+      data: {
+        estatus: 'CANCELADA',
+        motivo_cancelacion: dto.motivo,
+        motivo_cancelacion_comentario: dto.comentario?.trim() || null,
+        cancelado_por_id: usuarioId,
+        cancelado_at: new Date(),
+      },
       include: NOTA_INCLUDE,
     });
 

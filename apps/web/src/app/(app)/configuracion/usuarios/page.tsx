@@ -37,6 +37,14 @@ const ROL_COLORS: Record<RolUsuario, string> = {
 
 const IPV4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
 
+const ROLES_UBICACION_UNICA: RolUsuario[] = [
+  'ENCARGADO',
+  'VENDEDOR',
+  'ALMACENISTA',
+  'JEFE_MANUFACTURA',
+  'JEFE_RH',
+];
+
 const UsuarioSchema = z.object({
   nombre: z.string().min(2, 'Requerido'),
   apellidos: z.string().min(2, 'Requerido'),
@@ -53,7 +61,10 @@ const UsuarioSchema = z.object({
   password: z.string().min(8, 'Mínimo 8 caracteres').optional().or(z.literal('')),
   ubicacion_ids: z.array(z.string()),
   allowed_ips: z.array(z.string()),
-});
+}).refine(
+  (data) => !ROLES_UBICACION_UNICA.includes(data.rol) || data.ubicacion_ids.length === 1,
+  { message: 'Este rol solo puede asignarse a una única ubicación', path: ['ubicacion_ids'] },
+);
 
 const ResetPasswordSchema = z.object({
   nueva_password: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -187,11 +198,16 @@ export default function UsuariosPage() {
   const allowedIps = userForm.watch('allowed_ips') ?? [];
   const watchedRol = userForm.watch('rol');
   const showIpSection = editing && !['SUPER_USUARIO', 'ADMIN'].includes(watchedRol ?? '');
+  const requiereUbicacionUnica = ROLES_UBICACION_UNICA.includes(watchedRol as RolUsuario);
 
   function toggleUbicacion(id: string) {
     const current = selectedUbicaciones;
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
     userForm.setValue('ubicacion_ids', next, { shouldValidate: true });
+  }
+
+  function selectUbicacionUnica(id: string) {
+    userForm.setValue('ubicacion_ids', id ? [id] : [], { shouldValidate: true });
   }
 
   function addIp() {
@@ -404,24 +420,39 @@ export default function UsuariosPage() {
           {/* Asignación de ubicaciones */}
           {ubicaciones.length > 0 && (
             <div>
-              <p className="text-body-sm font-medium text-steel-900 mb-2">Ubicaciones asignadas</p>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                {ubicaciones.map((ub) => (
-                  <label
-                    key={ub.id}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-steel-200 cursor-pointer hover:bg-steel-50 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      className="rounded border-steel-300 text-brand-600 focus:ring-brand-600/20"
-                      checked={selectedUbicaciones.includes(ub.id)}
-                      onChange={() => toggleUbicacion(ub.id)}
-                    />
-                    <span className="text-body text-steel-900 flex-1">{ub.nombre}</span>
-                    <span className="text-[10px] text-steel-400 uppercase">{ub.tipo}</span>
-                  </label>
-                ))}
-              </div>
+              <p className="text-body-sm font-medium text-steel-900 mb-2">
+                {requiereUbicacionUnica ? 'Ubicación asignada' : 'Ubicaciones asignadas'}
+              </p>
+              {requiereUbicacionUnica ? (
+                <Select
+                  value={selectedUbicaciones[0] ?? ''}
+                  onChange={(e) => selectUbicacionUnica(e.target.value)}
+                  error={userForm.formState.errors.ubicacion_ids?.message}
+                  placeholder="Selecciona una ubicación"
+                >
+                  {ubicaciones.map((ub) => (
+                    <option key={ub.id} value={ub.id}>{ub.nombre} ({ub.tipo})</option>
+                  ))}
+                </Select>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {ubicaciones.map((ub) => (
+                    <label
+                      key={ub.id}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-steel-200 cursor-pointer hover:bg-steel-50 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded border-steel-300 text-brand-600 focus:ring-brand-600/20"
+                        checked={selectedUbicaciones.includes(ub.id)}
+                        onChange={() => toggleUbicacion(ub.id)}
+                      />
+                      <span className="text-body text-steel-900 flex-1">{ub.nombre}</span>
+                      <span className="text-[10px] text-steel-400 uppercase">{ub.tipo}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

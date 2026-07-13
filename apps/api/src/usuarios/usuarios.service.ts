@@ -11,6 +11,15 @@ import type { CreateUsuarioDto } from './dto/create-usuario.dto';
 import type { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import type { ResetPasswordDto } from './dto/reset-password.dto';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { RolUsuario } from '@grupometalicoemf/database';
+
+const ROLES_UBICACION_UNICA: RolUsuario[] = [
+  'ENCARGADO',
+  'VENDEDOR',
+  'ALMACENISTA',
+  'JEFE_MANUFACTURA',
+  'JEFE_RH',
+];
 
 @Injectable()
 export class UsuariosService {
@@ -23,7 +32,7 @@ export class UsuariosService {
         ? {}
         : { empresa_id: user.empresa_id, rol: { not: 'SUPER_USUARIO' as const } };
 
-    return this.prisma.usuario.findMany({
+    const usuarios = await this.prisma.usuario.findMany({
       where,
       select: {
         id: true,
@@ -41,6 +50,8 @@ export class UsuariosService {
       },
       orderBy: [{ empresa: { nombre: 'asc' } }, { nombre: 'asc' }],
     });
+
+    return usuarios.map((u) => ({ ...u, ubicaciones: u.ubicaciones.map((uu) => uu.ubicacion) }));
   }
 
   async findOne(id: string, user: JwtPayload) {
@@ -69,7 +80,7 @@ export class UsuariosService {
       throw new ForbiddenException('No tienes acceso a este usuario');
     }
 
-    return usuario;
+    return { ...usuario, ubicaciones: usuario.ubicaciones.map((uu) => uu.ubicacion) };
   }
 
   async create(dto: CreateUsuarioDto, user: JwtPayload) {
@@ -98,12 +109,16 @@ export class UsuariosService {
       throw new BadRequestException('Una o más ubicaciones no pertenecen a esta empresa');
     }
 
+    if (ROLES_UBICACION_UNICA.includes(dto.rol) && dto.ubicacion_ids.length !== 1) {
+      throw new BadRequestException(`El rol ${dto.rol} solo puede asignarse a una única ubicación`);
+    }
+
     const password_hash = await argon2.hash(dto.password);
 
     const { ubicacion_ids, password, ...rest } = dto;
     void password;
 
-    return this.prisma.usuario.create({
+    const creado = await this.prisma.usuario.create({
       data: {
         ...rest,
         password_hash,
@@ -114,10 +129,12 @@ export class UsuariosService {
       },
       include: {
         ubicaciones: {
-          include: { ubicacion: { select: { id: true, nombre: true } } },
+          include: { ubicacion: { select: { id: true, nombre: true, tipo: true } } },
         },
       },
     });
+
+    return { ...creado, ubicaciones: creado.ubicaciones.map((uu) => uu.ubicacion) };
   }
 
   async update(id: string, dto: UpdateUsuarioDto, user: JwtPayload) {
@@ -130,6 +147,12 @@ export class UsuariosService {
       }
     }
 
+    const rolEfectivo = dto.rol ?? target.rol;
+    const cantidadUbicaciones = dto.ubicacion_ids ? dto.ubicacion_ids.length : target.ubicaciones.length;
+    if (ROLES_UBICACION_UNICA.includes(rolEfectivo) && cantidadUbicaciones !== 1) {
+      throw new BadRequestException(`El rol ${rolEfectivo} solo puede asignarse a una única ubicación`);
+    }
+
     if (dto.ubicacion_ids) {
       // Reemplaza todas las asignaciones
       await this.prisma.usuarioUbicacion.deleteMany({ where: { usuario_id: id } });
@@ -140,17 +163,18 @@ export class UsuariosService {
 
     const { ubicacion_ids, ...rest } = dto;
     void ubicacion_ids;
-    void target;
 
-    return this.prisma.usuario.update({
+    const actualizado = await this.prisma.usuario.update({
       where: { id },
       data: rest,
       include: {
         ubicaciones: {
-          include: { ubicacion: { select: { id: true, nombre: true } } },
+          include: { ubicacion: { select: { id: true, nombre: true, tipo: true } } },
         },
       },
     });
+
+    return { ...actualizado, ubicaciones: actualizado.ubicaciones.map((uu) => uu.ubicacion) };
   }
 
   async resetPassword(id: string, dto: ResetPasswordDto, user: JwtPayload) {
