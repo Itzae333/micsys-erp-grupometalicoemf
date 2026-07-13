@@ -466,6 +466,47 @@ function buildEscPosBuffer(ticket) {
     return Buffer.concat(parts);
   }
 
+  // ── Carga / entrega de mercancía ────────────────────────
+  if (ticket.tipo === 'carga') {
+    pushHeader(ticket, push);
+    push(CMD.ALIGN_LEFT, sep('='));
+    push(CMD.BOLD_ON, center('CARGA / ENTREGA'), CMD.BOLD_OFF);
+    push(row('Nota #' + norm(ticket.folio ?? ''), fmtDateTime(new Date())));
+    push(sep('='));
+
+    const lineas = ticket.lineas ?? [];
+    const cargadas = lineas.filter((l) => Number(l.cargado_ahora) > 0);
+    const pendientes = lineas.filter((l) => Number(l.pendiente) > 0);
+
+    push(CMD.BOLD_ON, ln('ENTREGADO AHORA:'), CMD.BOLD_OFF);
+    push(sep('-'));
+    if (cargadas.length === 0) {
+      push(ln('(sin articulos en este evento)'));
+    } else {
+      for (const l of cargadas) {
+        const nombre = l.descripcion || l.clave;
+        push(ln(norm(String(l.cargado_ahora)) + '  ' + nombre));
+      }
+    }
+
+    if (pendientes.length > 0) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('PENDIENTE POR ENTREGAR:'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const l of pendientes) {
+        const nombre = l.descripcion || l.clave;
+        push(ln(norm(String(l.pendiente)) + '  ' + nombre));
+      }
+    }
+
+    push(sep('='), CMD.ALIGN_CENTER);
+    push(ln('Conserve este comprobante'));
+    push(CMD.ALIGN_LEFT);
+    push(CMD.FEED(config.cutFeedLines ?? 5));
+    push(CMD.CUT(0));
+    return Buffer.concat(parts);
+  }
+
   // ── Nombre empresa / sucursal ──────────────────────────
   pushHeader(ticket, push);
 

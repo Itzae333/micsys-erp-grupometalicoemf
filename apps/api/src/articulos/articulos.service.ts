@@ -4,6 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@grupometalicoemf/database';
 import type { CreateArticuloDto } from './dto/create-articulo.dto';
 
 interface ListQuery {
@@ -140,14 +141,31 @@ export class ArticulosService {
     return this.serialize(art);
   }
 
-  async deactivate(id: string, ubicacionId: string) {
+  async remove(id: string, ubicacionId: string) {
     await this.findOne(id, ubicacionId);
-    const art = await this.prisma.articulo.update({
-      where: { id },
-      data: { activo: false },
-      include: { proveedor: { select: { id: true, nombre: true } } },
+
+    const tieneVentas = await this.prisma.notaVentaLinea.findFirst({
+      where: { articulo_id: id },
+      select: { id: true },
     });
-    return this.serialize(art);
+    if (tieneVentas) {
+      throw new ConflictException(
+        'No se puede eliminar: el artículo tiene ventas registradas. Desactívalo en su lugar.',
+      );
+    }
+
+    try {
+      await this.prisma.articulo.delete({ where: { id } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+        throw new ConflictException(
+          'No se puede eliminar: el artículo tiene movimientos, compras, pedidos o remisiones asociadas. Desactívalo en su lugar.',
+        );
+      }
+      throw err;
+    }
+
+    return { ok: true };
   }
 
   private serialize(art: Record<string, unknown>) {

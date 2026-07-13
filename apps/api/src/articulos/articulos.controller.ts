@@ -88,9 +88,9 @@ export class ArticulosController {
   }
 
   @Delete(':id')
-  @Roles('SUPER_USUARIO', 'ADMIN')
-  @ApiOperation({ summary: 'Desactivar artículo (soft delete)' })
-  deactivate(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
-    return this.articulos.deactivate(id, ubicacionId);
+  @Roles('ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Eliminar artículo (solo si no tiene ventas registradas)' })
+  remove(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.articulos.remove(id, ubicacionId);
   }
 }

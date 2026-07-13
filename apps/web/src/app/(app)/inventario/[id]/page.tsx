@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Package, Pencil, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Package, Pencil, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -63,9 +63,13 @@ export default function ArticuloDetailPage() {
   const [preciosOpen, setPreciosOpen] = useState(false);
   const [existenciasOpen, setExistenciasOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
   const canEditPrecios = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   const infoForm = useForm<z.infer<typeof InfoSchema>>({ resolver: zodResolver(InfoSchema) });
   const preciosForm = useForm<z.infer<typeof PreciosSchema>>({ resolver: zodResolver(PreciosSchema) });
@@ -174,6 +178,19 @@ export default function ArticuloDetailPage() {
     load();
   }
 
+  async function onEliminar() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/articulos/${id}`);
+      router.replace('/inventario');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error al eliminar el artículo');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-8 space-y-4">
@@ -234,6 +251,14 @@ export default function ArticuloDetailPage() {
                 <><ToggleLeft className="h-4 w-4 text-steel-400" /> Activar</>
               )}
             </button>
+            {canDelete && (
+              <button
+                onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
+                className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-brand-600 px-3 py-1.5 border border-steel-200 rounded-lg hover:bg-brand-50 transition-colors"
+              >
+                <Trash2 className="h-4 w-4" /> Eliminar
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -413,6 +438,25 @@ export default function ArticuloDetailPage() {
             <Button type="submit" loading={existenciasForm.formState.isSubmitting}>Guardar existencias</Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* Dialog: eliminar */}
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title="¿Eliminar artículo?" size="sm">
+        <p className="text-body text-steel-600 mb-4">
+          Esta acción elimina permanentemente <strong>{articulo.clave}</strong> y no puede deshacerse.
+          Solo es posible si el artículo no tiene ventas registradas.
+        </p>
+        {deleteError && (
+          <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2 mb-4">
+            <p className="text-body-sm text-brand-600">{deleteError}</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)}>Cancelar</Button>
+          <Button type="button" variant="destructive" loading={deleting} onClick={onEliminar}>
+            Sí, eliminar
+          </Button>
+        </DialogFooter>
       </Dialog>
     </div>
   );
