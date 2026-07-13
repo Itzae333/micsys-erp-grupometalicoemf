@@ -194,7 +194,7 @@ export default function ClientesVentasPage() {
     };
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 15000);
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

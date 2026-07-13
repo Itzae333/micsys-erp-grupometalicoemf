@@ -4,9 +4,9 @@ Empresa destino: **Metálicos Lyeva**. Origen: sistema legado independiente "Pue
 
 Ejecuta estas queries en la base de datos legada de Puebla (MySQL/MariaDB) para generar los CSV que se suben en **Configuración → Migración**.
 
-> **Alcance de esta migración:** solo **clientes** e **inventario (productos)**. Las ventas históricas de Puebla no se migran.
+> **Alcance de esta migración:** clientes, inventario (productos) y ventas históricas.
 
-> **Puebla es una sola sucursal.** No genera un archivo por sucursal ni requiere columna `sucursal` — a diferencia de MetalAlpha (`virgen`/`santa`/`tecamachalco`/`tepeaca`), aquí todo se sube en una sola ubicación: "Matriz Metálicos Lyeva".
+> **Puebla es una sola sucursal.** El inventario/clientes no requieren columna `sucursal` (se suben posicionado en "Matriz Metálicos Lyeva"). Para `ventas_detalle.csv` sí se incluye la columna `sucursal` con el literal fijo `'puebla'` — a diferencia de MetalAlpha (`virgen`/`santa`/`tecamachalco`/`tepeaca`), aquí solo hay un valor posible.
 
 > **Antes de subir `inventario.csv`**, da de alta en **Configuración → Columnas** (para Metálicos Lyeva → Matriz) los precios "Crédito" (slot 3) y "Proveedor" (slot 4), además de los ya existentes "Público" (1) y "Mayoreo" (2). El precio "Proveedor" no existe en el legado — se importa en `0.00` y se captura manualmente después.
 
@@ -94,6 +94,59 @@ id,nombre,apellidoPaterno,apellidoMaterno,telefono,correo,saldo,precio_num
 1,Juan,Pérez López,,555-1234,juan@mail.com,0.00,2
 2,María,González,,555-5678,,0.00,1
 3,Carlos,Ruiz,,555-9999,,0.00,
+```
+
+---
+
+## 3. `ventas_detalle.csv`
+
+Exporta ventas históricas con sus líneas de carrito, denormalizado (una fila por artículo vendido) — igual que las fuentes ya migradas. El ERP agrupa por `venta_id + sucursal` al importar, y `sucursal` es siempre el literal `'puebla'`.
+
+```sql
+SELECT
+  v.id_venta                                                          AS venta_id,
+  CONCAT(v.fecha_venta, ' ', COALESCE(v.hora_venta, '00:00:00'))      AS fechaHoraVenta,
+  v.total,
+  COALESCE(v.recibido, 0.00)                                          AS recibido,
+  COALESCE(v.cambio, 0.00)                                            AS cambio,
+  COALESCE(v.restan, 0.00)                                            AS restan,
+  COALESCE(ev.descripcion, 'Pagada')                                  AS estatusVenta,
+  COALESCE(tp.descripcion, 'Efectivo')                                AS tipoPago,
+  COALESCE(v.nota, '')                                                AS nota,
+  COALESCE(v.incidencia, '')                                          AS incidencia,
+  TRIM(CONCAT(COALESCE(cl.nombre,''), ' ', COALESCE(cl.apellido,''))) AS cliente_nombre,
+  COALESCE(ca.cantidad, 0)                                            AS cantidad,
+  COALESCE(ca.precio_neto, 0.00)                                      AS precioNeto,
+  COALESCE(ca.total, 0.00)                                            AS linea_total,
+  COALESCE(p.nombre, '')                                              AS descripcion1,
+  COALESCE(p.tipo, '')                                                AS descripcion2,
+  COALESCE(p.medidas, '')                                             AS descripcion3,
+  COALESCE(pi.descripcion, '')                                        AS descripcion4,
+  COALESCE(co.descripcion, '')                                        AS descripcion5,
+  'puebla'                                                            AS sucursal
+FROM venta v
+LEFT JOIN cliente cl        ON cl.id_cliente = v.id_cliente
+JOIN  carrito ca             ON ca.id_venta = v.id_venta
+JOIN  inventario inv         ON inv.id_inventario = ca.id_inventario
+JOIN  producto p              ON p.id_producto = inv.id_producto
+LEFT JOIN pintura pi          ON pi.id_pintura = p.id_pintura
+LEFT JOIN color co            ON co.id_color = inv.id_color
+LEFT JOIN estatus_venta ev    ON ev.id_estatus_venta = v.id_estatus_venta
+LEFT JOIN ticket tk           ON tk.id_venta = v.id_venta AND tk.id_estatus_ticket = 1  -- 'Exito'
+LEFT JOIN tipo_pago tp        ON tp.id_tipo_pago = tk.id_tipo_pago
+ORDER BY v.id_venta;
+```
+
+Notas:
+- `fecha_venta`/`hora_venta` están separados en Puebla (a diferencia de MetalAlpha, que ya trae `fechaHoraVenta` combinado) — se concatenan con `CONCAT`.
+- El tipo de pago sale del `ticket` con `id_estatus_ticket = 1` ('Exito'); si una venta llegara a tener más de un ticket exitoso (no debería en la práctica), la query duplicaría filas — vale la pena correr un `COUNT` de verificación antes de exportar en producción.
+- La tabla `multi_pago` (pagos divididos) no se migra — `ventas_detalle.csv` solo admite un `tipoPago` por venta, igual que las fuentes ya migradas.
+- Igual que en clientes, `cliente.apellido` es una sola columna — se concatena completa en `cliente_nombre`.
+
+**Formato del CSV:**
+```
+venta_id,fechaHoraVenta,total,recibido,cambio,restan,estatusVenta,tipoPago,nota,incidencia,cliente_nombre,cantidad,precioNeto,linea_total,descripcion1,descripcion2,descripcion3,descripcion4,descripcion5,sucursal
+1,2024-03-15 10:30:00,500.00,500.00,0.00,0.00,Pagada,Efectivo,,,Juan Pérez,2,25.00,50.00,Perfil PTR,2x2,3mm,Horneada,Azul,puebla
 ```
 
 ---

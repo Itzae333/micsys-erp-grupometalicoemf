@@ -601,7 +601,7 @@ export default function VentasPage() {
 
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 15000);
       const res = await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

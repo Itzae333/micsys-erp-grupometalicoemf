@@ -313,7 +313,7 @@ export default function NotaDetallePage() {
     setPrinting(true);
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 15000);
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -363,7 +363,7 @@ export default function NotaDetallePage() {
     };
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
+      const timer = setTimeout(() => controller.abort(), 15000);
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
