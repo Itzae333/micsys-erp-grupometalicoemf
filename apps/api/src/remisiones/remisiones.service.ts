@@ -4,8 +4,26 @@ import type { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
 import type { Prisma } from '@grupometalicoemf/database';
 
 const REM_INCLUDE = {
-  empresa_origen:  { select: { id: true, nombre: true } },
-  ub_origen:       { select: { id: true, nombre: true } },
+  empresa_origen:  { select: { id: true, nombre: true, logo_url: true } },
+  ub_origen:       {
+    select: {
+      id: true,
+      nombre: true,
+      tipo: true,
+      logo_url: true,
+      razon_social: true,
+      rfc: true,
+      regimen_fiscal: true,
+      calle: true,
+      num_ext: true,
+      num_int: true,
+      colonia: true,
+      municipio: true,
+      estado: true,
+      cp: true,
+      telefono: true,
+    },
+  },
   empresa_destino: { select: { id: true, nombre: true } },
   ub_destino:      { select: { id: true, nombre: true } },
   creado_por:      { select: { id: true, nombre: true, apellidos: true } },

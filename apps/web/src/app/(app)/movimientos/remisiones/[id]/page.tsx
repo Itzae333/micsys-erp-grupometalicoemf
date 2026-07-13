@@ -12,7 +12,7 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
-import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -36,8 +36,23 @@ interface Remision {
   created_at: string;
   fecha_envio: string | null;
   fecha_recepcion: string | null;
-  empresa_origen:  { id: string; nombre: string };
-  ub_origen:       { id: string; nombre: string };
+  empresa_origen:  { id: string; nombre: string; logo_url: string | null };
+  ub_origen:       {
+    id: string;
+    nombre: string;
+    logo_url: string | null;
+    razon_social: string | null;
+    rfc: string | null;
+    regimen_fiscal: string | null;
+    calle: string | null;
+    num_ext: string | null;
+    num_int: string | null;
+    colonia: string | null;
+    municipio: string | null;
+    estado: string | null;
+    cp: string | null;
+    telefono: string | null;
+  };
   empresa_destino: { id: string; nombre: string };
   ub_destino:      { id: string; nombre: string };
   creado_por:      { nombre: string; apellidos: string };
@@ -152,12 +167,15 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
 
   async function printTicket() {
     if (!rem) return;
-    const logoUrl = getTicketLogoUrl(empresa, null); // usa logo de empresa activa (contexto)
+    // Logo/datos fiscales de la ubicación que emite la remisión (origen)
+    const logoUrl = getTicketLogoUrl(rem.empresa_origen, rem.ub_origen);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
 
     const payload = {
       tipo: 'remision',
       logo_escpos_b64,
+      empresa: { nombre: rem.empresa_origen.nombre },
+      ubicacion: { nombre: rem.ub_origen.nombre, ...buildTicketUbicacionFiscal(rem.ub_origen) },
       empresa_origen: { nombre: rem.empresa_origen.nombre },
       folio: rem.folio,
       concepto: rem.concepto ?? null,

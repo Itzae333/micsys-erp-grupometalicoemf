@@ -145,7 +145,25 @@ export class AuthService {
         empresa: { select: { id: true, nombre: true, logo_url: true } },
         ubicaciones: {
           include: {
-            ubicacion: { select: { id: true, nombre: true, tipo: true } },
+            ubicacion: {
+            select: {
+              id: true,
+              nombre: true,
+              tipo: true,
+              logo_url: true,
+              razon_social: true,
+              rfc: true,
+              regimen_fiscal: true,
+              calle: true,
+              num_ext: true,
+              num_int: true,
+              colonia: true,
+              municipio: true,
+              estado: true,
+              cp: true,
+              telefono: true,
+            },
+          },
           },
         },
       },

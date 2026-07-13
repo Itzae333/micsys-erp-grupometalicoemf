@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import type { Cliente, ConfigColumnasSchema, CuentaClienteDetalle, AbonarCuentaResult } from '@/lib/types/api';
 
 const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
@@ -173,9 +173,7 @@ export default function ClientesVentasPage() {
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',
-        razon_social: (ubicacion as { razon_social?: string | null } | undefined)?.razon_social ?? null,
-        rfc: (ubicacion as { rfc?: string | null } | undefined)?.rfc ?? null,
-        telefono: (ubicacion as { telefono?: string | null } | undefined)?.telefono ?? null,
+        ...buildTicketUbicacionFiscal(ubicacion),
       },
       cliente: {
         nombre: cliente.razon_social ?? `${cliente.nombre} ${cliente.apellidos ?? ''}`.trim(),

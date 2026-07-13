@@ -8,6 +8,45 @@ export function getTicketLogoUrl(
   return ubicacion?.logo_url ?? empresa?.logo_url ?? null;
 }
 
+interface UbicacionFiscal {
+  razon_social?: string | null;
+  rfc?: string | null;
+  regimen_fiscal?: string | null;
+  telefono?: string | null;
+  calle?: string | null;
+  num_ext?: string | null;
+  num_int?: string | null;
+  colonia?: string | null;
+  municipio?: string | null;
+  estado?: string | null;
+  cp?: string | null;
+}
+
+/**
+ * Arma el bloque de datos fiscales de una ubicación para el payload de
+ * impresión (print-bridge los imprime en la cabecera de todos los tickets).
+ */
+export function buildTicketUbicacionFiscal(ubicacion?: UbicacionFiscal | null) {
+  const direccion = [
+    ubicacion?.calle
+      ? `${ubicacion.calle}${ubicacion.num_ext ? ` #${ubicacion.num_ext}` : ''}${ubicacion.num_int ? ` Int.${ubicacion.num_int}` : ''}`
+      : null,
+    ubicacion?.colonia,
+    ubicacion?.municipio && ubicacion?.estado
+      ? `${ubicacion.municipio}, ${ubicacion.estado}`
+      : (ubicacion?.municipio ?? ubicacion?.estado ?? null),
+    ubicacion?.cp,
+  ].filter(Boolean).join(', ') || null;
+
+  return {
+    razon_social: ubicacion?.razon_social ?? null,
+    rfc: ubicacion?.rfc ?? null,
+    regimen_fiscal: ubicacion?.regimen_fiscal ?? null,
+    telefono: ubicacion?.telefono ?? null,
+    direccion,
+  };
+}
+
 /**
  * Rasteriza un logo con la Canvas API del browser y lo codifica como
  * comando ESC/POS "GS v 0" (bitmap de 1 bit) en base64.

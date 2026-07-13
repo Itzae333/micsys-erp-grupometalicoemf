@@ -35,7 +35,25 @@ interface LoginResponse {
 
 interface MeResponse {
   empresa: { id: string; nombre: string; logo_url: string | null };
-  ubicaciones: { ubicacion: { id: string; nombre: string; tipo: string } }[];
+  ubicaciones: {
+    ubicacion: {
+      id: string;
+      nombre: string;
+      tipo: string;
+      logo_url: string | null;
+      razon_social: string | null;
+      rfc: string | null;
+      regimen_fiscal: string | null;
+      calle: string | null;
+      num_ext: string | null;
+      num_int: string | null;
+      colonia: string | null;
+      municipio: string | null;
+      estado: string | null;
+      cp: string | null;
+      telefono: string | null;
+    };
+  }[];
 }
 
 export default function LoginPage() {
@@ -84,6 +102,18 @@ export default function LoginPage() {
             id: me.ubicaciones[0].ubicacion.id,
             nombre: me.ubicaciones[0].ubicacion.nombre,
             tipo: me.ubicaciones[0].ubicacion.tipo as never,
+            logo_url: me.ubicaciones[0].ubicacion.logo_url,
+            razon_social: me.ubicaciones[0].ubicacion.razon_social,
+            rfc: me.ubicaciones[0].ubicacion.rfc,
+            regimen_fiscal: me.ubicaciones[0].ubicacion.regimen_fiscal,
+            calle: me.ubicaciones[0].ubicacion.calle,
+            num_ext: me.ubicaciones[0].ubicacion.num_ext,
+            num_int: me.ubicaciones[0].ubicacion.num_int,
+            colonia: me.ubicaciones[0].ubicacion.colonia,
+            municipio: me.ubicaciones[0].ubicacion.municipio,
+            estado: me.ubicaciones[0].ubicacion.estado,
+            cp: me.ubicaciones[0].ubicacion.cp,
+            telefono: me.ubicaciones[0].ubicacion.telefono,
           },
         );
         router.push('/dashboard');

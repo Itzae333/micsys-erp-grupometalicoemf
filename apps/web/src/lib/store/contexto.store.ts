@@ -14,6 +14,7 @@ export interface UbicacionContexto {
   logo_url?: string | null;
   razon_social?: string | null;
   rfc?: string | null;
+  regimen_fiscal?: string | null;
   telefono?: string | null;
   calle?: string | null;
   num_ext?: string | null;

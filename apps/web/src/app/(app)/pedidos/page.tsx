@@ -13,7 +13,7 @@ import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
-import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'cargada' }> = {
@@ -254,7 +254,7 @@ export default function PedidosPage() {
   // ── Imprimir ticket ─────────────────────────────────────────
   async function printTicket(payload: Record<string, unknown>, copias = 1) {
     try {
-      const logoUrl = getTicketLogoUrl(ubicacion, empresa);
+      const logoUrl = getTicketLogoUrl(empresa, ubicacion);
       let escpos: string | undefined;
       if (logoUrl) { try { escpos = (await logoToEscPosBase64(logoUrl as string)) ?? undefined; } catch { /* sin logo */ } }
       await fetch('http://localhost:7788/print', {
@@ -264,13 +264,9 @@ export default function PedidosPage() {
           ...payload,
           copias,
           empresa: { nombre: empresa?.nombre ?? '' },
-          ubicacion: ubicacion ? {
-            nombre: ubicacion.nombre, razon_social: ubicacion.razon_social,
-            rfc: ubicacion.rfc, telefono: ubicacion.telefono,
-            calle: ubicacion.calle, num_ext: ubicacion.num_ext,
-            colonia: ubicacion.colonia, municipio: ubicacion.municipio,
-            estado: ubicacion.estado, cp: ubicacion.cp,
-          } : {},
+          ubicacion: ubicacion
+            ? { nombre: ubicacion.nombre, ...buildTicketUbicacionFiscal(ubicacion) }
+            : {},
           ...(escpos ? { logo_escpos_b64: escpos } : {}),
         }),
       });

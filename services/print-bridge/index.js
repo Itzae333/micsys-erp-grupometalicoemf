@@ -223,6 +223,17 @@ function pushHeader(ticket, push) {
   if (ticket.ubicacion?.razon_social) {
     push(center(ticket.ubicacion.razon_social));
   }
+  // Datos fiscales — se imprimen en la cabecera de todos los tipos de ticket
+  if (ticket.ubicacion?.rfc) {
+    push(center('RFC: ' + ticket.ubicacion.rfc +
+      (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '')));
+  } else if (ticket.ubicacion?.telefono) {
+    push(center('Tel: ' + ticket.ubicacion.telefono));
+  }
+  if (ticket.ubicacion?.regimen_fiscal) {
+    push(center('Régimen Fiscal: ' + ticket.ubicacion.regimen_fiscal));
+  }
+  if (ticket.ubicacion?.direccion) push(center(ticket.ubicacion.direccion));
 }
 
 /**
@@ -294,11 +305,6 @@ function buildEscPosBuffer(ticket) {
   // ── Comprobante de abono a cuenta ──────────────────────
   if (ticket.tipo === 'abono_cuenta') {
     pushHeader(ticket, push);
-    if (ticket.ubicacion?.rfc) {
-      push(center('RFC: ' + ticket.ubicacion.rfc + (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '')));
-    } else if (ticket.ubicacion?.telefono) {
-      push(center('Tel: ' + ticket.ubicacion.telefono));
-    }
     push(CMD.ALIGN_LEFT, sep());
     push(CMD.BOLD_ON, center('COMPROBANTE DE ABONO'), CMD.BOLD_OFF);
     push(row('Fecha', norm(ticket.fecha ?? '')));
@@ -406,17 +412,6 @@ function buildEscPosBuffer(ticket) {
   // ── Anticipo de pedido ─────────────────────────────────
   if (ticket.tipo === 'anticipo_pedido') {
     pushHeader(ticket, push);
-    if (ticket.ubicacion?.rfc) {
-      const rfcLine = 'RFC: ' + ticket.ubicacion.rfc +
-        (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '');
-      push(center(rfcLine));
-    } else if (ticket.ubicacion?.telefono) {
-      push(center('Tel: ' + ticket.ubicacion.telefono));
-    }
-    const dirs = [ticket.ubicacion?.calle, ticket.ubicacion?.num_ext, ticket.ubicacion?.colonia].filter(Boolean).join(' ');
-    if (dirs) push(center(dirs));
-    const mun = [ticket.ubicacion?.municipio, ticket.ubicacion?.estado].filter(Boolean).join(', ');
-    if (mun) push(center(mun));
 
     push(CMD.ALIGN_LEFT, sep('='));
     push(CMD.BOLD_ON, center('ANTICIPO DE PEDIDO'), CMD.BOLD_OFF);
@@ -507,19 +502,8 @@ function buildEscPosBuffer(ticket) {
     return Buffer.concat(parts);
   }
 
-  // ── Nombre empresa / sucursal ──────────────────────────
+  // ── Nombre empresa / sucursal / datos fiscales ──────────
   pushHeader(ticket, push);
-
-  // RFC + Teléfono
-  if (ticket.ubicacion?.rfc) {
-    const rfcLine = 'RFC: ' + ticket.ubicacion.rfc +
-      (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '');
-    push(center(rfcLine));
-  } else if (ticket.ubicacion?.telefono) {
-    push(center('Tel: ' + ticket.ubicacion.telefono));
-  }
-  // Dirección (campo pre-ensamblado desde el frontend)
-  if (ticket.ubicacion?.direccion) push(center(ticket.ubicacion.direccion));
 
   push(CMD.ALIGN_LEFT, sep());
 

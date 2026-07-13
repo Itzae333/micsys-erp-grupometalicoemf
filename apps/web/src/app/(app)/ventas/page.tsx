@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
-import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
 
 // ── Estatus ──────────────────────────────────────────────────
@@ -566,10 +566,7 @@ export default function VentasPage() {
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',
-        razon_social: ubicacion?.razon_social ?? null,
-        rfc: ubicacion?.rfc ?? null,
-        telefono: ubicacion?.telefono ?? null,
-        direccion: direccionUbicacion || null,
+        ...buildTicketUbicacionFiscal(ubicacion),
       },
       nota: {
         folio: String(nota.folio).padStart(4, '0'),
@@ -2097,57 +2094,6 @@ export default function VentasPage() {
         )}
       </Dialog>
 
-      {/* ── Dialog: enviar por correo ─────────────────────── */}
-      <Dialog
-        open={!!dlgEmail}
-        onClose={() => { setDlgEmail(null); setEmailOk(false); setEmailError(null); }}
-        title={dlgEmail === 'cotizacion' ? 'Enviar cotización por correo' : 'Enviar comprobante por correo'}
-        size="sm"
-      >
-        <div className="space-y-4">
-          {emailOk ? (
-            <div className="text-center py-6">
-              <p className="text-display-sm text-green-600 font-bold mb-1">✅ Enviado</p>
-              <p className="text-body-sm text-steel-500">El correo fue enviado a <strong>{emailDest}</strong>.</p>
-            </div>
-          ) : (
-            <>
-              <div>
-                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Correo destino</label>
-                <Input
-                  type="email"
-                  placeholder="cliente@empresa.com"
-                  value={emailDest}
-                  onChange={(e) => setEmailDest(e.target.value)}
-                />
-              </div>
-              {emailError && (
-                <p className="text-body-sm text-brand-600">{emailError}</p>
-              )}
-              <DialogFooter>
-                <Button variant="secondary" onClick={() => { setDlgEmail(null); setEmailError(null); }}>
-                  Cancelar
-                </Button>
-                <Button
-                  disabled={!emailDest || sendingEmail}
-                  onClick={() => {
-                    const nota = postCobro?.nota ?? notaActiva;
-                    if (!nota || !dlgEmail) return;
-                    void sendEmailNota(nota, dlgEmail, emailDest, postCobro ? {
-                      pagos: postCobro.pagos.filter((p) => p.monto > 0).map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
-                      cambio: postCobro.cambio,
-                      tipo_cierre: postCobro.tipoCierre,
-                    } : undefined);
-                  }}
-                >
-                  {sendingEmail ? 'Enviando…' : '✉️ Enviar'}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </div>
-      </Dialog>
-
       {/* ── Dialog: comprobante post-cobro ────────────────── */}
       <Dialog
         open={!!postCobro}
@@ -2223,6 +2169,57 @@ export default function VentasPage() {
           </div>
           );
         })()}
+      </Dialog>
+
+      {/* ── Dialog: enviar por correo (declarado al final para quedar SIEMPRE por encima de otros diálogos abiertos, p.ej. el de Comprobante) ─────────────────────── */}
+      <Dialog
+        open={!!dlgEmail}
+        onClose={() => { setDlgEmail(null); setEmailOk(false); setEmailError(null); }}
+        title={dlgEmail === 'cotizacion' ? 'Enviar cotización por correo' : 'Enviar comprobante por correo'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          {emailOk ? (
+            <div className="text-center py-6">
+              <p className="text-display-sm text-green-600 font-bold mb-1">✅ Enviado</p>
+              <p className="text-body-sm text-steel-500">El correo fue enviado a <strong>{emailDest}</strong>.</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Correo destino</label>
+                <Input
+                  type="email"
+                  placeholder="cliente@empresa.com"
+                  value={emailDest}
+                  onChange={(e) => setEmailDest(e.target.value)}
+                />
+              </div>
+              {emailError && (
+                <p className="text-body-sm text-brand-600">{emailError}</p>
+              )}
+              <DialogFooter>
+                <Button variant="secondary" onClick={() => { setDlgEmail(null); setEmailError(null); }}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={!emailDest || sendingEmail}
+                  onClick={() => {
+                    const nota = postCobro?.nota ?? notaActiva;
+                    if (!nota || !dlgEmail) return;
+                    void sendEmailNota(nota, dlgEmail, emailDest, postCobro ? {
+                      pagos: postCobro.pagos.filter((p) => p.monto > 0).map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
+                      cambio: postCobro.cambio,
+                      tipo_cierre: postCobro.tipoCierre,
+                    } : undefined);
+                  }}
+                >
+                  {sendingEmail ? 'Enviando…' : '✉️ Enviar'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </div>
       </Dialog>
     </div>
   );

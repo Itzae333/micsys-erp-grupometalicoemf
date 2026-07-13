@@ -116,22 +116,41 @@ function runInstall() {
   }
 
   // --- Registrar tarea en Programador de Tareas ---
+  // Corre como el usuario interactivo actual (no SYSTEM): las impresoras
+  // USB suelen quedar registradas solo en la sesión del usuario que las
+  // instaló, y SYSTEM (Sesión 0) no tiene acceso a ellas.
   console.log('⏳  Registrando tarea en Windows...');
+
+  const currentUser = `${process.env.USERDOMAIN ?? '.'}\\${process.env.USERNAME ?? ''}`;
 
   const ps1Script = [
     `$taskName = '${TASK_NAME}'`,
     `$exePath  = '${EXE_DEST.replace(/'/g, "''")}'`,
+    `$user     = '${currentUser.replace(/'/g, "''")}'`,
+    '',
+    // Mata cualquier instancia vieja (de una instalación anterior) que
+    // pudiera seguir viva y bloqueando el puerto 7788.
+    'Get-Process -Name "PrintBridge" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue',
+    'Start-Sleep -Milliseconds 500',
     '',
     'Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null',
     '',
     "$action    = New-ScheduledTaskAction -Execute $exePath -Argument '--service'",
-    '$trigger   = New-ScheduledTaskTrigger -AtStartup',
+    '$trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 2) -MultipleInstances IgnoreNew',
-    "$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
+    "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest",
     '',
     'Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null',
     'Start-ScheduledTask -TaskName $taskName',
-    "Write-Host 'TASK_OK'",
+    '',
+    // Confirma que el servicio realmente levantó antes de darlo por bueno.
+    '$up = $false',
+    'for ($i = 0; $i -lt 8; $i++) {',
+    '  Start-Sleep -Milliseconds 500',
+    '  try { Invoke-WebRequest http://localhost:7788 -UseBasicParsing -TimeoutSec 2 | Out-Null; $up = $true; break }',
+    '  catch { if ($_.Exception.Response) { $up = $true; break } }',
+    '}',
+    'if ($up) { Write-Host "TASK_OK" } else { Write-Host "TASK_OK_NOT_RESPONDING" }',
   ].join('\r\n');
 
   const tmpPs1 = path.join(os.tmpdir(), `pb-install-${Date.now()}.ps1`);
@@ -147,6 +166,7 @@ function runInstall() {
     if (!out.includes('TASK_OK')) {
       throw new Error('Respuesta inesperada de PowerShell: ' + out.trim());
     }
+    const serviceUp = out.includes('TASK_OK') && !out.includes('TASK_OK_NOT_RESPONDING');
 
     console.log('');
     console.log('  ╔══════════════════════════════════════════════════╗');
@@ -161,6 +181,13 @@ function runInstall() {
     console.log('  ║   2. Vuelve a ejecutar como Admin                ║');
     console.log('  ╚══════════════════════════════════════════════════╝');
     console.log('');
+
+    if (!serviceUp) {
+      console.warn('⚠️   El servicio no respondió en http://localhost:7788 todavía.');
+      console.warn('    Cierra sesión de Windows y vuelve a entrar (o reinicia la PC)');
+      console.warn('    para que la tarea programada arranque limpia.');
+      console.log('');
+    }
   } catch (err) {
     console.error('❌  Error al registrar la tarea de Windows:', err.message);
     waitEnter(1);

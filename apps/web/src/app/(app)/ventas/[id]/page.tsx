@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
-import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
@@ -278,10 +278,7 @@ export default function NotaDetallePage() {
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
         nombre: ubicacion?.nombre ?? '',
-        razon_social: ubicacion?.razon_social ?? null,
-        rfc: ubicacion?.rfc ?? null,
-        telefono: ubicacion?.telefono ?? null,
-        direccion: null,
+        ...buildTicketUbicacionFiscal(ubicacion),
       },
       nota: {
         folio: String(nota.folio).padStart(4, '0'),
@@ -352,7 +349,10 @@ export default function NotaDetallePage() {
       tipo: 'carga',
       logo_escpos_b64,
       empresa: { nombre: empresa?.nombre ?? '' },
-      ubicacion: { nombre: ubicacion?.nombre ?? '' },
+      ubicacion: {
+        nombre: ubicacion?.nombre ?? '',
+        ...buildTicketUbicacionFiscal(ubicacion),
+      },
       folio: String(nota.folio).padStart(4, '0'),
       lineas: detalle.lineas.map((l) => ({
         clave: l.clave,

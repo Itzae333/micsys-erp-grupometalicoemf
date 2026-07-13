@@ -83,6 +83,7 @@ export function ContextSwitcher({ open, onClose }: Props) {
         logo_url: ub.logo_url,
         razon_social: ub.razon_social,
         rfc: ub.rfc,
+        regimen_fiscal: ub.regimen_fiscal,
         telefono: ub.telefono,
         calle: ub.calle,
         num_ext: ub.num_ext,
