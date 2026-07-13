@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Package, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Package, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -76,9 +76,13 @@ export default function InventarioPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Articulo | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Articulo | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const claveEditada = useRef(false);
 
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
+  const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   const {
     register,
@@ -206,6 +210,21 @@ export default function InventarioPage() {
       } else {
         setFormError(err instanceof Error ? err.message : 'Error al guardar');
       }
+    }
+  }
+
+  async function onEliminar() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/articulos/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      loadArticulos();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error al eliminar el artículo');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -345,14 +364,25 @@ export default function InventarioPage() {
                     );
                   })}
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    {canWrite && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEdit(art); }}
-                        className="text-steel-400 hover:text-steel-700 text-body-sm px-2 py-1 rounded hover:bg-steel-100"
-                      >
-                        Editar
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end gap-1">
+                      {canWrite && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEdit(art); }}
+                          className="text-steel-400 hover:text-steel-700 text-body-sm px-2 py-1 rounded hover:bg-steel-100"
+                        >
+                          Editar
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeleteTarget(art); }}
+                          className="text-steel-400 hover:text-brand-600 p-1.5 rounded hover:bg-brand-50"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -539,6 +569,34 @@ export default function InventarioPage() {
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* Dialog: eliminar */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="¿Eliminar artículo?"
+        size="sm"
+      >
+        {deleteTarget && (
+          <>
+            <p className="text-body text-steel-600 mb-4">
+              Esta acción elimina permanentemente <strong>{deleteTarget.clave}</strong> y no puede deshacerse.
+              Solo es posible si el artículo no tiene ventas registradas.
+            </p>
+            {deleteError && (
+              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2 mb-4">
+                <p className="text-body-sm text-brand-600">{deleteError}</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+              <Button type="button" variant="destructive" loading={deleting} onClick={onEliminar}>
+                Sí, eliminar
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </Dialog>
     </div>
   );
