@@ -25,6 +25,10 @@ import { SearchModule } from './search/search.module';
 import { AdminModule } from './admin/admin.module';
 import { RemisionesModule } from './remisiones/remisiones.module';
 import { PedidosModule } from './pedidos/pedidos.module';
+import { CargasNotaModule } from './cargas-nota/cargas-nota.module';
+import { SolicitudesEdicionModule } from './solicitudes-edicion/solicitudes-edicion.module';
+import { MailModule } from './mail/mail.module';
+import { GastosModule } from './gastos/gastos.module';
 
 @Module({
   imports: [
@@ -51,6 +55,10 @@ import { PedidosModule } from './pedidos/pedidos.module';
     AdminModule,
     RemisionesModule,
     PedidosModule,
+    CargasNotaModule,
+    MailModule,
+    SolicitudesEdicionModule,
+    GastosModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },

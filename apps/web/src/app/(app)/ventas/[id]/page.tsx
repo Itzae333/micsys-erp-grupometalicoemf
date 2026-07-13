@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema } from '@/lib/types/api';
+import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
@@ -14,12 +14,21 @@ import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64 } from '@/lib/utils/ticket-logo';
 
-const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' }> = {
-  ABIERTA:   { label: 'Abierta',   variant: 'pending' },
-  PENDIENTE: { label: 'Pendiente', variant: 'pending' },
-  PAGADA:    { label: 'Pagada',    variant: 'paid' },
-  CREDITO:   { label: 'Crédito',   variant: 'credit' },
-  CANCELADA: { label: 'Cancelada', variant: 'cancelled' },
+const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
+  ABIERTA:    { label: 'Abierta',    variant: 'pending' },
+  PENDIENTE:  { label: 'Pendiente',  variant: 'pending' },
+  PAGADA:     { label: 'Pagada',     variant: 'paid' },
+  CREDITO:    { label: 'Crédito',    variant: 'credit' },
+  CANCELADA:  { label: 'Cancelada',  variant: 'cancelled' },
+  REABIERTA:  { label: 'En edición', variant: 'incomplete' },
+  INCOMPLETA: { label: 'Carga incompleta', variant: 'incomplete' },
+  FINALIZADA: { label: 'Finalizada', variant: 'cargada' },
+};
+
+const SOLICITUD_ESTATUS_CONFIG: Record<string, { label: string; variant: 'pending' | 'paid' | 'cancelled' }> = {
+  PENDIENTE: { label: 'Pendiente de autorización', variant: 'pending' },
+  APROBADA:  { label: 'Autorizada', variant: 'paid' },
+  RECHAZADA: { label: 'Rechazada', variant: 'cancelled' },
 };
 
 const METODO_LABEL: Record<string, string> = {
@@ -86,8 +95,24 @@ export default function NotaDetallePage() {
   // Reimprimir
   const [printing, setPrinting] = useState(false);
 
+  // Carga / entrega de mercancía
+  const [dlgCarga, setDlgCarga] = useState(false);
+  const [cargaPendientes, setCargaPendientes] = useState<CargaNotaPendientes | null>(null);
+  const [cargaCantidades, setCargaCantidades] = useState<Record<string, number>>({});
+  const [registrandoCarga, setRegistrandoCarga] = useState(false);
+  const [cargaError, setCargaError] = useState<string | null>(null);
+
+  // Solicitud de edición
+  const [dlgSolicitud, setDlgSolicitud] = useState(false);
+  const [solicitudMotivo, setSolicitudMotivo] = useState('');
+  const [creandoSolicitud, setCreandoSolicitud] = useState(false);
+  const [solicitudError, setSolicitudError] = useState<string | null>(null);
+  const [solicitudes, setSolicitudes] = useState<SolicitudEdicionNota[]>([]);
+
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canCarga = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
+  const canSolicitarEdicion = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
 
   async function load() {
     setLoading(true);
@@ -101,8 +126,16 @@ export default function NotaDetallePage() {
     }
   }
 
+  async function loadSolicitudes() {
+    try {
+      const res = await api.get<SolicitudEdicionNota[]>(`/ventas/${id}/solicitudes-edicion`);
+      setSolicitudes(res);
+    } catch { /* silencioso */ }
+  }
+
   useEffect(() => {
     load();
+    loadSolicitudes();
     if (empresa?.id && ubicacion?.id) {
       api.get<ConfigColumnasSchema>(`/config-columnas/${empresa.id}/${ubicacion.id}/schema`)
         .then(setSchema)
@@ -225,6 +258,7 @@ export default function NotaDetallePage() {
       },
       nota: {
         folio: String(nota.folio).padStart(4, '0'),
+        version: nota.version > 1 ? nota.version : null,
         fecha: new Date(nota.created_at).toLocaleDateString('es-MX', {
           day: '2-digit', month: 'short', year: 'numeric',
         }),
@@ -264,6 +298,112 @@ export default function NotaDetallePage() {
       // Bridge no disponible — no bloquear la UI
     } finally {
       setPrinting(false);
+    }
+  }
+
+  // ── Carga / entrega de mercancía ────────────────────────────
+  async function openCarga() {
+    if (!nota) return;
+    setCargaError(null);
+    try {
+      const pend = await api.get<CargaNotaPendientes>(`/ventas/${nota.id}/carga`);
+      setCargaPendientes(pend);
+      const defaults: Record<string, number> = {};
+      for (const l of pend.lineas) defaults[l.id] = l.pendiente;
+      setCargaCantidades(defaults);
+      setDlgCarga(true);
+    } catch (err) {
+      setCargaError(err instanceof Error ? err.message : 'Error al consultar la carga');
+    }
+  }
+
+  async function printTicketCarga(detalle: CargaNotaPendientes, cargadoAhora: Record<string, number>) {
+    if (!nota) return;
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+    const payload = {
+      tipo: 'carga',
+      logo_escpos_b64,
+      empresa: { nombre: empresa?.nombre ?? '' },
+      ubicacion: { nombre: ubicacion?.nombre ?? '' },
+      folio: String(nota.folio).padStart(4, '0'),
+      lineas: detalle.lineas.map((l) => ({
+        clave: l.clave,
+        descripcion: l.descripcion,
+        cargado_ahora: cargadoAhora[l.id] ?? 0,
+        pendiente: l.pendiente,
+      })),
+    };
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // Bridge no disponible — no bloquear la UI
+    }
+  }
+
+  async function onRegistrarCarga() {
+    if (!nota || !cargaPendientes) return;
+    setRegistrandoCarga(true);
+    setCargaError(null);
+    const cantidadEnviada = { ...cargaCantidades };
+    try {
+      const lineas = cargaPendientes.lineas
+        .map((l) => ({ nota_venta_linea_id: l.id, cantidad_cargada: cantidadEnviada[l.id] ?? 0 }))
+        .filter((l) => l.cantidad_cargada > 0);
+
+      if (lineas.length === 0) {
+        setCargaError('Indica al menos una cantidad a cargar.');
+        return;
+      }
+
+      const res = await api.post<{ estatus: string; imprimir_ticket: boolean }>(`/ventas/${nota.id}/carga`, { lineas });
+
+      if (res.imprimir_ticket) {
+        await printTicketCarga(cargaPendientes, cantidadEnviada);
+      }
+
+      setDlgCarga(false);
+      load();
+    } catch (err) {
+      setCargaError(err instanceof Error ? err.message : 'Error al registrar la carga');
+    } finally {
+      setRegistrandoCarga(false);
+    }
+  }
+
+  // ── Solicitud de edición ─────────────────────────────────────
+  const solicitudPendiente = solicitudes.find((s) => s.estatus === 'PENDIENTE');
+
+  function openSolicitud() {
+    setSolicitudMotivo('');
+    setSolicitudError(null);
+    setDlgSolicitud(true);
+  }
+
+  async function onCrearSolicitud() {
+    if (!nota) return;
+    if (solicitudMotivo.trim().length < 5) {
+      setSolicitudError('Describe el motivo con al menos 5 caracteres.');
+      return;
+    }
+    setCreandoSolicitud(true);
+    setSolicitudError(null);
+    try {
+      await api.post(`/ventas/${nota.id}/solicitudes-edicion`, { motivo: solicitudMotivo.trim() });
+      setDlgSolicitud(false);
+      loadSolicitudes();
+    } catch (err) {
+      setSolicitudError(err instanceof Error ? err.message : 'Error al solicitar la edición');
+    } finally {
+      setCreandoSolicitud(false);
     }
   }
 
@@ -365,7 +505,11 @@ export default function NotaDetallePage() {
   }
 
   const cfg = ESTATUS_CONFIG[nota.estatus];
-  const esCerrada = ['PAGADA', 'CREDITO'].includes(nota.estatus);
+  const esCerrada = ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'].includes(nota.estatus);
+  const puedeCargar = canCarga && ['PAGADA', 'CREDITO', 'INCOMPLETA'].includes(nota.estatus);
+  const puedeSolicitarEdicion = canSolicitarEdicion
+    && ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'].includes(nota.estatus)
+    && !solicitudPendiente;
 
   // Computa saldo y running balance para CREDITO
   const totalPagado = nota.pagos.reduce((s, p) => s + p.monto, 0);
@@ -401,19 +545,19 @@ export default function NotaDetallePage() {
           <p className="text-eyebrow text-steel-400 tracking-[2px] uppercase mb-0.5">Nota de Venta</p>
           <div className="flex items-center gap-3">
             <h1 className="text-display-md font-bold text-steel-900">
-              #{String(nota.folio).padStart(4, '0')}
+              #{String(nota.folio).padStart(4, '0')}{nota.version > 1 && <span className="text-steel-400"> · v{nota.version}</span>}
             </h1>
             <Badge variant={cfg?.variant ?? 'outline'}>{cfg?.label}</Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {nota.estatus === 'ABIERTA' && canWrite && (
+          {['ABIERTA', 'REABIERTA'].includes(nota.estatus) && canWrite && (
             <>
               <Button variant="secondary" onClick={() => setDlgLinea(true)}>
                 + Artículo
               </Button>
               {nota.lineas.length > 0 && (
-                <Button onClick={openCobrar}>Cobrar</Button>
+                <Button onClick={openCobrar}>{nota.estatus === 'REABIERTA' ? 'Volver a cobrar' : 'Cobrar'}</Button>
               )}
             </>
           )}
@@ -421,6 +565,18 @@ export default function NotaDetallePage() {
             <Button variant="secondary" disabled={printing} onClick={() => void printTicketNota()}>
               <Printer className={`h-4 w-4 mr-1.5 ${printing ? 'animate-pulse' : ''}`} />
               {printing ? 'Imprimiendo…' : 'Reimprimir'}
+            </Button>
+          )}
+          {puedeCargar && (
+            <Button variant="secondary" onClick={openCarga}>
+              <PackageCheck className="h-4 w-4 mr-1.5" />
+              Registrar carga
+            </Button>
+          )}
+          {puedeSolicitarEdicion && (
+            <Button variant="ghost" onClick={openSolicitud}>
+              <Send className="h-4 w-4 mr-1.5" />
+              Solicitar edición
             </Button>
           )}
           {['ABIERTA', 'PENDIENTE'].includes(nota.estatus) && canCancel && (
@@ -431,6 +587,28 @@ export default function NotaDetallePage() {
           )}
         </div>
       </div>
+
+      {/* Banner REABIERTA */}
+      {nota.estatus === 'REABIERTA' && (
+        <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 mb-4">
+          <AlertTriangle className="h-5 w-5 text-purple-600 flex-shrink-0" />
+          <div>
+            <p className="text-body font-semibold text-purple-800">Edición autorizada por el administrador</p>
+            <p className="text-body-sm text-purple-600">Modifica los artículos y vuelve a cobrar para generar el nuevo ticket.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner solicitud pendiente */}
+      {solicitudPendiente && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4">
+          <Clock className="h-5 w-5 text-blue-600 flex-shrink-0" />
+          <div>
+            <p className="text-body font-semibold text-blue-800">Solicitud de edición enviada</p>
+            <p className="text-body-sm text-blue-600">Esperando autorización del administrador por correo.</p>
+          </div>
+        </div>
+      )}
 
       {/* Banner PAGADA */}
       {nota.estatus === 'PAGADA' && (
@@ -511,7 +689,7 @@ export default function NotaDetallePage() {
                 <th className="px-4 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Precio</th>
                 <th className="px-4 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Desc.</th>
                 <th className="px-4 py-2 text-right text-eyebrow text-steel-400 tracking-[1px] uppercase font-medium text-[10px]">Subtotal</th>
-                {nota.estatus === 'ABIERTA' && canWrite && <th className="px-4 py-2" />}
+                {['ABIERTA', 'REABIERTA'].includes(nota.estatus) && canWrite && <th className="px-4 py-2" />}
               </tr>
             </thead>
             <tbody>
@@ -525,7 +703,7 @@ export default function NotaDetallePage() {
                   <td className="px-4 py-3 text-right text-body-sm text-steel-700">{formatPrecio(l.precio_unitario)}</td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-500">{l.descuento > 0 ? `${l.descuento}%` : '—'}</td>
                   <td className="px-4 py-3 text-right text-body-sm font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
-                  {nota.estatus === 'ABIERTA' && canWrite && (
+                  {['ABIERTA', 'REABIERTA'].includes(nota.estatus) && canWrite && (
                     <td className="px-4 py-3">
                       <button
                         onClick={() => eliminarLinea(l.id)}
@@ -721,6 +899,41 @@ export default function NotaDetallePage() {
         <div className="bg-white border border-steel-200 rounded-xl p-4 mb-4">
           <p className="text-eyebrow text-steel-400 tracking-[1.5px] uppercase font-medium text-[10px] mb-1">Observaciones</p>
           <p className="text-body text-steel-700">{nota.observaciones}</p>
+        </div>
+      )}
+
+      {/* Historial de solicitudes de edición */}
+      {solicitudes.length > 0 && (
+        <div className="bg-white border border-steel-200 rounded-xl overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+            <History className="h-4 w-4 text-steel-400" />
+            <p className="text-body font-semibold text-steel-900">Solicitudes de edición</p>
+          </div>
+          <div className="divide-y divide-steel-50">
+            {solicitudes.map((s) => {
+              const sc = SOLICITUD_ESTATUS_CONFIG[s.estatus];
+              return (
+                <div key={s.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-body-sm font-medium text-steel-900">
+                      {s.solicitante ? `${s.solicitante.nombre} ${s.solicitante.apellidos}` : 'Usuario'}
+                    </p>
+                    <Badge variant={sc?.variant ?? 'default'}>{sc?.label ?? s.estatus}</Badge>
+                  </div>
+                  <p className="text-body-sm text-steel-600 mt-0.5">{s.motivo}</p>
+                  {s.aprobado_por && (
+                    <p className="text-meta text-steel-400 mt-1">
+                      {s.estatus === 'APROBADA' ? 'Autorizado' : 'Resuelto'} por {s.aprobado_por.nombre} {s.aprobado_por.apellidos}
+                    </p>
+                  )}
+                  {s.comentario_admin && (
+                    <p className="text-meta text-steel-400 mt-0.5">Comentario: {s.comentario_admin}</p>
+                  )}
+                  <p className="text-meta text-steel-400 mt-1">{fmtFecha(s.created_at)}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1012,6 +1225,82 @@ export default function NotaDetallePage() {
               onClick={onAgregarEvidencia}
             >
               Guardar evidencia
+            </Button>
+          </DialogFooter>
+        </div>
+      </Dialog>
+
+      {/* ── Dialog: registrar carga ────────────────────────── */}
+      <Dialog open={dlgCarga} onClose={() => setDlgCarga(false)} title="Registrar carga / entrega" size="md">
+        {cargaPendientes && (
+          <div className="space-y-4">
+            <p className="text-body-sm text-steel-500">
+              Indica cuánto se entrega en este momento. Por defecto se propone el total pendiente.
+            </p>
+            <div className="space-y-3">
+              {cargaPendientes.lineas.map((l) => (
+                <div key={l.id} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body-sm font-semibold text-steel-900">{l.clave}</p>
+                    <p className="text-meta text-steel-500">
+                      Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
+                    </p>
+                  </div>
+                  <div className="w-28">
+                    <Input
+                      type="number" step="0.001" min="0" max={l.pendiente}
+                      value={cargaCantidades[l.id] ?? 0}
+                      disabled={l.pendiente <= 0}
+                      onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {cargaError && (
+              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+                <p className="text-body-sm text-brand-600">{cargaError}</p>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setDlgCarga(false)}>Cancelar</Button>
+              <Button type="button" loading={registrandoCarga} onClick={onRegistrarCarga}>
+                Registrar carga
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </Dialog>
+
+      {/* ── Dialog: solicitar edición ──────────────────────── */}
+      <Dialog open={dlgSolicitud} onClose={() => setDlgSolicitud(false)} title="Solicitar edición de venta" size="md">
+        <div className="space-y-4">
+          <p className="text-body-sm text-steel-500">
+            Esta venta ya fue cobrada. Se enviará un correo al administrador para que autorice la edición.
+          </p>
+          <div>
+            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Motivo</label>
+            <textarea
+              className="flex w-full rounded-md border border-steel-300 bg-white px-3 py-2 text-body text-steel-900 focus:outline-none focus:ring-2 focus:ring-brand-600"
+              rows={3}
+              placeholder="Ej: El cliente cambió un artículo por otro…"
+              value={solicitudMotivo}
+              onChange={(e) => setSolicitudMotivo(e.target.value)}
+            />
+          </div>
+
+          {solicitudError && (
+            <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+              <p className="text-body-sm text-brand-600">{solicitudError}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setDlgSolicitud(false)}>Cancelar</Button>
+            <Button type="button" loading={creandoSolicitud} onClick={onCrearSolicitud}>
+              Enviar solicitud
             </Button>
           </DialogFooter>
         </div>

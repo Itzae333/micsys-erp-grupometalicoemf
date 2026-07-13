@@ -24,6 +24,7 @@ import {
   PackageCheck,
   MonitorDown,
   Info,
+  Receipt,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmpresaLogo } from '@/components/brand/Logo';
@@ -96,6 +97,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Corte de Caja',
     icon: <Calculator className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO'],
+  },
+  {
+    href: '/gastos',
+    label: 'Gastos',
+    icon: <Receipt className="h-4 w-4" />,
+    roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
   },
   {
     href: '/compras',

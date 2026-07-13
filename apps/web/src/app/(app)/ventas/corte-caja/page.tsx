@@ -23,13 +23,20 @@ interface NotaCorte {
   cliente: { nombre: string };
   pagos: { metodo: string; monto: number }[];
 }
+interface GastoCorte {
+  id: string; concepto: string; categoria: string; monto: number;
+  metodo_pago: string; usuario: string; created_at: string;
+}
 interface CorteCajaData {
   desde: string | null;
   hasta: string | null;
   total_cobrado: number;
+  total_gastos: number;
+  total_neto: number;
   por_metodo: Record<string, MetodoResumen>;
   por_estatus: Record<string, EstatusResumen>;
   notas: NotaCorte[];
+  gastos: GastoCorte[];
 }
 
 // ── helpers ──────────────────────────────────────────────────
@@ -100,9 +107,12 @@ export default function CorteCajaPage() {
           desde: data.desde,
           hasta: data.hasta,
           total_cobrado: data.total_cobrado,
+          total_gastos: data.total_gastos,
+          total_neto: data.total_neto,
           por_metodo: data.por_metodo,
           por_estatus: data.por_estatus,
           notas: data.notas,
+          gastos: data.gastos,
         }),
       });
     } catch {
@@ -147,7 +157,7 @@ export default function CorteCajaPage() {
 
       {data && (
         <>
-          {/* Total cobrado */}
+          {/* Total cobrado / neto */}
           <div className="bg-steel-900 text-white rounded-xl p-5 flex items-center justify-between">
             <div>
               <p className="text-steel-400 text-sm uppercase tracking-wide">Total cobrado</p>
@@ -156,6 +166,13 @@ export default function CorteCajaPage() {
                 {data.notas.length} nota{data.notas.length !== 1 ? 's' : ''} ·{' '}
                 {desde === hasta ? desde : `${desde} → ${hasta}`}
               </p>
+              {data.total_gastos > 0 && (
+                <p className="text-xs mt-2">
+                  <span className="text-red-300">− {fmt(data.total_gastos)} gastos</span>
+                  {' '}=&nbsp;
+                  <span className="text-emerald-300 font-semibold">{fmt(data.total_neto)} neto</span>
+                </p>
+              )}
             </div>
             <Calculator className="h-10 w-10 text-steel-500" />
           </div>
@@ -199,6 +216,45 @@ export default function CorteCajaPage() {
               ))}
             </div>
           </div>
+
+          {/* Gastos del día */}
+          {data.gastos.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
+                Gastos del período
+              </h2>
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-50 border-b border-steel-200">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Concepto</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Categoría</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Usuario</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.gastos.map((g, i) => (
+                      <tr key={g.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                        <td className="px-4 py-2.5 text-steel-700">{g.concepto}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{g.categoria}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[g.metodo_pago] ?? g.metodo_pago}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{g.usuario}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-red-600">− {fmt(g.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-steel-900">
+                      <td colSpan={4} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL GASTOS</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(data.total_gastos)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Detalle de notas */}
           <div>
@@ -267,6 +323,16 @@ export default function CorteCajaPage() {
                         {fmt(data.total_cobrado)}
                       </td>
                     </tr>
+                    {data.total_gastos > 0 && (
+                      <tr className="bg-steel-800">
+                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
+                          TOTAL NETO (tras gastos)
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-base font-bold text-emerald-300">
+                          {fmt(data.total_neto)}
+                        </td>
+                      </tr>
+                    )}
                   </tfoot>
                 )}
               </table>

@@ -599,9 +599,9 @@ export class ReportesService {
       created_at: { gte: desde, lte: hasta },
     };
 
-    const [notas, pagosGrouped, abonosAgg] = await Promise.all([
+    const [notas, pagosGrouped, abonosAgg, gastos] = await Promise.all([
       this.prisma.notaVenta.findMany({
-        where: { ...baseWhere, estatus: { in: ['PAGADA', 'CREDITO'] } },
+        where: { ...baseWhere, estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] } },
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
           pagos:   { select: { metodo: true, monto: true } },
@@ -613,7 +613,7 @@ export class ReportesService {
         where: {
           nota: {
             ubicacion_id: ubicacionId,
-            estatus: { in: ['PAGADA', 'CREDITO'] },
+            estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] },
             created_at: { gte: desde, lte: hasta },
           },
         },
@@ -628,6 +628,11 @@ export class ReportesService {
         },
         _sum:   { monto: true },
         _count: true,
+      }),
+      this.prisma.gasto.findMany({
+        where: baseWhere,
+        orderBy: { created_at: 'asc' },
+        include: { usuario: { select: { nombre: true, apellidos: true } } },
       }),
     ]);
 
@@ -651,16 +656,36 @@ export class ReportesService {
     const totalCobrado = Object.values(porMetodo).reduce((s, m) => s + m.total, 0);
     const totalAbonos  = dec(abonosAgg._sum?.monto);
 
+    let totalGastos = 0;
+    for (const g of gastos) {
+      const monto = dec(g.monto);
+      if (!porMetodo[g.metodo_pago]) porMetodo[g.metodo_pago] = { count: 0, total: 0 };
+      porMetodo[g.metodo_pago].total = +(porMetodo[g.metodo_pago].total - monto).toFixed(2);
+      totalGastos = +(totalGastos + monto).toFixed(2);
+    }
+    const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
+
     return {
       desde:           desde.toISOString().slice(0, 10),
       hasta:           hasta.toISOString().slice(0, 10),
       total_cobrado:   +totalCobrado.toFixed(2),
       total_abonos:    +totalAbonos.toFixed(2),
+      total_gastos:    totalGastos,
+      total_neto:      totalNeto,
       notas_count:     notas.length,
       por_metodo:      porMetodo,
       por_estatus:     Object.fromEntries(porEstatusMap),
       abonos_count:    abonosAgg._count,
       notas: notas.map((n) => serializeDecimal(n)),
+      gastos: gastos.map((g) => ({
+        id: g.id,
+        concepto: g.concepto,
+        categoria: g.categoria,
+        monto: dec(g.monto),
+        metodo_pago: g.metodo_pago,
+        usuario: [g.usuario.nombre, g.usuario.apellidos].filter(Boolean).join(' '),
+        created_at: g.created_at,
+      })),
     };
   }
 

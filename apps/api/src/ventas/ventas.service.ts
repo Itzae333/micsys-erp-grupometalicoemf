@@ -134,8 +134,8 @@ export class VentasService {
 
   async addLinea(notaId: string, dto: AddLineaDto, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
-      throw new ForbiddenException('Solo se pueden agregar líneas a notas ABIERTA o COTIZACION');
+    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden agregar líneas a notas ABIERTA, COTIZACION o REABIERTA');
     }
 
     const art = await this.prisma.articulo.findFirst({
@@ -166,8 +166,8 @@ export class VentasService {
 
   async updateLinea(notaId: string, lineaId: string, dto: UpdateLineaDto, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
-      throw new ForbiddenException('Solo se pueden editar líneas de notas ABIERTA o COTIZACION');
+    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden editar líneas de notas ABIERTA, COTIZACION o REABIERTA');
     }
 
     const linea = await this.prisma.notaVentaLinea.findFirst({
@@ -193,8 +193,8 @@ export class VentasService {
 
   async removeLinea(notaId: string, lineaId: string, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'COTIZACION') {
-      throw new ForbiddenException('Solo se pueden eliminar líneas de notas ABIERTA o COTIZACION');
+    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden eliminar líneas de notas ABIERTA, COTIZACION o REABIERTA');
     }
 
     const linea = await this.prisma.notaVentaLinea.findFirst({
@@ -215,12 +215,14 @@ export class VentasService {
   async cerrar(notaId: string, dto: CerrarNotaDto, ubicacionId: string, usuarioId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
 
-    if (nota.estatus !== 'ABIERTA' && nota.estatus !== 'PENDIENTE') {
+    if (!['ABIERTA', 'PENDIENTE', 'REABIERTA'].includes(nota.estatus)) {
       throw new ForbiddenException(`No se puede cobrar una nota en estatus ${nota.estatus}`);
     }
     if (nota.lineas.length === 0) {
       throw new BadRequestException('La nota no tiene líneas');
     }
+
+    const esReedicion = nota.estatus === 'REABIERTA';
 
     const totalPagado = dto.pagos.reduce((s, p) => s + p.monto, 0);
     const totalNota = Number(nota.total);
@@ -236,6 +238,42 @@ export class VentasService {
     const nuevoEstatus: 'PAGADA' | 'CREDITO' = esCredito ? 'CREDITO' : 'PAGADA';
 
     const result = await this.prisma.$transaction(async (tx) => {
+      if (esReedicion) {
+        // Reemplaza los pagos previos y, si la venta original fue a crédito,
+        // revierte el cargo aplicado a la cuenta del cliente antes de recalcular.
+        await tx.pago.deleteMany({ where: { nota_id: notaId } });
+
+        if (nota.es_credito && nota.cliente_id) {
+          const cargoPrevio = await tx.movimientoCuenta.aggregate({
+            where: { nota_id: notaId, tipo: 'CARGO' },
+            _sum: { monto: true },
+          });
+          const montoPrevio = Number(cargoPrevio._sum.monto ?? 0);
+
+          if (montoPrevio > 0) {
+            const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: nota.cliente_id } });
+            const saldoAntes = Number(cliente.saldo_pendiente);
+            const saldoDespues = Math.max(0, saldoAntes - montoPrevio);
+
+            await tx.movimientoCuenta.create({
+              data: {
+                ubicacion_id: ubicacionId,
+                cliente_id: nota.cliente_id,
+                tipo: 'AJUSTE',
+                monto: montoPrevio,
+                saldo_antes: saldoAntes,
+                saldo_despues: saldoDespues,
+                concepto: `Reversión de crédito por edición autorizada — nota #${nota.folio}`,
+                nota_id: notaId,
+                usuario_id: usuarioId,
+              },
+            });
+
+            await tx.cliente.update({ where: { id: nota.cliente_id }, data: { saldo_pendiente: saldoDespues } });
+          }
+        }
+      }
+
       for (const p of dto.pagos) {
         await tx.pago.create({
           data: { nota_id: notaId, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null },
@@ -275,11 +313,36 @@ export class VentasService {
         });
       }
 
+      if (esReedicion) {
+        const ubicacion = await tx.ubicacion.findUniqueOrThrow({ where: { id: ubicacionId }, select: { empresa_id: true } });
+        const lineasActuales = await tx.notaVentaLinea.findMany({ where: { nota_id: notaId } });
+
+        await tx.evidenciaNota.create({
+          data: {
+            nota_id: notaId,
+            empresa_id: ubicacion.empresa_id,
+            tipo: 'TICKET_REEDITADO',
+            descripcion: `Ticket regenerado tras edición autorizada (v${nota.version + 1})`,
+            data_json: {
+              version: nota.version + 1,
+              total: totalNota,
+              lineas: lineasActuales.map((l) => ({
+                articulo_id: l.articulo_id, clave: l.clave, cantidad: Number(l.cantidad),
+                precio_unitario: Number(l.precio_unitario), descuento: Number(l.descuento), subtotal: Number(l.subtotal),
+              })),
+              pagos: dto.pagos,
+            } as any,
+            subido_por_id: usuarioId,
+          },
+        });
+      }
+
       return tx.notaVenta.update({
         where: { id: notaId },
         data: {
           estatus: nuevoEstatus,
           es_credito: esCredito,
+          version: esReedicion ? { increment: 1 } : undefined,
           fecha_vencimiento: dto.fecha_vencimiento ? new Date(dto.fecha_vencimiento) : null,
           cerrada_at: new Date(),
         },
@@ -726,7 +789,7 @@ export class VentasService {
 
     const where: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,
-      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'CANCELADA'] as any[] },
+      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'CANCELADA', 'INCOMPLETA', 'FINALIZADA'] as any[] },
     };
     if (desde || hasta) {
       where.created_at = {
@@ -743,7 +806,15 @@ export class VentasService {
       };
     }
 
-    const [notas, anticiposPedido] = await Promise.all([
+    const whereGastos: Prisma.GastoWhereInput = { ubicacion_id: ubicacionId };
+    if (desde || hasta) {
+      whereGastos.created_at = {
+        ...(desde ? { gte: new Date(desde) } : {}),
+        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+      };
+    }
+
+    const [notas, anticiposPedido, gastos] = await Promise.all([
       this.prisma.notaVenta.findMany({
         where,
         orderBy: { created_at: 'asc' },
@@ -763,6 +834,11 @@ export class VentasService {
             },
           },
         },
+      }),
+      this.prisma.gasto.findMany({
+        where: whereGastos,
+        orderBy: { created_at: 'asc' },
+        include: { usuario: { select: { nombre: true, apellidos: true } } },
       }),
     ]);
 
@@ -823,13 +899,34 @@ export class VentasService {
       totalAnticipos = +(totalAnticipos + monto).toFixed(2);
     }
 
+    let totalGastos = 0;
+    for (const g of gastos) {
+      const m = g.metodo_pago as string;
+      const monto = Number(g.monto);
+      if (!metodos[m]) metodos[m] = { count: 0, total: 0 };
+      metodos[m].total = +(metodos[m].total - monto).toFixed(2);
+      totalGastos = +(totalGastos + monto).toFixed(2);
+    }
+    const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
+
     return {
       desde: desde ?? null,
       hasta: hasta ?? null,
       ubicacion_id: ubicacionId,
       total_cobrado: totalCobrado,
+      total_gastos: totalGastos,
+      total_neto: totalNeto,
       por_metodo: metodos,
       por_estatus: porEstatus,
+      gastos: gastos.map((g) => ({
+        id: g.id,
+        concepto: g.concepto,
+        categoria: g.categoria,
+        monto: Number(g.monto),
+        metodo_pago: g.metodo_pago,
+        usuario: [g.usuario.nombre, g.usuario.apellidos].filter(Boolean).join(' '),
+        created_at: g.created_at,
+      })),
       anticipos_pedido: {
         total: totalAnticipos,
         count: anticiposPedido.length,

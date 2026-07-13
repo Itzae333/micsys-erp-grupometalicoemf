@@ -5,6 +5,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { VentasService } from './ventas.service';
 import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
+import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
+import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -14,7 +16,10 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 @ApiHeader({ name: 'x-ubicacion-id', required: true })
 @Controller('ventas')
 export class VentasController {
-  constructor(private ventas: VentasService) {}
+  constructor(
+    private ventas: VentasService,
+    private solicitudesEdicion: SolicitudesEdicionService,
+  ) {}
 
   @Get('corte-caja')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
@@ -170,5 +175,27 @@ export class VentasController {
     @Body() dto: SendEmailDto,
   ) {
     return this.ventas.sendEmail(id, empresaId, dto);
+  }
+
+  @Post(':id/solicitudes-edicion')
+  @Roles('ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Solicitar edición de una venta ya cobrada (requiere autorización del ADMIN por correo)' })
+  crearSolicitudEdicion(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @Body() dto: CrearSolicitudDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.solicitudesEdicion.crear(id, ubicacionId, user.sub, dto);
+  }
+
+  @Get(':id/solicitudes-edicion')
+  @Roles('ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Historial de solicitudes de edición de una venta' })
+  listarSolicitudesEdicion(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+  ) {
+    return this.solicitudesEdicion.listarPorNota(id, ubicacionId);
   }
 }

@@ -145,7 +145,7 @@ export interface Cliente {
   updated_at: string;
 }
 
-export type EstatusNota = 'COTIZACION' | 'ABIERTA' | 'PENDIENTE' | 'PAGADA' | 'CREDITO' | 'CANCELADA';
+export type EstatusNota = 'COTIZACION' | 'ABIERTA' | 'PENDIENTE' | 'PAGADA' | 'CREDITO' | 'CANCELADA' | 'REABIERTA' | 'INCOMPLETA' | 'FINALIZADA';
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO';
 
 export interface NotaVentaLinea {
@@ -199,6 +199,7 @@ export interface NotaVenta {
   cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; limite_credito: number; saldo_pendiente: number } | null;
   usuario: { id: string; nombre: string; apellidos: string } | null;
   estatus: EstatusNota;
+  version: number;
   subtotal: number;
   descuento: number;
   total: number;
@@ -211,6 +212,47 @@ export interface NotaVenta {
   created_at: string;
   updated_at: string;
   cerrada_at: string | null;
+}
+
+export type EstatusSolicitudEdicion = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA';
+
+export interface SolicitudEdicionNota {
+  id: string;
+  nota_id: string;
+  motivo: string;
+  estatus: EstatusSolicitudEdicion;
+  comentario_admin: string | null;
+  solicitante: { id: string; nombre: string; apellidos: string } | null;
+  aprobado_por: { id: string; nombre: string; apellidos: string } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CargaNotaPendientes {
+  nota_id: string;
+  folio: number;
+  estatus: EstatusNota;
+  lineas: {
+    id: string;
+    articulo_id: string;
+    clave: string;
+    descripcion: string | null;
+    cantidad: number;
+    cargado: number;
+    pendiente: number;
+  }[];
+}
+
+export interface Gasto {
+  id: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
+  metodo_pago: MetodoPago;
+  comprobante_url: string | null;
+  usuario_id: string;
+  usuario?: { id: string; nombre: string; apellidos: string };
+  created_at: string;
 }
 
 export interface NotasVentaPage {
