@@ -69,8 +69,9 @@ export class SolicitudesEdicionService {
     const link = `${frontendUrl}/aprobaciones/edicion-nota/${token}`;
     const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
 
+    let notificados = 0;
     for (const admin of admins) {
-      await this.mail.send({
+      const enviado = await this.mail.send({
         to: admin.email,
         subject: `Solicitud de edición — Nota ${folioStr} (${nota.ubicacion.nombre})`,
         html: `
@@ -81,9 +82,22 @@ export class SolicitudesEdicionService {
           <p>Este enlace expira en ${TOKEN_VIGENCIA_HORAS} horas.</p>
         `,
       });
+      if (enviado) notificados++;
     }
 
-    return { ok: true, solicitud_id: solicitud.id, admins_notificados: admins.length };
+    // Si ningún admin quedó notificado (correo caído, mal configurado, o sin
+    // admins activos), no tiene sentido dejar la solicitud viva sin nadie que
+    // pueda aprobarla — se revierte para que el vendedor sepa que no se envió.
+    if (notificados === 0) {
+      await this.prisma.solicitudEdicionNota.delete({ where: { id: solicitud.id } });
+      throw new BadRequestException(
+        admins.length === 0
+          ? 'No hay administradores activos para notificar — la solicitud no se creó.'
+          : 'No se pudo notificar a ningún administrador por correo — la solicitud no se creó. Avisa a soporte para revisar la configuración de correo.',
+      );
+    }
+
+    return { ok: true, solicitud_id: solicitud.id, admins_notificados: notificados };
   }
 
   async listarPorNota(notaId: string, ubicacionId: string) {

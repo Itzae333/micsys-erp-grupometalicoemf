@@ -11,11 +11,12 @@ export interface SendMailOptions {
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  async send(options: SendMailOptions): Promise<void> {
+  /** Devuelve true si el correo se envió, false si falló (o si SMTP no está configurado). */
+  async send(options: SendMailOptions): Promise<boolean> {
     const smtpHost = process.env.SMTP_HOST;
     if (!smtpHost) {
       this.logger.warn(`SMTP_HOST no configurado — no se envió el correo "${options.subject}" a ${options.to}`);
-      return;
+      return false;
     }
 
     try {
@@ -32,10 +33,12 @@ export class MailService {
         subject: options.subject,
         html: options.html,
       });
+      return true;
     } catch (err) {
       this.logger.error(
         `Error al enviar "${options.subject}" a ${options.to}: ${err instanceof Error ? err.message : err}`,
       );
+      return false;
     }
   }
 }
