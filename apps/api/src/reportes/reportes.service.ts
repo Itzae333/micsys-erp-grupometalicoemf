@@ -140,6 +140,18 @@ export class ReportesService {
       count: Number(r.count),
     }));
 
+    // La `clave` del groupBy es la que quedó grabada en la línea al momento de la venta
+    // (puede ser un código viejo/migrado); se busca el artículo actual para mostrar su
+    // descripción vigente en vez de ese snapshot.
+    const articuloIdsTop = topArticulosMes.map((a) => a.articulo_id);
+    const articulosTop = articuloIdsTop.length
+      ? await this.prisma.articulo.findMany({
+          where: { id: { in: articuloIdsTop } },
+          select: { id: true, clave: true, descripcion_1: true, descripcion_2: true, descripcion_3: true, descripcion_4: true, descripcion_5: true },
+        })
+      : [];
+    const articuloTopMap = new Map(articulosTop.map((a) => [a.id, a]));
+
     return {
       ventas_hoy: {
         total: dec(ventasHoy._sum?.total),
@@ -157,6 +169,7 @@ export class ReportesService {
       top_articulos_mes: topArticulosMes.map((a) => ({
         articulo_id: a.articulo_id,
         clave: a.clave,
+        articulo: articuloTopMap.get(a.articulo_id) ?? null,
         cantidad: dec(a._sum?.cantidad),
         subtotal: dec(a._sum?.subtotal),
       })),
@@ -196,8 +209,6 @@ export class ReportesService {
         ]);
 
         return {
-          ubicacion_id:    ub.id,
-          ubicacion_nombre: ub.nombre,
           empresa_id:      ub.empresa.id,
           empresa_nombre:  ub.empresa.nombre,
           ventas_hoy:   { total: dec(hoyAgg._sum?.total), count: hoyAgg._count },
@@ -207,17 +218,45 @@ export class ReportesService {
       }),
     );
 
-    const totalHoy = resumenPorUbicacion.reduce((s, e) => s + e.ventas_hoy.total, 0);
-    const totalMes = resumenPorUbicacion.reduce((s, e) => s + e.ventas_mes.total, 0);
+    // El super usuario ve por empresa (no por ubicación) — se agregan todas las
+    // ubicaciones de cada empresa en un solo renglón.
+    const porEmpresa = new Map<string, {
+      empresa_id: string; empresa_nombre: string;
+      ventas_hoy: { total: number; count: number };
+      ventas_mes: { total: number; count: number };
+      clientes_con_saldo: number;
+    }>();
+    for (const r of resumenPorUbicacion) {
+      const acc = porEmpresa.get(r.empresa_id) ?? {
+        empresa_id: r.empresa_id,
+        empresa_nombre: r.empresa_nombre,
+        ventas_hoy: { total: 0, count: 0 },
+        ventas_mes: { total: 0, count: 0 },
+        clientes_con_saldo: 0,
+      };
+      acc.ventas_hoy.total += r.ventas_hoy.total;
+      acc.ventas_hoy.count += r.ventas_hoy.count;
+      acc.ventas_mes.total += r.ventas_mes.total;
+      acc.ventas_mes.count += r.ventas_mes.count;
+      acc.clientes_con_saldo += r.clientes_con_saldo;
+      porEmpresa.set(r.empresa_id, acc);
+    }
 
-    return {
-      total_hoy:  +totalHoy.toFixed(2),
-      total_mes:  +totalMes.toFixed(2),
-      ubicaciones: resumenPorUbicacion.map((e) => ({
+    const empresas = Array.from(porEmpresa.values())
+      .sort((a, b) => a.empresa_nombre.localeCompare(b.empresa_nombre))
+      .map((e) => ({
         ...e,
         ventas_hoy: { ...e.ventas_hoy, total: +e.ventas_hoy.total.toFixed(2) },
         ventas_mes: { ...e.ventas_mes, total: +e.ventas_mes.total.toFixed(2) },
-      })),
+      }));
+
+    const totalHoy = empresas.reduce((s, e) => s + e.ventas_hoy.total, 0);
+    const totalMes = empresas.reduce((s, e) => s + e.ventas_mes.total, 0);
+
+    return {
+      total_hoy: +totalHoy.toFixed(2),
+      total_mes: +totalMes.toFixed(2),
+      empresas,
     };
   }
 

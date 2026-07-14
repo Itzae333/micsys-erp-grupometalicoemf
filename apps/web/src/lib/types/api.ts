@@ -573,7 +573,10 @@ export interface DashboardData {
   ops_activas: number;
   proveedores_con_saldo: number;
   entradas_hoy: number;
-  top_articulos_mes: { articulo_id: string; clave: string; cantidad: number; subtotal: number }[];
+  top_articulos_mes: {
+    articulo_id: string; clave: string; cantidad: number; subtotal: number;
+    articulo: { id: string; clave: string; descripcion_1: string | null } | null;
+  }[];
   ventas_diarias: DiaVenta[];
 }
 

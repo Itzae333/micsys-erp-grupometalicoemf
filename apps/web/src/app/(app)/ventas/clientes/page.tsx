@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Users, Search, ShoppingCart, FileText, BookOpen, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Search, ShoppingCart, FileText, BookOpen, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -44,6 +44,8 @@ export default function ClientesVentasPage() {
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const [dlgOpen, setDlgOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Cliente | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -89,6 +91,10 @@ export default function ClientesVentasPage() {
   }, [empresa?.id, ubicacion?.id]);
 
   useEffect(() => { load(); }, [q]);
+  useEffect(() => { setPage(1); }, [q]);
+
+  const totalPages = Math.max(1, Math.ceil(clientes.length / PAGE_SIZE));
+  const clientesPagina = clientes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function precioLabel(num: number | null): string {
     if (!num) return '';
@@ -232,7 +238,7 @@ export default function ClientesVentasPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6 max-w-6xl">
       <button
         onClick={() => router.back()}
         className="flex items-center gap-1.5 text-steel-500 hover:text-steel-800 text-body-sm mb-4 transition-colors"
@@ -277,11 +283,12 @@ export default function ClientesVentasPage() {
           action={canWrite ? { label: 'Nuevo cliente', onClick: openCreate } : undefined}
         />
       ) : (
-        <div className="space-y-2">
-          {clientes.map((c) => (
+        <>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {clientesPagina.map((c) => (
             <div
               key={c.id}
-              className="flex items-center gap-4 px-4 py-3.5 bg-white border border-steel-200 rounded-xl hover:border-steel-300 transition-colors"
+              className="flex flex-wrap items-center gap-3 px-4 py-3.5 bg-white border border-steel-200 rounded-xl hover:border-steel-300 transition-colors"
             >
               <div className="w-9 h-9 rounded-full bg-steel-100 flex items-center justify-center flex-shrink-0">
                 <span className="text-steel-600 font-bold text-body-sm">{c.nombre.charAt(0).toUpperCase()}</span>
@@ -360,6 +367,33 @@ export default function ClientesVentasPage() {
             </div>
           ))}
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-body-sm text-steel-500">
+              Página {page} de {totalPages} · {clientes.length} cliente{clientes.length !== 1 ? 's' : ''}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex items-center gap-1 text-body-sm text-steel-600 hover:text-steel-900 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Anterior
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex items-center gap-1 text-body-sm text-steel-600 hover:text-steel-900 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                Siguiente
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* ── Dialog: cuenta corriente ─────────────────────── */}

@@ -486,7 +486,7 @@ function buildEscPosBuffer(ticket) {
     for (const linea of (ticket.lineas ?? [])) {
       const nombre = linea.descripcion || linea.clave;
       push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
-      push(row('  $' + formatMoney(Number(linea.precio)), '$' + formatMoney(Number(linea.subtotal))));
+      push(row('  P.U $' + formatMoney(Number(linea.precio)), 'Imp $' + formatMoney(Number(linea.subtotal))));
     }
     push(sep('='));
 
@@ -577,7 +577,7 @@ function buildEscPosBuffer(ticket) {
     // Cantidad ANTES de la descripción; la impresora hace wrap automático
     push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
     // Precio unitario y subtotal en su propia línea alineada
-    push(row('  $' + formatMoney(Number(linea.precio)), '$' + formatMoney(Number(linea.subtotal))));
+    push(row('  P.U $' + formatMoney(Number(linea.precio)), 'Imp $' + formatMoney(Number(linea.subtotal))));
   }
 
   push(sep('='));

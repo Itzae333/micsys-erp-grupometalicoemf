@@ -58,7 +58,11 @@ export class AuthController {
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.['refresh_token'] as string | undefined;
     if (!refreshToken) {
-      return res.status(HttpStatus.UNAUTHORIZED).json({ message: 'Refresh token no encontrado' });
+      // No usar res.json() aquí: con @Res({ passthrough: true }) devuelve el
+      // Response de Express (objeto circular con socket/parser) y Nest intenta
+      // volver a serializarlo, tronando con "Converting circular structure to JSON".
+      res.status(HttpStatus.UNAUTHORIZED);
+      return { message: 'Refresh token no encontrado' };
     }
 
     const result = await this.auth.refresh(refreshToken);

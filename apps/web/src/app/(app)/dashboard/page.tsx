@@ -5,6 +5,7 @@ import { TrendingUp, FileText, Users, Factory, Truck, CreditCard, RefreshCw, Bui
 import { api } from '@/lib/api/client';
 import { StatCard } from '@/components/ui/stat-card';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useContextoStore } from '@/lib/store/contexto.store';
 import type { DashboardData } from '@/lib/types/api';
 
 interface EmpresaKpi {
@@ -31,21 +32,27 @@ const fmtDia = (iso: string) => {
 
 export default function DashboardPage() {
   const { usuario } = useAuthStore();
+  const { ubicacion } = useContextoStore();
   const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';
+  // El super usuario opera sobre todas las empresas/ubicaciones (solo lectura),
+  // así que normalmente no tiene una ubicación seleccionada en el contexto —
+  // el dashboard por ubicación no aplica y se muestra la vista consolidada.
+  const sinUbicacion = isSuperUsuario && !ubicacion?.id;
 
   const [data, setData]           = useState<DashboardData | null>(null);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading]     = useState(!sinUbicacion);
   const [global, setGlobal]       = useState<DashboardGlobal | null>(null);
   const [globalLoading, setGlobalLoading] = useState(false);
 
   const load = useCallback(async () => {
+    if (sinUbicacion) return;
     setLoading(true);
     try {
       const d = await api.get<DashboardData>('/reportes/dashboard');
       setData(d);
     } catch { /* silently fail */ }
     finally { setLoading(false); }
-  }, []);
+  }, [sinUbicacion]);
 
   const loadGlobal = useCallback(async () => {
     if (!isSuperUsuario) return;
@@ -83,7 +90,16 @@ export default function DashboardPage() {
       </div>
 
       <div className="p-6 space-y-6">
-        {/* KPI cards — primera fila */}
+        {sinUbicacion && (
+          <div className="bg-brand-50 border border-brand-200 text-brand-800 rounded-xl px-4 py-3 text-body-sm">
+            Tu usuario (Super Usuario) no tiene una ubicación asignada — abajo tienes la vista
+            consolidada de ventas de todas las empresas y ubicaciones.
+          </div>
+        )}
+
+        {/* KPI cards — primera fila (requiere una ubicación de contexto) */}
+        {!sinUbicacion && (
+        <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             label="Ventas hoy"
@@ -176,7 +192,7 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-steel-50">
                   {d.top_articulos_mes.map((a) => (
                     <tr key={a.articulo_id} className="hover:bg-steel-50 transition-colors">
-                      <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{a.clave}</td>
+                      <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{a.articulo?.descripcion_1 ?? a.clave}</td>
                       <td className="px-4 py-2 text-right text-steel-600 tabular-nums">
                         {a.cantidad.toLocaleString('es-MX')}
                       </td>
@@ -226,6 +242,8 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        </>
+        )}
 
         {/* Dashboard global — solo SUPER_USUARIO */}
         {isSuperUsuario && (

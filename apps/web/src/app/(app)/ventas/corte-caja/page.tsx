@@ -394,6 +394,20 @@ export default function CorteCajaPage() {
                         {fmt(data.total_cobrado)}
                       </td>
                     </tr>
+                    {metodos.map((m) => {
+                      const res = data.por_metodo[m] ?? { count: 0, total: 0 };
+                      if (res.total === 0) return null;
+                      return (
+                        <tr key={m} className="bg-steel-800/60">
+                          <td colSpan={6} className="px-4 py-1.5 text-right text-xs font-medium text-steel-300">
+                            Total en {METODO_LABEL[m]}
+                          </td>
+                          <td className="px-4 py-1.5 text-right text-sm font-semibold text-steel-100">
+                            {fmt(res.total)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {data.total_gastos > 0 && (
                       <tr className="bg-steel-800">
                         <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
