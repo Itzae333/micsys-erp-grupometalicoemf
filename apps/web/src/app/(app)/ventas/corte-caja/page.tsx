@@ -129,15 +129,15 @@ export default function CorteCajaPage() {
             : null,
           desde: data.desde,
           hasta: data.hasta,
-          total_ventas: data.total_ventas,
+          total_ventas: data.total_ventas ?? data.total_cobrado,
           total_cobrado: data.total_cobrado,
           total_gastos: data.total_gastos,
-          total_gastos_efectivo: data.total_gastos_efectivo,
+          total_gastos_efectivo: data.total_gastos_efectivo ?? data.total_gastos,
           total_neto: data.total_neto,
-          total_entregar_efectivo: data.total_entregar_efectivo,
+          total_entregar_efectivo: data.total_entregar_efectivo ?? data.por_metodo?.['EFECTIVO']?.total ?? 0,
           por_metodo: data.por_metodo,
           por_estatus: data.por_estatus,
-          pagos_credito: data.pagos_credito,
+          pagos_credito: data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] },
           notas: data.notas,
           gastos: data.gastos,
         }),
@@ -182,13 +182,17 @@ export default function CorteCajaPage() {
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
       )}
 
-      {data && (
+      {data && (() => {
+        const pagosCredito = data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
+        const totalVentas = data.total_ventas ?? data.total_cobrado;
+        const totalEntregarEfectivo = data.total_entregar_efectivo ?? (data.por_metodo?.['EFECTIVO']?.total ?? 0);
+        return (
         <>
           {/* Total de ventas / cobrado / neto */}
           <div className="bg-steel-900 text-white rounded-xl p-5 flex items-center justify-between">
             <div>
               <p className="text-steel-400 text-sm uppercase tracking-wide">Total de ventas</p>
-              <p className="text-3xl font-bold mt-1">{fmt(data.total_ventas)}</p>
+              <p className="text-3xl font-bold mt-1">{fmt(totalVentas)}</p>
               <p className="text-steel-400 text-xs mt-1">
                 {data.notas.length} nota{data.notas.length !== 1 ? 's' : ''} ·{' '}
                 {desde === hasta ? desde : `${desde} → ${hasta}`}
@@ -203,7 +207,7 @@ export default function CorteCajaPage() {
             </div>
             <div className="text-right">
               <p className="text-steel-400 text-xs uppercase tracking-wide">Total a entregar</p>
-              <p className="text-2xl font-bold text-emerald-300">{fmt(data.total_entregar_efectivo)}</p>
+              <p className="text-2xl font-bold text-emerald-300">{fmt(totalEntregarEfectivo)}</p>
               <p className="text-steel-400 text-xs">en efectivo</p>
             </div>
             <Calculator className="h-10 w-10 text-steel-500 ml-4" />
@@ -250,7 +254,7 @@ export default function CorteCajaPage() {
           </div>
 
           {/* Pagos de crédito (abonos de notas abiertas en días anteriores) */}
-          {data.pagos_credito.count > 0 && (
+          {pagosCredito.count > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
                 Pagos de crédito
@@ -265,7 +269,7 @@ export default function CorteCajaPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.pagos_credito.detalle.map((p, i) => (
+                    {pagosCredito.detalle.map((p, i) => (
                       <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
                         <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
                         <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[p.metodo] ?? p.metodo}</td>
@@ -276,7 +280,7 @@ export default function CorteCajaPage() {
                   <tfoot>
                     <tr className="bg-steel-900">
                       <td colSpan={2} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
-                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(data.pagos_credito.total)}</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(pagosCredito.total)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -406,7 +410,8 @@ export default function CorteCajaPage() {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {!data && !loading && (
         <div className="bg-white rounded-xl border border-steel-200 py-16 text-center text-steel-400">
