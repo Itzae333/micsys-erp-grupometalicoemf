@@ -116,17 +116,15 @@ function runInstall() {
   }
 
   // --- Registrar tarea en Programador de Tareas ---
-  // Corre como el usuario interactivo actual (no SYSTEM): las impresoras
-  // USB suelen quedar registradas solo en la sesión del usuario que las
-  // instaló, y SYSTEM (Sesión 0) no tiene acceso a ellas.
+  // Corre como SYSTEM al arrancar Windows (sin depender de que un usuario
+  // específico inicie sesión). Requiere que la impresora esté instalada
+  // "para todos los usuarios" (compartida a nivel de máquina), si no,
+  // SYSTEM (Sesión 0) no tiene acceso a ella.
   console.log('⏳  Registrando tarea en Windows...');
-
-  const currentUser = `${process.env.USERDOMAIN ?? '.'}\\${process.env.USERNAME ?? ''}`;
 
   const ps1Script = [
     `$taskName = '${TASK_NAME}'`,
     `$exePath  = '${EXE_DEST.replace(/'/g, "''")}'`,
-    `$user     = '${currentUser.replace(/'/g, "''")}'`,
     '',
     // Mata cualquier instancia vieja (de una instalación anterior) que
     // pudiera seguir viva y bloqueando el puerto 7788.
@@ -136,9 +134,9 @@ function runInstall() {
     'Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null',
     '',
     "$action    = New-ScheduledTaskAction -Execute $exePath -Argument '--service'",
-    '$trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user',
+    '$trigger   = New-ScheduledTaskTrigger -AtStartup',
     '$settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 2) -MultipleInstances IgnoreNew',
-    "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest",
+    "$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
     '',
     'Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null',
     'Start-ScheduledTask -TaskName $taskName',
@@ -184,8 +182,9 @@ function runInstall() {
 
     if (!serviceUp) {
       console.warn('⚠️   El servicio no respondió en http://localhost:7788 todavía.');
-      console.warn('    Cierra sesión de Windows y vuelve a entrar (o reinicia la PC)');
-      console.warn('    para que la tarea programada arranque limpia.');
+      console.warn('    Verifica que la impresora esté instalada "para todos los usuarios"');
+      console.warn('    (compartida a nivel de máquina) — SYSTEM no ve impresoras que solo');
+      console.warn('    existen en el perfil de un usuario. Si no, reinicia la PC.');
       console.log('');
     }
   } catch (err) {

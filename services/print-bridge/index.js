@@ -70,7 +70,8 @@ app.use(cors({
     // Permite: sin origin (curl/Postman), localhost cualquier puerto, y Vercel
     if (!origin) return cb(null, true);
     const allowed = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-      || /\.vercel\.app$/.test(origin);
+      || /\.vercel\.app$/.test(origin)
+      || /\.cloudclusters\.net$/.test(origin);
     cb(null, allowed);
   },
   credentials: true,
@@ -161,6 +162,25 @@ function center(str) {
   return Buffer.from(' '.repeat(spaces) + s + '\n', 'latin1');
 }
 
+/** Centra texto largo en varias líneas (wrap por palabra) en vez de truncarlo */
+function wrapCenter(str) {
+  const w = config.columns;
+  const words = norm(str).split(' ').filter(Boolean);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? current + ' ' + word : word;
+    if (candidate.length > w) {
+      if (current) lines.push(current);
+      current = word.length > w ? word.substring(0, w) : word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return Buffer.concat(lines.map((line) => center(line)));
+}
+
 /** Línea de separación */
 function sep(char = '-') {
   return Buffer.from(char.repeat(config.columns) + '\n', 'latin1');
@@ -233,7 +253,7 @@ function pushHeader(ticket, push) {
   if (ticket.ubicacion?.regimen_fiscal) {
     push(center('Régimen Fiscal: ' + ticket.ubicacion.regimen_fiscal));
   }
-  if (ticket.ubicacion?.direccion) push(center(ticket.ubicacion.direccion));
+  if (ticket.ubicacion?.direccion) push(wrapCenter(ticket.ubicacion.direccion));
 }
 
 /**
@@ -370,7 +390,7 @@ function buildEscPosBuffer(ticket) {
       } else {
         mLabel = norm(n.pagos[0].metodo ?? '');
       }
-      push(dotRow(folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? ' ' + mLabel : '')));
+      push(dotRow(folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? '  ' + mLabel : '')));
     }
     push(sep('-'));
 
@@ -388,17 +408,56 @@ function buildEscPosBuffer(ticket) {
       push(CMD.BOLD_ON, dotRow('TOTAL ANTICIPOS', '$' + formatMoney(Number(ticket.anticipos_pedido.total ?? 0))), CMD.BOLD_OFF);
     }
 
-    // ── Totales por método ──────────────────────────────
+    // ── Pagos de crédito (abonos cobrados hoy de notas de días anteriores) ──
+    if (ticket.pagos_credito && ticket.pagos_credito.count > 0) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('PAGOS DE CREDITO'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const p of ticket.pagos_credito.detalle) {
+        const folioStr = 'N' + String(p.folio).padStart(5, '0');
+        push(dotRow(folioStr, '$' + formatMoney(Number(p.monto)) + '  ' + norm(p.metodo ?? '')));
+      }
+      push(sep('-'));
+      push(CMD.BOLD_ON, dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total ?? 0))), CMD.BOLD_OFF);
+    }
+
+    // ── Gastos del período ────────────────────────────────
+    if (ticket.gastos && ticket.gastos.length > 0) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('GASTOS'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const g of ticket.gastos) {
+        push(dotRow(norm(g.concepto ?? ''), '$' + formatMoney(Number(g.monto))));
+      }
+      push(sep('-'));
+      push(CMD.BOLD_ON, dotRow('TOTAL GASTOS', '$' + formatMoney(Number(ticket.total_gastos ?? 0))), CMD.BOLD_OFF);
+    }
+
+    // ── Totales ──────────────────────────────────────────
     push(sep('='));
-    let totalGeneral = 0;
+    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+    push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(Number(ticket.total_ventas ?? 0))));
+    push(CMD.NORMAL, CMD.BOLD_OFF);
+    push(sep('-'));
+
     for (const m of METODOS) {
       const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
-      totalGeneral += Number(res.total);
       push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
     }
-    push(sep('-'));
+
+    if (ticket.pagos_credito && Number(ticket.pagos_credito.total ?? 0) > 0) {
+      push(sep('-'));
+      push(dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total))));
+    }
+
+    if (Number(ticket.total_gastos ?? 0) > 0) {
+      push(sep('-'));
+      push(dotRow('TOTAL GASTOS', '-$' + formatMoney(Number(ticket.total_gastos))));
+    }
+
+    push(sep('='));
     push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(dotRow('TOTAL COBRADO', '$' + formatMoney(totalGeneral)));
+    push(dotRow('A ENTREGAR (EFECTIVO)', '$' + formatMoney(Number(ticket.total_entregar_efectivo ?? 0))));
     push(CMD.NORMAL, CMD.BOLD_OFF);
 
     push(sep('='));

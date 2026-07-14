@@ -824,7 +824,22 @@ export class VentasService {
       };
     }
 
-    const [notas, anticiposPedido, gastos] = await Promise.all([
+    // Pagos de crédito: abonos cobrados en el rango sobre notas creadas ANTES del rango
+    // (ver ClientesService.abonarCuenta, que crea estos Pago sobre la nota original).
+    const wherePagosCredito: Prisma.PagoWhereInput = {
+      nota: {
+        ubicacion_id: ubicacionId,
+        ...(desde ? { created_at: { lt: new Date(desde) } } : {}),
+      },
+    };
+    if (desde || hasta) {
+      wherePagosCredito.created_at = {
+        ...(desde ? { gte: new Date(desde) } : {}),
+        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+      };
+    }
+
+    const [notas, anticiposPedido, gastos, pagosCredito] = await Promise.all([
       this.prisma.notaVenta.findMany({
         where,
         orderBy: { created_at: 'asc' },
@@ -850,6 +865,11 @@ export class VentasService {
         orderBy: { created_at: 'asc' },
         include: { usuario: { select: { nombre: true, apellidos: true } } },
       }),
+      this.prisma.pago.findMany({
+        where: wherePagosCredito,
+        orderBy: { created_at: 'asc' },
+        include: { nota: { select: { folio: true } } },
+      }),
     ]);
 
     const metodos: Record<string, { count: number; total: number }> = {
@@ -861,6 +881,7 @@ export class VentasService {
 
     const porEstatus: Record<string, { count: number; total: number }> = {};
     let totalCobrado = 0;
+    let totalVentas = 0;
 
     for (const nota of notas) {
       const est = nota.estatus as string;
@@ -869,6 +890,7 @@ export class VentasService {
       porEstatus[est].total = +(porEstatus[est].total + Number(nota.total)).toFixed(2);
 
       const notaTotal = Number(nota.total);
+      totalVentas = +(totalVentas + notaTotal).toFixed(2);
 
       let nonCashSum = 0;
       for (const pago of nota.pagos) {
@@ -909,25 +931,63 @@ export class VentasService {
       totalAnticipos = +(totalAnticipos + monto).toFixed(2);
     }
 
+    // por_metodo queda como cobro bruto de ventas del día (sin gastos ni créditos mezclados).
     let totalGastos = 0;
+    let totalGastosEfectivo = 0;
     for (const g of gastos) {
-      const m = g.metodo_pago as string;
       const monto = Number(g.monto);
-      if (!metodos[m]) metodos[m] = { count: 0, total: 0 };
-      metodos[m].total = +(metodos[m].total - monto).toFixed(2);
       totalGastos = +(totalGastos + monto).toFixed(2);
+      if (g.metodo_pago === 'EFECTIVO') {
+        totalGastosEfectivo = +(totalGastosEfectivo + monto).toFixed(2);
+      }
     }
     const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
+
+    const metodoPagosCredito: Record<string, { count: number; total: number }> = {
+      EFECTIVO:     { count: 0, total: 0 },
+      TARJETA:      { count: 0, total: 0 },
+      TRANSFERENCIA:{ count: 0, total: 0 },
+      DEPOSITO:     { count: 0, total: 0 },
+    };
+    let totalPagosCredito = 0;
+    for (const pago of pagosCredito) {
+      const m = pago.metodo as string;
+      const monto = Number(pago.monto);
+      if (!metodoPagosCredito[m]) metodoPagosCredito[m] = { count: 0, total: 0 };
+      metodoPagosCredito[m].count++;
+      metodoPagosCredito[m].total = +(metodoPagosCredito[m].total + monto).toFixed(2);
+      totalPagosCredito = +(totalPagosCredito + monto).toFixed(2);
+    }
+
+    const totalEntregarEfectivo = +(
+      metodos['EFECTIVO'].total +
+      metodoPagosCredito['EFECTIVO'].total -
+      totalGastosEfectivo
+    ).toFixed(2);
 
     return {
       desde: desde ?? null,
       hasta: hasta ?? null,
       ubicacion_id: ubicacionId,
+      total_ventas: totalVentas,
       total_cobrado: totalCobrado,
       total_gastos: totalGastos,
+      total_gastos_efectivo: totalGastosEfectivo,
       total_neto: totalNeto,
+      total_entregar_efectivo: totalEntregarEfectivo,
       por_metodo: metodos,
       por_estatus: porEstatus,
+      pagos_credito: {
+        total: totalPagosCredito,
+        count: pagosCredito.length,
+        por_metodo: metodoPagosCredito,
+        detalle: pagosCredito.map((p) => ({
+          folio: p.nota.folio,
+          metodo: p.metodo,
+          monto: Number(p.monto),
+          fecha: p.created_at,
+        })),
+      },
       gastos: gastos.map((g) => ({
         id: g.id,
         concepto: g.concepto,

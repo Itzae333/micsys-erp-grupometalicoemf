@@ -27,14 +27,24 @@ interface GastoCorte {
   id: string; concepto: string; categoria: string; monto: number;
   metodo_pago: string; usuario: string; created_at: string;
 }
+interface PagoCreditoDetalle { folio: number; metodo: string; monto: number; fecha: string; }
+interface PagosCreditoResumen {
+  total: number; count: number;
+  por_metodo: Record<string, MetodoResumen>;
+  detalle: PagoCreditoDetalle[];
+}
 interface CorteCajaData {
   desde: string | null;
   hasta: string | null;
+  total_ventas: number;
   total_cobrado: number;
   total_gastos: number;
+  total_gastos_efectivo: number;
   total_neto: number;
+  total_entregar_efectivo: number;
   por_metodo: Record<string, MetodoResumen>;
   por_estatus: Record<string, EstatusResumen>;
+  pagos_credito: PagosCreditoResumen;
   notas: NotaCorte[];
   gastos: GastoCorte[];
 }
@@ -94,25 +104,40 @@ export default function CorteCajaPage() {
   const print = async () => {
     if (!data || !empresa) return;
     try {
-      const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+      // Se piden frescos (no el store persistido) para que logo/dirección/RFC reflejen
+      // cambios hechos después de la última selección de sucursal en este navegador.
+      const [empresaFresca, ubicacionFresca] = await Promise.all([
+        api.get<typeof empresa>(`/empresas/${empresa.id}`),
+        ubicacion ? api.get<typeof ubicacion>(`/empresas/${empresa.id}/ubicaciones/${ubicacion.id}`) : Promise.resolve(null),
+      ]);
+
+      const logoUrl = getTicketLogoUrl(empresaFresca, ubicacionFresca);
       const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+      if (logoUrl && !logo_escpos_b64) {
+        console.warn('[corte-caja] No se pudo rasterizar el logo para el ticket:', logoUrl);
+      }
+
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tipo: 'corte_caja',
           logo_escpos_b64,
-          empresa: { nombre: empresa.nombre },
-          ubicacion: ubicacion
-            ? { nombre: ubicacion.nombre, ...buildTicketUbicacionFiscal(ubicacion) }
+          empresa: { nombre: empresaFresca.nombre },
+          ubicacion: ubicacionFresca
+            ? { nombre: ubicacionFresca.nombre, ...buildTicketUbicacionFiscal(ubicacionFresca) }
             : null,
           desde: data.desde,
           hasta: data.hasta,
+          total_ventas: data.total_ventas,
           total_cobrado: data.total_cobrado,
           total_gastos: data.total_gastos,
+          total_gastos_efectivo: data.total_gastos_efectivo,
           total_neto: data.total_neto,
+          total_entregar_efectivo: data.total_entregar_efectivo,
           por_metodo: data.por_metodo,
           por_estatus: data.por_estatus,
+          pagos_credito: data.pagos_credito,
           notas: data.notas,
           gastos: data.gastos,
         }),
@@ -159,11 +184,11 @@ export default function CorteCajaPage() {
 
       {data && (
         <>
-          {/* Total cobrado / neto */}
+          {/* Total de ventas / cobrado / neto */}
           <div className="bg-steel-900 text-white rounded-xl p-5 flex items-center justify-between">
             <div>
-              <p className="text-steel-400 text-sm uppercase tracking-wide">Total cobrado</p>
-              <p className="text-3xl font-bold mt-1">{fmt(data.total_cobrado)}</p>
+              <p className="text-steel-400 text-sm uppercase tracking-wide">Total de ventas</p>
+              <p className="text-3xl font-bold mt-1">{fmt(data.total_ventas)}</p>
               <p className="text-steel-400 text-xs mt-1">
                 {data.notas.length} nota{data.notas.length !== 1 ? 's' : ''} ·{' '}
                 {desde === hasta ? desde : `${desde} → ${hasta}`}
@@ -176,13 +201,18 @@ export default function CorteCajaPage() {
                 </p>
               )}
             </div>
-            <Calculator className="h-10 w-10 text-steel-500" />
+            <div className="text-right">
+              <p className="text-steel-400 text-xs uppercase tracking-wide">Total a entregar</p>
+              <p className="text-2xl font-bold text-emerald-300">{fmt(data.total_entregar_efectivo)}</p>
+              <p className="text-steel-400 text-xs">en efectivo</p>
+            </div>
+            <Calculator className="h-10 w-10 text-steel-500 ml-4" />
           </div>
 
           {/* Por método de pago */}
           <div>
             <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
-              Por método de pago
+              Por método de pago <span className="normal-case text-steel-400">(sin incluir pagos de crédito)</span>
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {metodos.map((m) => {
@@ -218,6 +248,41 @@ export default function CorteCajaPage() {
               ))}
             </div>
           </div>
+
+          {/* Pagos de crédito (abonos de notas abiertas en días anteriores) */}
+          {data.pagos_credito.count > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
+                Pagos de crédito
+              </h2>
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-50 border-b border-steel-200">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.pagos_credito.detalle.map((p, i) => (
+                      <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[p.metodo] ?? p.metodo}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(p.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-steel-900">
+                      <td colSpan={2} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(data.pagos_credito.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Gastos del día */}
           {data.gastos.length > 0 && (
