@@ -8,7 +8,7 @@ import type { Gasto, MetodoPago } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-const CATEGORIAS = ['Limpieza', 'Servicios', 'Papelería', 'Mantenimiento', 'Otro'];
+const CATEGORIAS = ['Limpieza', 'Servicios', 'Papelería', 'Mantenimiento', 'Entrega de Efectivo', 'Otro'];
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
