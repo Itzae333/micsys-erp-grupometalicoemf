@@ -66,6 +66,10 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
     },
   ];
 
+  // El super usuario solo da de alta empresas/admins — es de solo lectura para
+  // todo lo demás (usuarios, inventario, migración, ticketera, auditoría, sistema).
+  const tabsVisibles = isSuperUsuario ? TABS.filter((t) => t.label === 'Mi Empresa') : TABS;
+
   // En la pantalla de columnas ocultamos la sub-nav (tiene su propio breadcrumb)
   const isColumnasPage = pathname.includes('/configuracion/columnas/');
 
@@ -74,7 +78,7 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
       {!isColumnasPage && (
         <div className="bg-white border-b border-steel-200 px-8">
           <nav className="flex gap-1 -mb-px">
-            {TABS.map((tab) => {
+            {tabsVisibles.map((tab) => {
               const isActive =
                 pathname === tab.matchPrefix ||
                 pathname.startsWith(`${tab.matchPrefix}/`);

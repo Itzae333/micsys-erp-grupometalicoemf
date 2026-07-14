@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { cn } from '@/lib/utils';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 const VENTAS_CHUNK = 5_000; // ventas por petición (no filas)
@@ -278,6 +279,7 @@ function CardMigracion({ tipo }: { tipo: TipoMigracion }) {
 }
 
 export default function MigracionPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const ubicacion = useContextoStore((s) => s.ubicacion);
 
   return (

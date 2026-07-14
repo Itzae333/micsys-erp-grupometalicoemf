@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { api } from '@/lib/api/client';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -16,6 +17,7 @@ type ResetResult = {
 };
 
 export default function SistemaPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const { accessToken } = useAuthStore();
   const [downloading, setDownloading] = useState(false);
   const [backupError, setBackupError] = useState<string | null>(null);

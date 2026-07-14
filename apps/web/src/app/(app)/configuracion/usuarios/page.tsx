@@ -14,6 +14,7 @@ import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { formatFechaCorta } from '@/lib/utils';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 const ROL_LABELS: Record<RolUsuario, string> = {
   SUPER_USUARIO: 'Super Usuario',
@@ -74,6 +75,7 @@ type UsuarioForm = z.infer<typeof UsuarioSchema>;
 type ResetForm = z.infer<typeof ResetPasswordSchema>;
 
 export default function UsuariosPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const { usuario: me } = useAuthStore();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);

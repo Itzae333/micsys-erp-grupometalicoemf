@@ -1102,10 +1102,12 @@ export default function VentasPage() {
             <h1 className="text-display-md font-bold text-steel-900">Notas de Venta</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="secondary" onClick={() => router.push('/ventas/clientes')}>
-              <Users className="h-4 w-4 mr-1.5" />
-              Clientes
-            </Button>
+            {usuario?.rol !== 'SUPER_USUARIO' && (
+              <Button variant="secondary" onClick={() => router.push('/ventas/clientes')}>
+                <Users className="h-4 w-4 mr-1.5" />
+                Clientes
+              </Button>
+            )}
             {canWrite && (
               <>
                 <Button variant="secondary" onClick={() => openDlgNota('cotizacion')}>

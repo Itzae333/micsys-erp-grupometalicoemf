@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'cargada' }> = {
@@ -52,6 +53,7 @@ function AutoCrearPedido({ empresa, onCrear }: { empresa: { id: string } | null;
 }
 
 export default function PedidosPage() {
+  useBlockRoles(['SUPER_USUARIO']);
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 

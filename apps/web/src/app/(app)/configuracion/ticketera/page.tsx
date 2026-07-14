@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Printer, CheckCircle2, XCircle, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 const LS_KEY = 'print_bridge_config';
 
@@ -36,6 +37,7 @@ function loadConfig(): PrintConfig {
 }
 
 export default function TicketeraConfigPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const [cfg, setCfg] = useState<PrintConfig>(DEFAULT_CONFIG);
   const [saved, setSaved] = useState(false);
   const [pingStatus, setPingStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');

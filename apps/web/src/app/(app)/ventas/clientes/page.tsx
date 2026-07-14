@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import type { Cliente, ConfigColumnasSchema, CuentaClienteDetalle, AbonarCuentaResult } from '@/lib/types/api';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL_MAP: Record<string, string> = {
@@ -37,6 +38,7 @@ const ClienteSchema = z.object({
 type ClienteForm = z.infer<typeof ClienteSchema>;
 
 export default function ClientesVentasPage() {
+  useBlockRoles(['SUPER_USUARIO']);
   const router = useRouter();
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
@@ -64,8 +66,8 @@ export default function ClientesVentasPage() {
   const [abonarError, setAbonarError] = useState<string | null>(null);
   const [abonarResult, setAbonarResult] = useState<AbonarCuentaResult | null>(null);
 
-  const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
-  const canEdit = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
+  const canEdit = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canVender = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
 
   const {

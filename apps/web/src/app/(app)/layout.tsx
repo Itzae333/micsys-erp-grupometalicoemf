@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/layout/Sidebar';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { ContextGuard } from '@/components/layout/ContextGuard';
+import { ContextKeyedMain } from '@/components/layout/ContextKeyedMain';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,9 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <OfflineBanner />
           {/* Spacer for mobile hamburger button */}
           <div className="h-12 flex-shrink-0 md:hidden" />
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
+          <ContextKeyedMain>{children}</ContextKeyedMain>
         </div>
       </div>
     </ContextGuard>

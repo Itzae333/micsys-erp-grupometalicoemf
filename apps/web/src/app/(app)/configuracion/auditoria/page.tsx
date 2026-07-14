@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 interface AuditLog {
   id: string;
@@ -41,6 +42,7 @@ function fmtFecha(iso: string) {
 }
 
 export default function AuditoriaPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const { usuario } = useAuthStore();
   const [logs, setLogs]       = useState<AuditLog[]>([]);
   const [total, setTotal]     = useState(0);

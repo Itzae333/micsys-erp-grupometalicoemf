@@ -9,6 +9,7 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 interface RemisionLinea {
   id: string;
@@ -32,6 +33,7 @@ interface Remision {
 }
 
 function RecibirContent() {
+  useBlockRoles(['SUPER_USUARIO']);
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { empresa }  = useContextoStore();

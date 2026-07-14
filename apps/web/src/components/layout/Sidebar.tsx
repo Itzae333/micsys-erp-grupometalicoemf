@@ -60,7 +60,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/pedidos',
     label: 'Pedidos',
     icon: <ClipboardList className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
   },
   {
     href: '/inventario',
@@ -78,13 +78,13 @@ const NAV_ITEMS: NavItem[] = [
     href: '/movimientos/remisiones',
     label: 'Remisiones',
     icon: <Truck className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'],
+    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA'],
   },
   {
     href: '/movimientos/recibir',
     label: 'Recibir',
     icon: <PackageCheck className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'],
+    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA'],
   },
   {
     href: '/ventas/clientes',

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 interface Articulo {
   id: string;
@@ -37,6 +38,7 @@ interface LineaCarrito {
 }
 
 export default function NuevaRemisionPage() {
+  useBlockRoles(['SUPER_USUARIO']);
   const router = useRouter();
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();

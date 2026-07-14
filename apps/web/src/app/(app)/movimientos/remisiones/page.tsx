@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -66,6 +67,7 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function RemisionesPage() {
+  useBlockRoles(['SUPER_USUARIO']);
   const router = useRouter();
   const { usuario } = useAuthStore();
   const { empresa }  = useContextoStore();

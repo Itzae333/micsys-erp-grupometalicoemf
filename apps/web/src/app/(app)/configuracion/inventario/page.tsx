@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import type { Ubicacion, ConfigColumna } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 interface ColsSummary {
   precios: number;
@@ -28,6 +29,7 @@ const TIPO_LABELS: Record<string, string> = {
 };
 
 export default function InventarioConfigPage() {
+  useBlockRoles(['SUPER_USUARIO'], '/configuracion');
   const router = useRouter();
   const { usuario } = useAuthStore();
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);

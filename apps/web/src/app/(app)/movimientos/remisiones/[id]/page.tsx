@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -75,6 +76,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'htt
 const APP_URL  = typeof window !== 'undefined' ? window.location.origin : '';
 
 export default function RemisionDetallePage({ params }: { params: { id: string } }) {
+  useBlockRoles(['SUPER_USUARIO']);
   const router    = useRouter();
   const { usuario } = useAuthStore();
   const { empresa }  = useContextoStore();
