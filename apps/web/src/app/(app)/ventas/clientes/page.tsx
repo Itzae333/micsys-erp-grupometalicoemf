@@ -290,35 +290,37 @@ export default function ClientesVentasPage() {
           {clientesPagina.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-center gap-3 px-4 py-3.5 bg-white border border-steel-200 rounded-xl hover:border-steel-300 transition-colors"
+              className="flex flex-col gap-3 px-4 py-3.5 bg-white border border-steel-200 rounded-xl hover:border-steel-300 transition-colors"
             >
-              <div className="w-9 h-9 rounded-full bg-steel-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-steel-600 font-bold text-body-sm">{c.nombre.charAt(0).toUpperCase()}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-body font-semibold text-steel-900 truncate">
-                  {c.razon_social || `${c.nombre} ${c.apellidos ?? ''}`.trim()}
-                </p>
-                <p className="text-body-sm text-steel-500 truncate">
-                  {[c.rfc, c.telefono].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {c.precio_num && (
-                    <span className="text-meta text-brand-600 font-medium">
-                      {precioLabel(c.precio_num)}
-                    </span>
-                  )}
-                  {c.limite_credito > 0 && (
-                    <span className="text-meta text-steel-400">
-                      límite {formatPrecio(c.limite_credito)}
-                      {c.saldo_pendiente > 0 && (
-                        <span className="text-brand-600"> · saldo {formatPrecio(c.saldo_pendiente)}</span>
-                      )}
-                    </span>
-                  )}
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-steel-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-steel-600 font-bold text-body-sm">{c.nombre.charAt(0).toUpperCase()}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-body font-semibold text-steel-900 truncate">
+                    {c.razon_social || `${c.nombre} ${c.apellidos ?? ''}`.trim()}
+                  </p>
+                  <p className="text-body-sm text-steel-500 truncate">
+                    {[c.rfc, c.telefono].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {c.precio_num && (
+                      <span className="text-meta text-brand-600 font-medium">
+                        {precioLabel(c.precio_num)}
+                      </span>
+                    )}
+                    {c.limite_credito > 0 && (
+                      <span className="text-meta text-steel-400">
+                        límite {formatPrecio(c.limite_credito)}
+                        {c.saldo_pendiente > 0 && (
+                          <span className="text-brand-600"> · saldo {formatPrecio(c.saldo_pendiente)}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 {(c.saldo_pendiente > 0 || c.limite_credito > 0) && (
                   <button
                     onClick={() => void openCuenta(c)}

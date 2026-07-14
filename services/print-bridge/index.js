@@ -589,6 +589,9 @@ function buildEscPosBuffer(ticket) {
 
   // ── Forma de pago ──────────────────────────────────────
   if (ticket.tipo_cierre === 'CREDITO') {
+    if (ticket.saldo_anterior != null) {
+      push(row('SALDO ANTERIOR', '$' + formatMoney(Number(ticket.saldo_anterior))));
+    }
     const pagosAbono = (ticket.pagos ?? []).filter((p) => Number(p.monto) > 0);
     if (pagosAbono.length > 0) {
       push(ln('ABONO:'));

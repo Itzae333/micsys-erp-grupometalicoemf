@@ -114,6 +114,10 @@ export default function VentasPage() {
     pagos: { metodo: string; monto: number; referencia: string }[];
     cambio: number;
     printStatus?: 'printing' | 'ok' | 'error';
+    // true cuando este comprobante viene de "Abonar" a una nota ya cerrada —
+    // el ticket no debe repetir el detalle de productos, solo el abono.
+    esAbono?: boolean;
+    saldoAnterior?: number;
   } | null>(null);
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
@@ -552,9 +556,11 @@ export default function VentasPage() {
     pagosList: { metodo: string; monto: number; referencia: string }[],
     cambioFinal: number,
     copias = 1,
+    opts?: { soloAbono?: boolean; saldoAnterior?: number },
   ): Promise<boolean> {
     const totalPagadoNota = (nota.pagos ?? []).reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoNota).toFixed(2));
+    const soloAbono = opts?.soloAbono ?? false;
 
     const logoUrl = getTicketLogoUrl(empresa, ubicacion);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
@@ -577,7 +583,9 @@ export default function VentasPage() {
           ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
           : null,
       },
-      lineas: nota.lineas.map((l) => ({
+      // En un abono a una nota ya cerrada no se repite el detalle de productos
+      // — solo interesa el saldo anterior, el abono y lo que queda.
+      lineas: soloAbono ? [] : nota.lineas.map((l) => ({
         clave: l.clave,
         descripcion: [
           l.articulo?.descripcion_1, l.articulo?.descripcion_2,
@@ -587,6 +595,7 @@ export default function VentasPage() {
         precio: l.precio_unitario,
         subtotal: l.subtotal,
       })),
+      saldo_anterior: opts?.saldoAnterior ?? null,
       totales: { subtotal: nota.subtotal, total: nota.total },
       pagos: pagosList
         .filter((p) => p.monto > 0)
@@ -656,6 +665,8 @@ export default function VentasPage() {
     setAbonando(true);
     setAbonandoError(null);
     try {
+      const pagadoAntes = (dlgAbonar.pagos ?? []).reduce((s, p) => s + p.monto, 0);
+      const saldoAntes = Math.max(0, +(dlgAbonar.total - pagadoAntes).toFixed(2));
       const pagosSnap = pagosAbono.filter((p) => p.monto > 0);
       const notaActualizada = await api.post<NotaVenta>(`/ventas/${dlgAbonar.id}/abonar`, {
         pagos: pagosSnap.map((p) => ({
@@ -673,6 +684,8 @@ export default function VentasPage() {
         tipoCierre: notaActualizada.estatus, // 'PAGADA' o 'CREDITO'
         pagos: pagosSnap,
         cambio: 0,
+        esAbono: true,
+        saldoAnterior: saldoAntes,
       });
     } catch (err) {
       setAbonandoError(err instanceof Error ? err.message : 'Error al registrar abono');
@@ -2142,7 +2155,14 @@ export default function VentasPage() {
                 variant="secondary"
                 className="justify-start"
                 onClick={() => {
-                  void printTicket(postCobro.nota, postCobro.tipoCierre as 'PAGADA' | 'CREDITO' | 'PENDIENTE', postCobro.pagos, postCobro.cambio);
+                  void printTicket(
+                    postCobro.nota,
+                    postCobro.tipoCierre as 'PAGADA' | 'CREDITO' | 'PENDIENTE',
+                    postCobro.pagos,
+                    postCobro.cambio,
+                    1,
+                    { soloAbono: postCobro.esAbono, saldoAnterior: postCobro.saldoAnterior },
+                  );
                   setPostCobro(null);
                 }}
               >
