@@ -1183,7 +1183,8 @@ export default function NotaDetallePage() {
                     {i === 0 && <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Monto</label>}
                     <Input
                       type="number" step="0.01" min="0"
-                      value={pago.monto}
+                      value={pago.monto === 0 ? '' : pago.monto}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => { const n = [...pagos]; n[i] = { ...n[i], monto: parseFloat(e.target.value) || 0 }; setPagos(n); }}
                     />
                   </div>
