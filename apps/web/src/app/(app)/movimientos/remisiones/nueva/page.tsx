@@ -26,8 +26,6 @@ interface LineaCarrito {
   slot_destino: number;
 }
 
-const SLOTS = [1, 2, 3, 4, 5];
-
 function descripcionCompleta(art: Articulo): string {
   return [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
     .filter(Boolean).join(' · ');
@@ -318,8 +316,6 @@ export default function NuevaRemisionPage() {
                 <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
                   <tr>
                     <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
-                    <th className="text-center px-2 py-2.5 font-medium text-steel-600 w-24">Slot org.</th>
-                    <th className="text-center px-2 py-2.5 font-medium text-steel-600 w-24">Slot dest.</th>
                     <th className="text-right px-2 py-2.5 font-medium text-steel-600 w-20">Cant</th>
                     <th className="px-2 py-2.5 w-8" />
                   </tr>
@@ -330,24 +326,6 @@ export default function NuevaRemisionPage() {
                       <td className="px-4 py-2.5 min-w-0">
                         <p className="font-semibold text-steel-900 leading-tight break-words">{descripcionCompleta(l.articulo) || l.articulo.clave}</p>
                         <p className="text-meta text-steel-400">{l.articulo.clave}</p>
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <select
-                          value={l.slot_origen}
-                          onChange={(e) => updateLinea(idx, { slot_origen: Number(e.target.value) })}
-                          className="border border-steel-300 rounded px-1.5 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        >
-                          {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <select
-                          value={l.slot_destino}
-                          onChange={(e) => updateLinea(idx, { slot_destino: Number(e.target.value) })}
-                          className="border border-steel-300 rounded px-1.5 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        >
-                          {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
                       </td>
                       <td className="px-2 py-2.5 text-right">
                         <input
