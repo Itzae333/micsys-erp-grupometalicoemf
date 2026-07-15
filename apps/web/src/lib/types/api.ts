@@ -204,6 +204,8 @@ export interface NotaVenta {
   descuento: number;
   total: number;
   es_credito: boolean;
+  /** Cargo de crédito aún no revertido de esta misma nota (solo > 0 cuando estatus es REABIERTA y ya estaba a crédito). */
+  credito_previo: number;
   fecha_vencimiento: string | null;
   observaciones: string | null;
   motivo_cancelacion: string | null;

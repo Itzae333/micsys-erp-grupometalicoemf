@@ -88,7 +88,21 @@ export class VentasService {
 
   async findOne(id: string, ubicacionId: string) {
     const nota = await this.findOneRaw(id, ubicacionId);
-    return this.serializeNota(nota);
+
+    // Si la nota fue reabierta para edición y ya estaba a crédito, el cargo
+    // previo en la cuenta del cliente todavía no se revierte (eso solo pasa
+    // al volver a cerrarla, ver `cerrar()`). Se expone aquí para que el
+    // frontend pueda validar el límite de crédito sin contar ese cargo dos veces.
+    let creditoPrevio = 0;
+    if (nota.estatus === 'REABIERTA' && nota.es_credito && nota.cliente_id) {
+      const cargoPrevio = await this.prisma.movimientoCuenta.aggregate({
+        where: { nota_id: id, tipo: 'CARGO' },
+        _sum: { monto: true },
+      });
+      creditoPrevio = Number(cargoPrevio._sum.monto ?? 0);
+    }
+
+    return this.serializeNota(nota, creditoPrevio);
   }
 
   // ─── Crear nota ───────────────────────────────────────────────
@@ -463,12 +477,13 @@ export class VentasService {
     });
   }
 
-  private serializeNota(nota: NotaRaw) {
+  private serializeNota(nota: NotaRaw, creditoPrevio = 0) {
     return {
       ...nota,
       subtotal: Number(nota.subtotal),
       descuento: Number(nota.descuento),
       total: Number(nota.total),
+      credito_previo: creditoPrevio,
       cliente: nota.cliente ? {
         ...nota.cliente,
         limite_credito: Number((nota.cliente as any).limite_credito ?? 0),

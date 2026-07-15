@@ -46,15 +46,23 @@ function normalizeSucursal(raw: string | undefined): string {
 
 // Corrige mojibake (UTF-8 bytes almacenados como Latin-1: "AraÃ±a" → "Araña")
 // y descarta strings vacíos o el literal "null" que vienen del CSV legacy.
+// Solo reinterpreta el string cuando trae el patrón típico de mojibake
+// ("Ã"/"Â" seguido de otro carácter) y el resultado es UTF-8 válido —
+// aplicarlo a un string ya bien codificado (ej. "Araña" normal) rompe
+// la ñ/acentos en vez de arreglarlos.
 function cleanStr(val: string | undefined): string | null {
   if (!val) return null;
   const s = val.trim();
   if (!s || s.toLowerCase() === 'null') return null;
-  try {
-    return Buffer.from(s, 'latin1').toString('utf8');
-  } catch {
-    return s;
+  if (/[ÃÂ]./.test(s)) {
+    try {
+      const fixed = Buffer.from(s, 'latin1').toString('utf8');
+      if (!fixed.includes('�')) return fixed;
+    } catch {
+      // se queda con el original
+    }
   }
+  return s;
 }
 
 @Injectable()

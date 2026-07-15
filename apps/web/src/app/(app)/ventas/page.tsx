@@ -816,11 +816,17 @@ export default function VentasPage() {
     : 0;
 
   // Validación límite de crédito
+  // Si la nota fue reabierta y ya estaba a crédito, su cargo previo todavía
+  // sigue sumado a saldo_pendiente (se revierte hasta que se vuelva a cerrar,
+  // ver backend `cerrar()`) — hay que descontarlo aquí para no contarlo dos veces.
   const clienteCredito = notaActiva?.cliente;
+  const saldoPendienteEfectivo = clienteCredito
+    ? Math.max(0, clienteCredito.saldo_pendiente - (notaActiva?.credito_previo ?? 0))
+    : 0;
   const excedeLimite = !!clienteCredito && clienteCredito.limite_credito > 0
     && (checkCredito
-      ? clienteCredito.saldo_pendiente + notaActiva!.total > clienteCredito.limite_credito
-      : saldoCredito > 0 && clienteCredito.saldo_pendiente + saldoCredito > clienteCredito.limite_credito);
+      ? saldoPendienteEfectivo + notaActiva!.total > clienteCredito.limite_credito
+      : saldoCredito > 0 && saldoPendienteEfectivo + saldoCredito > clienteCredito.limite_credito);
 
   const puedeConfirmar = notaActiva && !excedeLimite && (
     checkNotaPorPagar
@@ -1937,7 +1943,7 @@ export default function VentasPage() {
             {excedeLimite && (
               <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
                 <p className="text-body-sm text-brand-600">
-                  Excede el límite de crédito. Saldo actual: {formatPrecio(clienteCredito!.saldo_pendiente)} · Límite: {formatPrecio(clienteCredito!.limite_credito)}
+                  Excede el límite de crédito. Saldo actual: {formatPrecio(saldoPendienteEfectivo)} · Límite: {formatPrecio(clienteCredito!.limite_credito)}
                 </p>
               </div>
             )}
