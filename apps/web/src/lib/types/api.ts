@@ -219,6 +219,7 @@ export interface NotaVenta {
 }
 
 export const MOTIVOS_CANCELACION: { value: string; label: string }[] = [
+  { value: 'SOLO_CONSULTA_PRECIO', label: 'Cliente solo consultó precio, no confirmó' },
   { value: 'CLIENTE_DESISTIO', label: 'El cliente desistió de la compra' },
   { value: 'ERROR_CAPTURA', label: 'Error de captura' },
   { value: 'PRODUCTO_NO_DISPONIBLE', label: 'Producto no disponible' },

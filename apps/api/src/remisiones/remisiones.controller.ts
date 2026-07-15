@@ -35,7 +35,8 @@ export class RemisionesController {
   @ApiQuery({ name: 'page',    required: false })
   @ApiQuery({ name: 'limit',   required: false })
   listar(
-    @Headers('x-empresa-id') empresaId: string,
+    @Headers('x-empresa-id')   empresaId: string,
+    @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('tipo')    tipo?:    string,
     @Query('estatus') estatus?: string,
     @Query('page')    page?:    string,
@@ -46,6 +47,7 @@ export class RemisionesController {
       (tipo as any) ?? 'todas',
       {
         estatus,
+        ubicacionId,
         page:  page  ? Number(page)                 : 1,
         limit: limit ? Math.min(Number(limit), 100) : 50,
       },

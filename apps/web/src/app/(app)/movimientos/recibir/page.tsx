@@ -2,12 +2,13 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, PackageCheck, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, PackageCheck, ArrowRight, CheckCircle2, AlertCircle, Inbox, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
@@ -32,6 +33,17 @@ interface Remision {
   lineas: RemisionLinea[];
 }
 
+interface RemisionPendiente {
+  id: string;
+  folio: string;
+  concepto: string | null;
+  created_at: string;
+  fecha_envio: string | null;
+  empresa_origen: { nombre: string };
+  ub_origen:      { nombre: string };
+  lineas: { id: string }[];
+}
+
 function RecibirContent() {
   useBlockRoles(['SUPER_USUARIO']);
   const router       = useRouter();
@@ -47,12 +59,31 @@ function RecibirContent() {
   const [error, setError]         = useState<string | null>(null);
   const [done, setDone]           = useState(false);
 
-  // Auto-buscar si viene folio en query param
+  // Inbox de remisiones pendientes dirigidas a esta ubicación
+  const [pendientes, setPendientes]             = useState<RemisionPendiente[] | null>(null);
+  const [loadingPendientes, setLoadingPendientes] = useState(false);
+  const [showBusquedaManual, setShowBusquedaManual] = useState(false);
+
+  async function cargarPendientes() {
+    setLoadingPendientes(true);
+    try {
+      const res = await api.get<{ data: RemisionPendiente[] }>('/remisiones?tipo=entrada&estatus=EN_TRANSITO&limit=50');
+      setPendientes(res.data);
+    } catch {
+      setPendientes([]);
+    } finally {
+      setLoadingPendientes(false);
+    }
+  }
+
+  // Auto-buscar si viene folio en query param; si no, cargar inbox de pendientes
   useEffect(() => {
     const f = searchParams.get('folio');
     if (f) {
       setFolio(f);
       void buscar(f);
+    } else {
+      void cargarPendientes();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -121,6 +152,7 @@ function RecibirContent() {
             setDone(false);
             setRem(null);
             setFolio('');
+            void cargarPendientes();
           }}>
             Nueva recepción
           </Button>
@@ -134,10 +166,68 @@ function RecibirContent() {
       {/* Header */}
       <div>
         <h1 className="text-display-sm font-bold text-steel-900">Recibir remisión</h1>
-        <p className="text-body-sm text-steel-500 mt-0.5">Ingresa el folio o escanea el QR de la remisión</p>
+        <p className="text-body-sm text-steel-500 mt-0.5">Selecciona una remisión pendiente o escanea el QR</p>
       </div>
 
-      {/* Búsqueda */}
+      {/* Inbox de remisiones pendientes */}
+      {!rem && (
+        <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-steel-100 bg-steel-50 flex items-center gap-2">
+            <Inbox className="h-4 w-4 text-steel-500" />
+            <p className="text-body-sm font-medium text-steel-700">Pendientes de recibir en esta ubicación</p>
+          </div>
+          {loadingPendientes ? (
+            <div className="py-10 text-center text-steel-400 text-body-sm">Cargando…</div>
+          ) : !pendientes?.length ? (
+            <EmptyState
+              icon={<Inbox className="h-8 w-8" />}
+              title="Sin remisiones pendientes"
+              description="No hay remisiones en tránsito hacia esta ubicación."
+            />
+          ) : (
+            <div className="divide-y divide-steel-100">
+              {pendientes.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => { setFolio(p.folio); void buscar(p.folio); }}
+                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-steel-50 text-left transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-medium text-brand-600">{p.folio}</span>
+                      <span className="text-meta text-steel-400">
+                        {p.lineas.length} {p.lineas.length === 1 ? 'artículo' : 'artículos'}
+                      </span>
+                    </div>
+                    <p className="text-meta text-steel-500 truncate">
+                      Desde {p.empresa_origen.nombre} · {p.ub_origen.nombre}
+                      {p.concepto ? ` — ${p.concepto}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-meta text-steel-400 flex-shrink-0">
+                    {p.fecha_envio
+                      ? new Date(p.fecha_envio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : ''}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-steel-300 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Búsqueda manual / QR */}
+      {!rem && (
+        <button
+          onClick={() => setShowBusquedaManual((v) => !v)}
+          className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-steel-800 transition-colors"
+        >
+          {showBusquedaManual ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          Buscar por folio manualmente
+        </button>
+      )}
+      {(rem || showBusquedaManual) && (
       <div className="bg-white border border-steel-200 rounded-xl p-5 space-y-3">
         <label className="text-body-sm font-medium text-steel-700">Folio de remisión</label>
         <div className="flex gap-2">
@@ -157,6 +247,7 @@ function RecibirContent() {
           <p className="text-body-sm text-red-600">No se encontró ninguna remisión con ese folio.</p>
         )}
       </div>
+      )}
 
       {/* Detalle remisión */}
       {rem && (

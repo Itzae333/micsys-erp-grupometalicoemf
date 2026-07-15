@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,8 +10,11 @@ import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import type { NotasVentaPage, NotaVenta, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema } from '@/lib/types/api';
+import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +76,13 @@ export default function VentasPage() {
   const [creatingNota, setCreatingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
   const [modoCreacion, setModoCreacion] = useState<'venta' | 'cotizacion'>('venta');
+
+  // Dialog descartar cotización
+  const [dlgDescartar, setDlgDescartar] = useState(false);
+  const [descartando, setDescartando] = useState(false);
+  const [motivoDescarte, setMotivoDescarte] = useState('');
+  const [comentarioDescarte, setComentarioDescarte] = useState('');
+  const [descartarError, setDescartarError] = useState<string | null>(null);
 
   // Dialog agregar línea
   const [notaActiva, setNotaActiva] = useState<NotaVenta | null>(null);
@@ -526,6 +536,42 @@ export default function VentasPage() {
     } catch {}
   }
 
+  // ── Descartar cotización (cancelación conservando folio) ──
+  function openDescartarCotizacion() {
+    setMotivoDescarte('SOLO_CONSULTA_PRECIO');
+    setComentarioDescarte('');
+    setDescartarError(null);
+    setDlgDescartar(true);
+  }
+
+  async function onDescartarCotizacion() {
+    if (!notaActiva) return;
+    if (!motivoDescarte) {
+      setDescartarError('Selecciona un motivo');
+      return;
+    }
+    if (motivoDescarte === 'OTRO' && !comentarioDescarte.trim()) {
+      setDescartarError('Especifica el comentario para el motivo "Otro"');
+      return;
+    }
+    setDescartando(true);
+    setDescartarError(null);
+    try {
+      await api.patch(`/ventas/${notaActiva.id}/cancelar`, {
+        motivo: motivoDescarte,
+        comentario: comentarioDescarte.trim() || undefined,
+      });
+      setDlgDescartar(false);
+      setDlgLinea(false);
+      setNotaActiva(null);
+      loadNotas();
+    } catch (err) {
+      setDescartarError(err instanceof Error ? err.message : 'Error al descartar');
+    } finally {
+      setDescartando(false);
+    }
+  }
+
   // ── Abrir nota/cotización para editar ─────────────────────
   async function openEditarNota(nota: NotaVenta) {
     setLineaError(null);
@@ -877,6 +923,12 @@ export default function VentasPage() {
                   </Button>
                 </>
               )}
+              {esCotizacionActiva && canWrite && (
+                <Button variant="ghost" size="sm" onClick={openDescartarCotizacion}>
+                  <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
+                  Descartar
+                </Button>
+              )}
               {!esCotizacionActiva && notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
                   Cobrar — {formatPrecio(notaActiva.total)}
@@ -1098,7 +1150,7 @@ export default function VentasPage() {
                   </div>
                 )}
                 {esCotizacionActiva && notaActiva.lineas.length > 0 && (
-                  <div className="px-4 pb-4 flex gap-2">
+                  <div className="px-4 pb-2 flex gap-2">
                     <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>
                       PDF
                     </Button>
@@ -1107,6 +1159,14 @@ export default function VentasPage() {
                       onClick={() => void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
                     >
                       Convertir
+                    </Button>
+                  </div>
+                )}
+                {esCotizacionActiva && canWrite && (
+                  <div className="px-4 pb-4">
+                    <Button variant="ghost" className="w-full" onClick={openDescartarCotizacion}>
+                      <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
+                      Descartar cotización
                     </Button>
                   </div>
                 )}
@@ -1532,6 +1592,47 @@ export default function VentasPage() {
         </form>
       </Dialog>
 
+      {/* ── Dialog: descartar cotización ─────────────────── */}
+      <Dialog
+        open={dlgDescartar}
+        onClose={() => setDlgDescartar(false)}
+        title="¿Descartar cotización?"
+        size="sm"
+      >
+        <p className="text-body text-steel-600 mb-4">
+          {notaActiva && `La cotización #${String(notaActiva.folio).padStart(4, '0')} `}
+          quedará marcada como cancelada — el folio se conserva, no se borra el registro.
+        </p>
+        <div className="mb-3">
+          <label className="block text-body-sm font-medium text-steel-700 mb-1">Motivo</label>
+          <Select
+            value={motivoDescarte}
+            onChange={(e) => setMotivoDescarte(e.target.value)}
+            placeholder="Selecciona un motivo"
+          >
+            {MOTIVOS_CANCELACION.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </Select>
+        </div>
+        {motivoDescarte === 'OTRO' && (
+          <div className="mb-3">
+            <label className="block text-body-sm font-medium text-steel-700 mb-1">Comentario</label>
+            <Textarea
+              value={comentarioDescarte}
+              onChange={(e) => setComentarioDescarte(e.target.value)}
+              placeholder="Especifica el motivo"
+            />
+          </div>
+        )}
+        {descartarError && <p className="text-body-sm text-brand-600 mb-3">{descartarError}</p>}
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => setDlgDescartar(false)}>No, mantener</Button>
+          <Button type="button" variant="destructive" loading={descartando} onClick={onDescartarCotizacion}>
+            Sí, descartar
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {/* ── Dialog: cobrar ────────────────────────────────── */}
       <Dialog

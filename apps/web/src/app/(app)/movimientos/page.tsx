@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  PackagePlus, PackageMinus, ArrowLeftRight,
+  PackagePlus, PackageMinus,
   SlidersHorizontal, Package, Search,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
@@ -159,16 +159,11 @@ export default function MovimientosPage() {
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
 
   // Diálogos
-  const [dlgEntrada, setDlgEntrada] = useState(false);
-  const [dlgSalida,  setDlgSalida]  = useState(false);
-  const [dlgTransf,  setDlgTransf]  = useState(false);
   const [dlgAjuste,  setDlgAjuste]  = useState(false);
 
   // Estado compartido de formularios
   const [artSel,    setArtSel]    = useState<Articulo | null>(null);
   const [slot,      setSlot]      = useState(1);
-  const [slotDst,   setSlotDst]   = useState(2);
-  const [cantidad,  setCantidad]  = useState('');
   const [cantNueva, setCantNueva] = useState('');
   const [concepto,  setConcepto]  = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -211,65 +206,11 @@ export default function MovimientosPage() {
   }
 
   function resetForm() {
-    setArtSel(null); setSlot(slots[0]?.numero ?? 1); setSlotDst(slots[1]?.numero ?? 2);
-    setCantidad(''); setCantNueva(''); setConcepto(''); setFormError(null);
+    setArtSel(null); setSlot(slots[0]?.numero ?? 1);
+    setCantNueva(''); setConcepto(''); setFormError(null);
   }
 
   // ── Handlers ─────────────────────────────────────────────────
-
-  async function handleEntrada() {
-    if (!artSel) { setFormError('Selecciona un artículo'); return; }
-    const cant = parseFloat(cantidad);
-    if (!cant || cant <= 0) { setFormError('Cantidad inválida'); return; }
-    setSaving(true); setFormError(null);
-    try {
-      await api.post('/movimientos/entrada', {
-        articulo_id:   artSel.id,
-        existencia_num: slot,
-        cantidad:      cant,
-        concepto:      concepto || undefined,
-      });
-      setDlgEntrada(false); resetForm(); load();
-    } catch (e) { setFormError(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
-  }
-
-  async function handleSalida() {
-    if (!artSel) { setFormError('Selecciona un artículo'); return; }
-    const cant = parseFloat(cantidad);
-    if (!cant || cant <= 0) { setFormError('Cantidad inválida'); return; }
-    if (!concepto.trim()) { setFormError('El concepto es obligatorio'); return; }
-    setSaving(true); setFormError(null);
-    try {
-      await api.post('/movimientos/salida', {
-        articulo_id:    artSel.id,
-        existencia_num: slot,
-        cantidad:       cant,
-        concepto,
-      });
-      setDlgSalida(false); resetForm(); load();
-    } catch (e) { setFormError(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
-  }
-
-  async function handleTransf() {
-    if (!artSel) { setFormError('Selecciona un artículo'); return; }
-    const cant = parseFloat(cantidad);
-    if (!cant || cant <= 0) { setFormError('Cantidad inválida'); return; }
-    if (slot === slotDst) { setFormError('El slot de origen y destino deben ser diferentes'); return; }
-    setSaving(true); setFormError(null);
-    try {
-      await api.post('/movimientos/transferencia', {
-        articulo_id:          artSel.id,
-        existencia_num_origen:  slot,
-        existencia_num_destino: slotDst,
-        cantidad:               cant,
-        concepto:               concepto || undefined,
-      });
-      setDlgTransf(false); resetForm(); load();
-    } catch (e) { setFormError(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
-  }
 
   async function handleAjuste() {
     if (!artSel) { setFormError('Selecciona un artículo'); return; }
@@ -300,41 +241,16 @@ export default function MovimientosPage() {
       </div>
 
       {/* Acciones */}
-      {canWrite && (
+      {canWrite && canAjuste && (
         <div className="flex flex-wrap gap-2 mb-5">
           <Button
-            onClick={() => { resetForm(); setDlgEntrada(true); }}
-            className="flex items-center gap-1.5"
-          >
-            <PackagePlus className="h-4 w-4" />
-            Entrada
-          </Button>
-          <Button
             variant="secondary"
-            onClick={() => { resetForm(); setDlgSalida(true); }}
+            onClick={() => { resetForm(); setDlgAjuste(true); }}
             className="flex items-center gap-1.5"
           >
-            <PackageMinus className="h-4 w-4" />
-            Salida
+            <SlidersHorizontal className="h-4 w-4" />
+            Ajuste
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => { resetForm(); setDlgTransf(true); }}
-            className="flex items-center gap-1.5"
-          >
-            <ArrowLeftRight className="h-4 w-4" />
-            Transferencia
-          </Button>
-          {canAjuste && (
-            <Button
-              variant="secondary"
-              onClick={() => { resetForm(); setDlgAjuste(true); }}
-              className="flex items-center gap-1.5"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Ajuste
-            </Button>
-          )}
         </div>
       )}
 
@@ -366,7 +282,7 @@ export default function MovimientosPage() {
         <EmptyState
           icon={<Package className="h-8 w-8" />}
           title="Sin movimientos"
-          description="Registra entradas, salidas o transferencias de inventario."
+          description="Historial de entradas, salidas, transferencias y ajustes de inventario."
         />
       ) : (
         <div className="space-y-2">
@@ -438,143 +354,6 @@ export default function MovimientosPage() {
           })}
         </div>
       )}
-
-      {/* ── Dialog: Entrada ───────────────────────────────────── */}
-      <Dialog
-        open={dlgEntrada}
-        onClose={() => { setDlgEntrada(false); resetForm(); }}
-        title="Registrar entrada"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Artículo <span className="text-brand-600">*</span>
-            </label>
-            <ArticuloSearch value={artSel} onChange={setArtSel} />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Slot de existencia</label>
-            <SlotSelect value={slot} onChange={setSlot} slots={slots} />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Cantidad <span className="text-brand-600">*</span>
-            </label>
-            <Input
-              type="number" step="0.001" min="0.001" placeholder="0"
-              value={cantidad} onChange={(e) => setCantidad(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
-            <Input placeholder="Entrada de mercancía…" value={concepto} onChange={(e) => setConcepto(e.target.value)} />
-          </div>
-          {formError && (
-            <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
-              <p className="text-body-sm text-brand-600">{formError}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => { setDlgEntrada(false); resetForm(); }}>Cancelar</Button>
-            <Button onClick={handleEntrada} loading={saving}>Registrar entrada</Button>
-          </DialogFooter>
-        </div>
-      </Dialog>
-
-      {/* ── Dialog: Salida ────────────────────────────────────── */}
-      <Dialog
-        open={dlgSalida}
-        onClose={() => { setDlgSalida(false); resetForm(); }}
-        title="Registrar salida"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Artículo <span className="text-brand-600">*</span>
-            </label>
-            <ArticuloSearch value={artSel} onChange={setArtSel} />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Slot de existencia</label>
-            <SlotSelect value={slot} onChange={setSlot} slots={slots} />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Cantidad <span className="text-brand-600">*</span>
-            </label>
-            <Input
-              type="number" step="0.001" min="0.001" placeholder="0"
-              value={cantidad} onChange={(e) => setCantidad(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Concepto <span className="text-brand-600">*</span>
-            </label>
-            <Input placeholder="Motivo de la salida…" value={concepto} onChange={(e) => setConcepto(e.target.value)} />
-          </div>
-          {formError && (
-            <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
-              <p className="text-body-sm text-brand-600">{formError}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => { setDlgSalida(false); resetForm(); }}>Cancelar</Button>
-            <Button onClick={handleSalida} loading={saving}>Registrar salida</Button>
-          </DialogFooter>
-        </div>
-      </Dialog>
-
-      {/* ── Dialog: Transferencia ─────────────────────────────── */}
-      <Dialog
-        open={dlgTransf}
-        onClose={() => { setDlgTransf(false); resetForm(); }}
-        title="Transferencia de inventario"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Artículo <span className="text-brand-600">*</span>
-            </label>
-            <ArticuloSearch value={artSel} onChange={setArtSel} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Origen</label>
-              <SlotSelect value={slot} onChange={setSlot} slots={slots} />
-            </div>
-            <div>
-              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Destino</label>
-              <SlotSelect value={slotDst} onChange={setSlotDst} slots={slots} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
-              Cantidad <span className="text-brand-600">*</span>
-            </label>
-            <Input
-              type="number" step="0.001" min="0.001" placeholder="0"
-              value={cantidad} onChange={(e) => setCantidad(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
-            <Input placeholder="Transferencia interna…" value={concepto} onChange={(e) => setConcepto(e.target.value)} />
-          </div>
-          {formError && (
-            <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
-              <p className="text-body-sm text-brand-600">{formError}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => { setDlgTransf(false); resetForm(); }}>Cancelar</Button>
-            <Button onClick={handleTransf} loading={saving}>Registrar transferencia</Button>
-          </DialogFooter>
-        </div>
-      </Dialog>
 
       {/* ── Dialog: Ajuste ────────────────────────────────────── */}
       <Dialog

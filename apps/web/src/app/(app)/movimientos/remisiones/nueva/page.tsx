@@ -1,28 +1,17 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Plus, Trash2, ArrowRight, Send, Save } from 'lucide-react';
+import { Search, Trash2, ArrowRight, Send, Save, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { api } from '@/lib/api/client';
-import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
-
-interface Articulo {
-  id: string;
-  clave: string;
-  descripcion_1: string | null;
-  descripcion_2: string | null;
-  existencia_1: number | null;
-  existencia_2: number | null;
-  existencia_3: number | null;
-  existencia_4: number | null;
-  existencia_5: number | null;
-}
-
-interface ArticulosPage { data: Articulo[] }
+import { cn } from '@/lib/utils';
+import { getTicketLogoUrl } from '@/lib/utils/ticket-logo';
+import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
+import type { Articulo, ArticulosPage } from '@/lib/types/api';
 
 interface EmpresaDestino {
   id: string;
@@ -37,26 +26,31 @@ interface LineaCarrito {
   slot_destino: number;
 }
 
+const SLOTS = [1, 2, 3, 4, 5];
+
 export default function NuevaRemisionPage() {
   useBlockRoles(['SUPER_USUARIO']);
   const router = useRouter();
-  const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 
-  const [destinos, setDestinos]           = useState<EmpresaDestino[]>([]);
-  const [empresaDstId, setEmpresaDstId]   = useState('');
-  const [ubDestinoId, setUbDestinoId]     = useState('');
-  const [concepto, setConcepto]           = useState('');
-  const [lineas, setLineas]               = useState<LineaCarrito[]>([]);
-  const [saving, setSaving]               = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
+  const [destinos, setDestinos]         = useState<EmpresaDestino[]>([]);
+  const [empresaDstId, setEmpresaDstId] = useState('');
+  const [ubDestinoId, setUbDestinoId]   = useState('');
+  const [concepto, setConcepto]         = useState('');
+  const [lineas, setLineas]             = useState<LineaCarrito[]>([]);
+  const [saving, setSaving]             = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [showPreview, setShowPreview]   = useState(false);
 
-  // Buscador artículos
-  const [q, setQ]                 = useState('');
-  const [suggestions, setSugg]    = useState<Articulo[]>([]);
-  const [searching, setSearching] = useState(false);
-  const searchRef                 = useRef<HTMLDivElement>(null);
-  const debounceRef               = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Catálogo (izquierda)
+  const [artsPag, setArtsPag]             = useState<Articulo[]>([]);
+  const [artsPagPage, setArtsPagPage]     = useState(1);
+  const [artsPagPages, setArtsPagPages]   = useState(1);
+  const [artsPagQ, setArtsPagQ]           = useState('');
+  const [artsPagLoading, setArtsPagLoading] = useState(false);
+
+  // Carrito (derecha)
+  const [cartQ, setCartQ] = useState('');
 
   const empresaDst = destinos.find((e) => e.id === empresaDstId);
 
@@ -64,44 +58,49 @@ export default function NuevaRemisionPage() {
     void api.get<EmpresaDestino[]>('/remisiones/destinos').then(setDestinos);
   }, []);
 
-  // Close suggestion dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSugg([]);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+  const cargarArticulosPag = useCallback(async (p: number, searchQ: string) => {
+    setArtsPagLoading(true);
+    try {
+      const qp = new URLSearchParams({ page: String(p), limit: '15' });
+      if (searchQ) qp.set('q', searchQ);
+      const res = await api.get<ArticulosPage>(`/articulos?${qp}`);
+      setArtsPag(res.data);
+      setArtsPagPages(res.pages);
+      setArtsPagPage(p);
+    } finally {
+      setArtsPagLoading(false);
+    }
   }, []);
 
-  const searchArticulos = useCallback(async (term: string) => {
-    if (!empresa || term.length < 2) { setSugg([]); return; }
-    setSearching(true);
-    try {
-      const res = await api.get<ArticulosPage>(`/articulos?q=${encodeURIComponent(term)}&limit=8`);
-      setSugg(res.data.filter((a) => !lineas.find((l) => l.articulo.id === a.id)));
-    } finally {
-      setSearching(false);
-    }
-  }, [empresa, lineas]);
+  // Debounce búsqueda de catálogo
+  useEffect(() => {
+    const t = setTimeout(() => { void cargarArticulosPag(1, artsPagQ); }, 300);
+    return () => clearTimeout(t);
+  }, [artsPagQ, cargarArticulosPag]);
 
-  const onSearchChange = (val: string) => {
-    setQ(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => void searchArticulos(val), 250);
-  };
-
-  const addLinea = (art: Articulo) => {
-    setLineas((prev) => [...prev, { articulo: art, cantidad: 1, slot_origen: 1, slot_destino: 1 }]);
-    setSugg([]);
-    setQ('');
-  };
+  function addLinea(art: Articulo) {
+    setLineas((prev) => {
+      const existente = prev.find((l) => l.articulo.id === art.id);
+      if (existente) {
+        return prev.map((l) => l.articulo.id === art.id ? { ...l, cantidad: l.cantidad + 1 } : l);
+      }
+      return [...prev, { articulo: art, cantidad: 1, slot_origen: 1, slot_destino: 1 }];
+    });
+  }
 
   const removeLinea = (idx: number) => setLineas((prev) => prev.filter((_, i) => i !== idx));
 
   const updateLinea = (idx: number, patch: Partial<LineaCarrito>) =>
     setLineas((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+
+  const carritoFiltrado = lineas
+    .map((l, idx) => ({ l, idx }))
+    .filter(({ l }) => {
+      if (!cartQ) return true;
+      const qLow = cartQ.toLowerCase();
+      return [l.articulo.clave, l.articulo.descripcion_1, l.articulo.descripcion_2]
+        .filter(Boolean).join(' ').toLowerCase().includes(qLow);
+    });
 
   async function guardar(enviar: boolean) {
     if (!empresa || !ubicacion) return;
@@ -139,12 +138,12 @@ export default function NuevaRemisionPage() {
     }
   }
 
-  const SLOTS = [1, 2, 3, 4, 5];
+  const ubDestinoNombre = empresaDst?.ubicaciones.find((u) => u.id === ubDestinoId)?.nombre ?? '—';
 
   return (
-    <div className="p-6 max-w-4xl space-y-6">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="px-4 md:px-6 py-4 border-b border-steel-200 bg-white flex items-center gap-3 flex-shrink-0">
         <button onClick={() => router.back()} className="text-steel-500 hover:text-steel-900 transition-colors">
           ←
         </button>
@@ -154,190 +153,270 @@ export default function NuevaRemisionPage() {
         </div>
       </div>
 
-      {/* Origen → Destino */}
-      <div className="bg-white border border-steel-200 rounded-xl p-5 space-y-4">
-        <h2 className="text-body font-semibold text-steel-800">Ruta</h2>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-start">
-          {/* Origen (readonly) */}
+      {/* Ruta + Concepto */}
+      <div className="px-4 md:px-6 py-4 bg-white border-b border-steel-200 flex-shrink-0 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_1fr] gap-3 items-end">
           <div className="space-y-1">
             <p className="text-meta font-medium text-steel-500 uppercase tracking-wide">Origen</p>
-            <div className="bg-steel-50 border border-steel-200 rounded-lg px-3 py-2.5">
+            <div className="bg-steel-50 border border-steel-200 rounded-lg px-3 py-2">
               <p className="text-body-sm font-semibold text-steel-800">{empresa?.nombre ?? '—'}</p>
               <p className="text-meta text-steel-500">{ubicacion?.nombre ?? '—'}</p>
             </div>
           </div>
-
-          <div className="hidden md:flex items-center justify-center pt-8">
+          <div className="hidden md:flex items-center justify-center pb-2">
             <ArrowRight className="h-5 w-5 text-steel-400" />
           </div>
-
-          {/* Destino (selectable) */}
-          <div className="space-y-2">
-            <p className="text-meta font-medium text-steel-500 uppercase tracking-wide">Destino</p>
+          <div className="space-y-1">
+            <p className="text-meta font-medium text-steel-500 uppercase tracking-wide">Empresa destino</p>
             <select
               value={empresaDstId}
               onChange={(e) => { setEmpresaDstId(e.target.value); setUbDestinoId(''); }}
-              className="w-full border border-steel-300 rounded-lg px-3 py-2 text-body-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full h-9 border border-steel-300 rounded-lg px-3 text-body-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
-              <option value="">Empresa destino…</option>
+              <option value="">Selecciona…</option>
               {destinos.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
             </select>
-            {empresaDst && (
-              <select
-                value={ubDestinoId}
-                onChange={(e) => setUbDestinoId(e.target.value)}
-                className="w-full border border-steel-300 rounded-lg px-3 py-2 text-body-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Ubicación destino…</option>
-                {empresaDst.ubicaciones.map((u) => (
-                  <option key={u.id} value={u.id}>{u.nombre}</option>
-                ))}
-              </select>
-            )}
+          </div>
+          <div className="space-y-1">
+            <p className="text-meta font-medium text-steel-500 uppercase tracking-wide">Ubicación destino</p>
+            <select
+              value={ubDestinoId}
+              onChange={(e) => setUbDestinoId(e.target.value)}
+              disabled={!empresaDst}
+              className="w-full h-9 border border-steel-300 rounded-lg px-3 text-body-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-steel-50 disabled:text-steel-400"
+            >
+              <option value="">Selecciona…</option>
+              {empresaDst?.ubicaciones.map((u) => (
+                <option key={u.id} value={u.id}>{u.nombre}</option>
+              ))}
+            </select>
           </div>
         </div>
-
-        {/* Concepto */}
-        <div>
-          <label className="text-meta font-medium text-steel-600 block mb-1">Concepto (opcional)</label>
-          <Input
-            value={concepto}
-            onChange={(e) => setConcepto(e.target.value)}
-            placeholder="Ej. Reposición de stock, transferencia mensual…"
-          />
-        </div>
+        <Input
+          value={concepto}
+          onChange={(e) => setConcepto(e.target.value)}
+          placeholder="Concepto (opcional) — ej. Reposición de stock, transferencia mensual…"
+        />
       </div>
 
-      {/* Artículos */}
-      <div className="bg-white border border-steel-200 rounded-xl p-5 space-y-4">
-        <h2 className="text-body font-semibold text-steel-800">Artículos</h2>
+      {/* Split-view: catálogo | carrito */}
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+        {/* Catálogo */}
+        <div className="h-[45%] md:h-auto md:w-[58%] flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-steel-200">
+          <div className="px-4 py-3 bg-steel-50 border-b border-steel-100 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
+              <input
+                className="h-9 w-full rounded-md border border-steel-300 bg-white pl-9 pr-3 text-body text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                placeholder="Buscar artículo por clave o descripción…"
+                value={artsPagQ}
+                onChange={(e) => setArtsPagQ(e.target.value)}
+              />
+            </div>
+          </div>
 
-        {/* Buscador */}
-        <div className="relative" ref={searchRef}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
-            <input
-              value={q}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Buscar artículo por clave o descripción…"
-              className="w-full pl-9 pr-4 py-2 border border-steel-300 rounded-lg text-body-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            {q && (
-              <button onClick={() => { setQ(''); setSugg([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-steel-400 hover:text-steel-700">
-                <X className="h-4 w-4" />
-              </button>
+          <div className="flex-1 overflow-y-auto">
+            {artsPagLoading ? (
+              <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Cargando…</div>
+            ) : artsPag.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Sin resultados</div>
+            ) : (
+              <table className="w-full text-body-sm">
+                <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-steel-600">Exist.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-steel-100">
+                  {artsPag.map((art) => {
+                    const enCarrito = lineas.find((l) => l.articulo.id === art.id);
+                    return (
+                      <tr
+                        key={art.id}
+                        onClick={() => addLinea(art)}
+                        className={cn(
+                          'cursor-pointer transition-colors hover:bg-brand-50',
+                          enCarrito ? 'bg-green-50' : '',
+                        )}
+                      >
+                        <td className="px-4 py-2.5 min-w-0">
+                          <p className="font-semibold text-steel-900 leading-tight break-words">
+                            {art.descripcion_1 || art.clave}
+                          </p>
+                          <p className="text-meta text-steel-400">{art.clave}</p>
+                        </td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                          <span className="text-steel-600">{Number(art.existencia_1 ?? 0)}</span>
+                          {enCarrito && (
+                            <span className="ml-2 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                              x{enCarrito.cantidad}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
-          {(suggestions.length > 0 || searching) && (
-            <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-steel-200 rounded-xl shadow-lg overflow-hidden">
-              {searching && <div className="px-4 py-3 text-body-sm text-steel-400">Buscando…</div>}
-              {suggestions.map((art) => (
-                <button
-                  key={art.id}
-                  onClick={() => addLinea(art)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-steel-50 text-left transition-colors"
-                >
-                  <Plus className="h-4 w-4 text-brand-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-medium text-steel-800 truncate">{art.clave}</p>
-                    <p className="text-meta text-steel-500 truncate">{art.descripcion_1}</p>
-                  </div>
-                  <span className="text-meta text-steel-400 flex-shrink-0">Exi: {Number(art.existencia_1 ?? 0)}</span>
-                </button>
-              ))}
+
+          <div className="flex items-center justify-between px-4 py-2 bg-white border-t border-steel-100 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={artsPagPage <= 1}
+              onClick={() => void cargarArticulosPag(artsPagPage - 1, artsPagQ)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-body-sm text-steel-500">Pág {artsPagPage}/{artsPagPages}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={artsPagPage >= artsPagPages}
+              onClick={() => void cargarArticulosPag(artsPagPage + 1, artsPagQ)}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Carrito */}
+        <div className="flex-1 flex flex-col min-h-0 min-h-[200px]">
+          {lineas.length > 0 && (
+            <div className="px-3 py-2 bg-steel-50 border-b border-steel-100 flex-shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
+                <input
+                  className="h-7 w-full rounded-md border border-steel-200 bg-white pl-8 pr-3 text-body-sm text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-1 focus:ring-brand-600 focus:border-brand-600"
+                  placeholder="Filtrar carrito…"
+                  value={cartQ}
+                  onChange={(e) => setCartQ(e.target.value)}
+                />
+              </div>
             </div>
           )}
-        </div>
 
-        {/* Tabla de líneas */}
-        {lineas.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-body-sm">
-              <thead>
-                <tr className="border-b border-steel-100">
-                  <th className="text-left py-2 pr-4 font-medium text-steel-600">Artículo</th>
-                  <th className="text-center py-2 px-2 font-medium text-steel-600 w-28">Slot origen</th>
-                  <th className="text-center py-2 px-2 font-medium text-steel-600 w-28">Slot destino</th>
-                  <th className="text-center py-2 px-2 font-medium text-steel-600 w-28">Cantidad</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-steel-50">
-                {lineas.map((linea, idx) => (
-                  <tr key={`${linea.articulo.id}-${idx}`}>
-                    <td className="py-2.5 pr-4">
-                      <p className="font-medium text-steel-800">{linea.articulo.clave}</p>
-                      <p className="text-meta text-steel-500 truncate max-w-[200px]">{linea.articulo.descripcion_1}</p>
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <select
-                        value={linea.slot_origen}
-                        onChange={(e) => updateLinea(idx, { slot_origen: Number(e.target.value) })}
-                        className="border border-steel-300 rounded px-2 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      >
-                        {SLOTS.map((s) => <option key={s} value={s}>Slot {s}</option>)}
-                      </select>
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <select
-                        value={linea.slot_destino}
-                        onChange={(e) => updateLinea(idx, { slot_destino: Number(e.target.value) })}
-                        className="border border-steel-300 rounded px-2 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      >
-                        {SLOTS.map((s) => <option key={s} value={s}>Slot {s}</option>)}
-                      </select>
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <input
-                        type="number"
-                        min={0.001}
-                        step={0.001}
-                        value={linea.cantidad}
-                        onChange={(e) => updateLinea(idx, { cantidad: Number(e.target.value) })}
-                        className="w-24 border border-steel-300 rounded px-2 py-1 text-body-sm text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </td>
-                    <td className="py-2.5 text-right">
-                      <button onClick={() => removeLinea(idx)} className="text-steel-400 hover:text-red-500 transition-colors p-1">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
+          <div className="flex-1 overflow-y-auto">
+            {lineas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-steel-400 p-8">
+                <p className="text-body-sm text-center">Sin artículos — haz clic en un producto del catálogo</p>
+              </div>
+            ) : carritoFiltrado.length === 0 ? (
+              <div className="flex items-center justify-center h-24 text-body-sm text-steel-400">Sin coincidencias</div>
+            ) : (
+              <table className="w-full text-body-sm">
+                <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                    <th className="text-center px-2 py-2.5 font-medium text-steel-600 w-24">Slot org.</th>
+                    <th className="text-center px-2 py-2.5 font-medium text-steel-600 w-24">Slot dest.</th>
+                    <th className="text-right px-2 py-2.5 font-medium text-steel-600 w-20">Cant</th>
+                    <th className="px-2 py-2.5 w-8" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-steel-100">
+                  {carritoFiltrado.map(({ l, idx }) => (
+                    <tr key={`${l.articulo.id}-${idx}`} className="bg-white">
+                      <td className="px-4 py-2.5 min-w-0">
+                        <p className="font-semibold text-steel-900 leading-tight break-words">{l.articulo.descripcion_1 || l.articulo.clave}</p>
+                        <p className="text-meta text-steel-400">{l.articulo.clave}</p>
+                      </td>
+                      <td className="px-2 py-2.5 text-center">
+                        <select
+                          value={l.slot_origen}
+                          onChange={(e) => updateLinea(idx, { slot_origen: Number(e.target.value) })}
+                          className="border border-steel-300 rounded px-1.5 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        >
+                          {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-2.5 text-center">
+                        <select
+                          value={l.slot_destino}
+                          onChange={(e) => updateLinea(idx, { slot_destino: Number(e.target.value) })}
+                          className="border border-steel-300 rounded px-1.5 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        >
+                          {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-2.5 text-right">
+                        <input
+                          type="number"
+                          min={0.001}
+                          step={0.001}
+                          value={l.cantidad}
+                          onChange={(e) => updateLinea(idx, { cantidad: Number(e.target.value) })}
+                          className="w-16 border border-steel-300 rounded px-2 py-1 text-body-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <button onClick={() => removeLinea(idx)} className="text-steel-300 hover:text-brand-600 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-        )}
 
-        {!lineas.length && (
-          <p className="text-body-sm text-steel-400 text-center py-6">
-            Busca artículos para agregarlos a la remisión
-          </p>
-        )}
-      </div>
+          {/* Footer carrito */}
+          <div className="border-t border-steel-200 bg-steel-50 flex-shrink-0">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <span className="text-body-sm text-steel-500">
+                {lineas.length} artículo{lineas.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => setShowPreview((v) => !v)}
+                className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-steel-800 transition-colors"
+              >
+                {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                {showPreview ? 'Ocultar vista previa' : 'Ver ticket'}
+              </button>
+            </div>
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-body-sm text-red-700">
-          {error}
+            {showPreview && (
+              <div className="px-4 pb-4">
+                <TicketPreviewRemision
+                  logoUrl={getTicketLogoUrl(empresa, ubicacion)}
+                  folio={null}
+                  empresaOrigen={empresa?.nombre ?? '—'}
+                  ubOrigen={ubicacion?.nombre ?? '—'}
+                  empresaDestino={empresaDst?.nombre ?? '—'}
+                  ubDestino={ubDestinoNombre}
+                  fecha={new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  lineas={lineas.map((l) => ({ clave: l.articulo.clave, descripcion: l.articulo.descripcion_1, cantidad: l.cantidad }))}
+                />
+              </div>
+            )}
+
+            {error && (
+              <div className="mx-4 mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-body-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="px-4 pb-4 flex gap-2">
+              <Button variant="ghost" onClick={() => router.back()} disabled={saving} className="flex-1">
+                Cancelar
+              </Button>
+              <Button variant="outline" onClick={() => guardar(false)} disabled={saving} className="flex-1">
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                Borrador
+              </Button>
+              <Button onClick={() => guardar(true)} disabled={saving} className="flex-1">
+                <Send className="h-3.5 w-3.5 mr-1.5" />
+                {saving ? 'Guardando…' : 'Guardar y enviar'}
+              </Button>
+            </div>
+          </div>
         </div>
-      )}
-
-      {/* Acciones */}
-      <div className="flex items-center justify-end gap-3 pb-8">
-        <Button variant="ghost" onClick={() => router.back()} disabled={saving}>
-          Cancelar
-        </Button>
-        <Button variant="outline" onClick={() => guardar(false)} disabled={saving}>
-          <Save className="h-3.5 w-3.5 mr-1.5" />
-          Guardar borrador
-        </Button>
-        <Button onClick={() => guardar(true)} disabled={saving}>
-          <Send className="h-3.5 w-3.5 mr-1.5" />
-          {saving ? 'Guardando…' : 'Guardar y enviar'}
-        </Button>
       </div>
     </div>
   );

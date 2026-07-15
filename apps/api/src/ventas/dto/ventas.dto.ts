@@ -55,6 +55,7 @@ export class CerrarNotaDto {
 }
 
 export const MOTIVOS_CANCELACION = [
+  'SOLO_CONSULTA_PRECIO',
   'CLIENTE_DESISTIO',
   'ERROR_CAPTURA',
   'PRODUCTO_NO_DISPONIBLE',

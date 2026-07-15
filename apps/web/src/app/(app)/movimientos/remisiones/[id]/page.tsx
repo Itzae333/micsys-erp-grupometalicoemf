@@ -11,9 +11,9 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
+import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -274,45 +274,18 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
           {showPreview ? 'Ocultar vista previa' : 'Ver ticket'}
         </button>
         {showPreview && (
-          <div className="mt-2 border border-steel-200 rounded-xl overflow-hidden bg-white text-[11px] font-mono max-w-xs">
-            {/* Cabecera */}
-            <div className="bg-steel-900 text-white px-4 py-3 text-center">
-              {getTicketLogoUrl(empresa, null) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={resolveLogoUrl(getTicketLogoUrl(empresa, null)!)}
-                  alt="Logo"
-                  className="h-8 w-auto mx-auto mb-1.5 object-contain"
-                />
-              )}
-              <p className="font-bold text-[13px] tracking-wide uppercase">REMISIÓN DE ALMACÉN</p>
-              <p className="text-steel-300 mt-0.5 font-bold">{rem.folio}</p>
-            </div>
-            {/* Ruta */}
-            <div className="px-4 py-2 border-b border-dashed border-steel-200 text-[10px] text-steel-600 space-y-0.5">
-              <p><span className="font-semibold">ORIGEN:</span>  {rem.empresa_origen.nombre} / {rem.ub_origen.nombre}</p>
-              <p><span className="font-semibold">DESTINO:</span> {rem.empresa_destino.nombre} / {rem.ub_destino.nombre}</p>
-              <p><span className="font-semibold">Fecha:</span> {new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-            </div>
-            {/* Artículos */}
-            <div className="px-4 py-2 border-b border-dashed border-steel-200">
-              <div className="flex justify-between text-[10px] text-steel-400 font-semibold mb-1">
-                <span>ARTÍCULO</span><span>CANT</span>
-              </div>
-              {rem.lineas.map((l) => (
-                <div key={l.id} className="flex justify-between text-steel-700 leading-5">
-                  <span className="truncate max-w-[160px]">{l.articulo.clave}</span>
-                  <span>{l.cantidad_enviada}</span>
-                </div>
-              ))}
-            </div>
-            {/* QR placeholder */}
-            {qrUrl && (
-              <div className="px-4 py-3 text-center">
-                <p className="text-[10px] text-steel-500 mb-1.5">Escanea para confirmar recepción</p>
-                <img src={qrUrl} alt="QR" className="w-24 h-24 mx-auto" />
-              </div>
-            )}
+          <div className="mt-2">
+            <TicketPreviewRemision
+              logoUrl={getTicketLogoUrl(empresa, null)}
+              folio={rem.folio}
+              empresaOrigen={rem.empresa_origen.nombre}
+              ubOrigen={rem.ub_origen.nombre}
+              empresaDestino={rem.empresa_destino.nombre}
+              ubDestino={rem.ub_destino.nombre}
+              fecha={new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              lineas={rem.lineas.map((l) => ({ clave: l.articulo.clave, descripcion: l.articulo.descripcion_1, cantidad: l.cantidad_enviada }))}
+              qrUrl={qrUrl}
+            />
           </div>
         )}
       </div>

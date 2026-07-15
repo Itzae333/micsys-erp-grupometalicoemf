@@ -47,15 +47,21 @@ export class RemisionesService {
   async listar(
     empresaId: string,
     tipo: 'salida' | 'entrada' | 'todas',
-    query: { estatus?: string; page?: number; limit?: number } = {},
+    query: { estatus?: string; ubicacionId?: string; page?: number; limit?: number } = {},
   ) {
-    const { estatus, page = 1, limit = 50 } = query;
+    const { estatus, ubicacionId, page = 1, limit = 50 } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.RemisionWhereInput = {};
-    if (tipo === 'salida')   where.empresa_origen_id  = empresaId;
-    else if (tipo === 'entrada') where.empresa_destino_id = empresaId;
-    else where.OR = [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }];
+    if (tipo === 'salida') {
+      where.empresa_origen_id = empresaId;
+      if (ubicacionId) where.ub_origen_id = ubicacionId;
+    } else if (tipo === 'entrada') {
+      where.empresa_destino_id = empresaId;
+      if (ubicacionId) where.ub_destino_id = ubicacionId;
+    } else {
+      where.OR = [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }];
+    }
     if (estatus) where.estatus = estatus as any;
 
     const [total, data] = await Promise.all([
