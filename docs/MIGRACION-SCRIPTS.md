@@ -164,6 +164,7 @@ Exporta ventas históricas con sus líneas de carrito en un solo CSV denormaliza
 | Santa | `santa` | `metalpha_santa` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
 | Tecamachalco | `tecamachalco` | `metalpha_tecamachalco` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
 | Tepeaca | `tepeaca` | `metalpha_tepeaca` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo |
+| Tizayuca | `tizayuca` | `metalpha_tizayuca` (o similar) | `*_punto_venta` — `descripcion4`/`5` directo. Ubicación destino en el ERP: **MATRIZ** (no PUNTO_VENTA como las demás de esta tabla) |
 
 > Cada sucursal vive en su propia base de datos MetalAlpha con el mismo esquema.  
 > **No es posible hacer un UNION ALL** entre ellas en una sola query — se exporta un CSV por sucursal conectándose a cada DB por separado, y se suben los 4 CSVs al ERP uno por uno.  
@@ -212,12 +213,12 @@ ORDER BY v.id;
 
 ---
 
-### Script para Santa / Tecamachalco / Tepeaca (`descripcion4`/`5` directo)
+### Script para Santa / Tecamachalco / Tepeaca / Tizayuca (`descripcion4`/`5` directo)
 
-El esquema de tablas es el mismo en las 3 DBs. Conéctate a cada una y ejecuta este script **cambiando solo el literal de `sucursal`**:
+El esquema de tablas es el mismo en las 4 DBs. Conéctate a cada una y ejecuta este script **cambiando solo el literal de `sucursal`**:
 
 ```sql
--- Cambia 'santa' por 'tecamachalco' o 'tepeaca' según la DB a la que estés conectado
+-- Cambia 'santa' por 'tecamachalco', 'tepeaca' o 'tizayuca' según la DB a la que estés conectado
 SELECT
   v.id                                                         AS venta_id,
   v.fechaHoraVenta,
@@ -255,6 +256,7 @@ ORDER BY v.id;
 | metalpha_santa | `'santa'` |
 | metalpha_tecamachalco | `'tecamachalco'` |
 | metalpha_tepeaca | `'tepeaca'` |
+| metalpha_tizayuca | `'tizayuca'` |
 
 **Formato esperado del CSV:**
 ```

@@ -1015,9 +1015,6 @@ function TabCorteCaja({ desde, hasta }: { desde: string; hasta: string }) {
     if (!data) return;
     setPrinting(true);
     try {
-      const cfg = typeof window !== 'undefined'
-        ? JSON.parse(localStorage.getItem('print_bridge_config') ?? '{}')
-        : {};
       const lines: string[] = [
         '='.repeat(32),
         '     CORTE DE CAJA',
@@ -1035,7 +1032,7 @@ function TabCorteCaja({ desde, hasta }: { desde: string; hasta: string }) {
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'texto', texto: lines.join('\n'), copias: cfg.copias ?? 1 }),
+        body: JSON.stringify({ tipo: 'texto', texto: lines.join('\n'), copias: 1 }),
         signal: AbortSignal.timeout(6000),
       });
     } catch { /* ticketera puede no estar disponible */ }

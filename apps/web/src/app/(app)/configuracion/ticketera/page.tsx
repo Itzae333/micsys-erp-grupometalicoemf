@@ -198,10 +198,13 @@ export default function TicketeraConfigPage() {
 
       {/* Copias */}
       <div className="bg-white border border-steel-200 rounded-xl p-5 space-y-4">
-        <h2 className="text-body font-semibold text-steel-800">Copias por defecto al cobrar</h2>
-        <p className="text-body-sm text-steel-500">Número de tickets que se imprimen automáticamente cuando se cierra una nota.</p>
+        <h2 className="text-body font-semibold text-steel-800">Copias del ticket de venta</h2>
+        <p className="text-body-sm text-steel-500">
+          Cuántas veces se imprime el ticket al cobrar una nota de venta. El resto de comprobantes
+          (remisiones, abonos, corte de caja, anticipos, cargas) siempre se imprimen una sola vez.
+        </p>
         <div className="flex gap-3">
-          {[1, 2, 3].map((n) => (
+          {[1, 2].map((n) => (
             <button
               key={n}
               type="button"

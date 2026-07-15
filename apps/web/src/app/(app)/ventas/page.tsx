@@ -114,6 +114,7 @@ export default function VentasPage() {
     pagos: { metodo: string; monto: number; referencia: string }[];
     cambio: number;
     printStatus?: 'printing' | 'ok' | 'error';
+    copiasAuto?: number;
     // true cuando este comprobante viene de "Abonar" a una nota ya cerrada —
     // el ticket no debe repetir el detalle de productos, solo el abono.
     esAbono?: boolean;
@@ -739,9 +740,17 @@ export default function VentasPage() {
       setNotaActiva(null);
       void loadNotas();
       void refreshDetalleNota();
-      // Auto-imprimir 2 copias inmediatamente — dialog muestra el estado
-      setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap, printStatus: 'printing' });
-      void printTicket(notaSnap, tipoCierre, pagosSnap, cambioSnap, 2).then((ok) => {
+      // Auto-imprimir según copias configuradas en Configuración > Ticketera
+      const copiasAuto = (() => {
+        try {
+          const cfg = JSON.parse(localStorage.getItem('print_bridge_config') ?? '{}') as { copias?: number };
+          return Math.max(1, Math.min(3, Number(cfg.copias) || 2));
+        } catch {
+          return 2;
+        }
+      })();
+      setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap, printStatus: 'printing', copiasAuto });
+      void printTicket(notaSnap, tipoCierre, pagosSnap, cambioSnap, copiasAuto).then((ok) => {
         setPostCobro((prev) => prev ? { ...prev, printStatus: ok ? 'ok' : 'error' } : prev);
       });
     } catch (err) {
@@ -2140,11 +2149,13 @@ export default function VentasPage() {
             {postCobro.printStatus === 'printing' && (
               <p className="text-body-sm text-steel-500 flex items-center gap-2">
                 <span className="inline-block w-3.5 h-3.5 border-2 border-steel-300 border-t-brand-600 rounded-full animate-spin flex-shrink-0" />
-                Imprimiendo 2 copias…
+                Imprimiendo {postCobro.copiasAuto ?? 2} {(postCobro.copiasAuto ?? 2) === 1 ? 'copia' : 'copias'}…
               </p>
             )}
             {postCobro.printStatus === 'ok' && (
-              <p className="text-body-sm text-green-700 font-medium">🖨️ Ticket impreso · 2 copias</p>
+              <p className="text-body-sm text-green-700 font-medium">
+                🖨️ Ticket impreso · {postCobro.copiasAuto ?? 2} {(postCobro.copiasAuto ?? 2) === 1 ? 'copia' : 'copias'}
+              </p>
             )}
             {postCobro.printStatus === 'error' && (
               <p className="text-body-sm text-amber-700">⚠ No se pudo imprimir — verifica que la ticketera esté encendida y el puerto configurado en printer.config.json</p>
