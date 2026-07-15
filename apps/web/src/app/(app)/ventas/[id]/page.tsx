@@ -59,6 +59,10 @@ export default function NotaDetallePage() {
   const [loading, setLoading] = useState(true);
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
 
+  // Edición inline de cantidad/precio en la tabla de artículos
+  const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
+  const [savingLinea, setSavingLinea] = useState<string | null>(null);
+
   // Agregar línea (solo ABIERTA)
   const [dlgLinea, setDlgLinea] = useState(false);
   const [artBusqueda, setArtBusqueda] = useState('');
@@ -151,6 +155,18 @@ export default function NotaDetallePage() {
     }
   }, [id, empresa?.id, ubicacion?.id]);
 
+  // Sync drafts de edición inline cuando cambian las líneas de la nota
+  useEffect(() => {
+    if (!nota) { setLineaDraft({}); return; }
+    setLineaDraft(() => {
+      const d: Record<string, { cantidad: string; precio: string }> = {};
+      for (const l of nota.lineas) {
+        d[l.id] = { cantidad: String(l.cantidad), precio: String(l.precio_unitario) };
+      }
+      return d;
+    });
+  }, [nota]);
+
   // ── Líneas ─────────────────────────────────────────────────
   async function buscarArt(val: string) {
     setArtBusqueda(val);
@@ -165,7 +181,9 @@ export default function NotaDetallePage() {
   function selArt(art: Articulo) {
     setArtSel(art);
     setArtSugeridos([]);
-    setArtBusqueda(`${art.clave} — ${art.descripcion_1 ?? ''}`);
+    const descArt = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
+      .filter(Boolean).join(' · ');
+    setArtBusqueda(`${art.clave}${descArt ? ` — ${descArt}` : ''}`);
     const precioDefault = schema?.precios.find((p) => p.activa);
     const campo = precioDefault ? `precio_${precioDefault.numero}` as keyof Articulo : 'precio_1';
     setLineaPrecio((art[campo] as number) ?? 0);
@@ -198,6 +216,31 @@ export default function NotaDetallePage() {
       const updated = await api.delete<NotaVenta>(`/ventas/${nota.id}/lineas/${lineaId}`);
       setNota(updated);
     } catch {}
+  }
+
+  async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
+    if (!nota) return;
+    const parsed = field === 'cantidad' ? parseFloat(rawValue) : parseFloat(rawValue);
+    if (isNaN(parsed) || parsed <= 0) return;
+    const orig = nota.lineas.find((l) => l.id === lineaId);
+    if (!orig) return;
+    const origVal = field === 'cantidad' ? orig.cantidad : orig.precio_unitario;
+    if (Math.abs(parsed - origVal) < 0.0001) return;
+    setSavingLinea(lineaId);
+    try {
+      const updated = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${lineaId}`, { [field]: parsed });
+      setNota(updated);
+    } catch {
+      setLineaDraft((prev) => ({
+        ...prev,
+        [lineaId]: {
+          ...prev[lineaId],
+          [field === 'cantidad' ? 'cantidad' : 'precio']: String(origVal),
+        },
+      }));
+    } finally {
+      setSavingLinea(null);
+    }
   }
 
   // ── Cobrar ─────────────────────────────────────────────────
@@ -766,8 +809,35 @@ export default function NotaDetallePage() {
                     </p>
                     <p className="text-meta text-steel-400">{l.clave}</p>
                   </td>
-                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad}</td>
-                  <td className="px-4 py-3 text-right text-body-sm text-steel-700">{formatPrecio(l.precio_unitario)}</td>
+                  {['ABIERTA', 'REABIERTA'].includes(nota.estatus) && canWrite ? (
+                    <>
+                      <td className="px-4 py-3 text-right">
+                        <input
+                          type="number" step="1" min="0.001"
+                          disabled={savingLinea === l.id}
+                          className="w-16 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
+                          value={lineaDraft[l.id]?.cantidad ?? String(l.cantidad)}
+                          onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], cantidad: e.target.value } }))}
+                          onBlur={(e) => updateLineaInline(l.id, 'cantidad', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <input
+                          type="number" step="0.01" min="0"
+                          disabled={savingLinea === l.id}
+                          className="w-24 text-right text-body-sm text-steel-700 bg-transparent border-b border-transparent hover:border-steel-300 focus:border-brand-600 focus:outline-none disabled:opacity-50"
+                          value={lineaDraft[l.id]?.precio ?? String(l.precio_unitario)}
+                          onChange={(e) => setLineaDraft((prev) => ({ ...prev, [l.id]: { ...prev[l.id], precio: e.target.value } }))}
+                          onBlur={(e) => updateLineaInline(l.id, 'precio_unitario', e.target.value)}
+                        />
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad}</td>
+                      <td className="px-4 py-3 text-right text-body-sm text-steel-700">{formatPrecio(l.precio_unitario)}</td>
+                    </>
+                  )}
                   <td className="px-4 py-3 text-right text-body-sm text-steel-500">{l.descuento > 0 ? `${l.descuento}%` : '—'}</td>
                   <td className="px-4 py-3 text-right text-body-sm font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
                   {['ABIERTA', 'REABIERTA'].includes(nota.estatus) && canWrite && (
@@ -1025,7 +1095,10 @@ export default function NotaDetallePage() {
                   >
                     <div>
                       <p className="text-body-sm font-semibold text-steel-900">{art.clave}</p>
-                      <p className="text-meta text-steel-500">{art.descripcion_1 ?? ''}</p>
+                      <p className="text-meta text-steel-500">
+                        {[art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
+                          .filter(Boolean).join(' · ')}
+                      </p>
                     </div>
                   </button>
                 ))}
