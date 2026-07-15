@@ -82,6 +82,7 @@ export default function VentasPage() {
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
   const [lineaError, setLineaError] = useState<string | null>(null);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  const [clienteQ, setClienteQ] = useState('');
 
   // Inline editing del carrito
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
@@ -392,8 +393,10 @@ export default function VentasPage() {
         notaForm.setValue('cliente_id', preClienteId);
         const c = data.find((cl) => cl.id === preClienteId) ?? null;
         setClienteSeleccionado(c);
+        setClienteQ(c ? (c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()) : '');
       } else {
         setClienteSeleccionado(null);
+        setClienteQ('');
       }
     } catch {
       setClientes([]);
@@ -1454,22 +1457,57 @@ export default function VentasPage() {
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
               Cliente <span className="text-steel-400 font-normal">(opcional)</span>
             </label>
-            <select
-              className="flex h-9 w-full rounded-md border border-steel-300 bg-white px-3 py-1 text-body text-steel-900 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
-              {...notaForm.register('cliente_id', {
-                onChange: (e) => {
-                  const c = clientes.find((cl) => cl.id === e.target.value) ?? null;
-                  setClienteSeleccionado(c);
-                },
-              })}
-            >
-              <option value="">{modoCreacion === 'venta' ? 'Venta de mostrador (sin cliente)' : 'Sin cliente asignado'}</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()}
-                </option>
-              ))}
-            </select>
+            <Input
+              placeholder={modoCreacion === 'venta' ? 'Venta de mostrador (sin cliente)' : 'Sin cliente asignado'}
+              value={clienteQ}
+              onChange={(e) => {
+                setClienteQ(e.target.value);
+                if (clienteSeleccionado) {
+                  setClienteSeleccionado(null);
+                  notaForm.setValue('cliente_id', '');
+                }
+              }}
+            />
+            {clienteQ.length > 0 && !clienteSeleccionado && (
+              <div className="mt-1 border border-steel-200 rounded-lg max-h-40 overflow-y-auto">
+                {clientes
+                  .filter((c) => {
+                    const n = `${c.nombre} ${c.apellidos ?? ''} ${c.razon_social ?? ''}`.toLowerCase();
+                    return n.includes(clienteQ.toLowerCase());
+                  })
+                  .slice(0, 8)
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-body-sm hover:bg-steel-50 border-b border-steel-50"
+                      onClick={() => {
+                        setClienteSeleccionado(c);
+                        setClienteQ(c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim());
+                        notaForm.setValue('cliente_id', c.id);
+                      }}
+                    >
+                      {c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()}
+                    </button>
+                  ))}
+              </div>
+            )}
+            {clienteSeleccionado && (
+              <p className="text-meta text-emerald-600 mt-1 flex items-center gap-2">
+                <span>✓ {clienteSeleccionado.razon_social ?? clienteSeleccionado.nombre}</span>
+                <button
+                  type="button"
+                  className="text-steel-400 hover:text-steel-600 underline"
+                  onClick={() => {
+                    setClienteSeleccionado(null);
+                    setClienteQ('');
+                    notaForm.setValue('cliente_id', '');
+                  }}
+                >
+                  Quitar
+                </button>
+              </p>
+            )}
             {clienteSeleccionado?.precio_num && schema && (
               <p className="text-meta text-brand-600 mt-1">
                 Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}

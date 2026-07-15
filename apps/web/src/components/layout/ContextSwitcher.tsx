@@ -104,7 +104,7 @@ export function ContextSwitcher({ open, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-steel-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-steel-900/60 backdrop-blur-sm" />
 
       <div className="relative bg-white rounded-xl shadow-xl border border-steel-200 w-full max-w-sm">
         {/* Header */}

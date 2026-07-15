@@ -1,3 +1,5 @@
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 import { getTicketLogoUrl } from './ticket-logo';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import type { NotaVenta } from '@/lib/types/api';
@@ -28,11 +30,30 @@ function fmt(n: number): string {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function generateCotizacionPDF(
+function sanitizeFilename(s: string): string {
+  return s
+    .replace(/[\\/:*?"<>|]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function waitForImages(doc: Document): Promise<void> {
+  const imgs = Array.from(doc.images);
+  return Promise.all(imgs.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      setTimeout(resolve, 3000);
+    });
+  })).then(() => undefined);
+}
+
+export async function generateCotizacionPDF(
   nota: NotaVenta,
   empresa: EmpresaPDF | null,
   ubicacion: UbicacionPDF | null,
-): void {
+): Promise<void> {
   const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
   const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', {
     day: '2-digit', month: 'long', year: 'numeric',
@@ -83,7 +104,6 @@ export function generateCotizacionPDF(
     const bg = idx % 2 === 1 ? 'background:#f8fafc;' : '';
     return `<tr>
       <td style="padding:9px 6px;text-align:center;font-size:11px;color:#94a3b8;${bg}">${idx + 1}</td>
-      <td style="padding:9px 6px;font-family:monospace;font-size:12px;font-weight:700;color:#0f172a;${bg}">${l.clave}</td>
       <td style="padding:9px 6px;font-size:12px;color:#475569;${bg}">${desc || '—'}</td>
       <td style="padding:9px 6px;text-align:right;font-size:12px;${bg}">${Number(l.cantidad).toLocaleString('es-MX')}</td>
       <td style="padding:9px 6px;text-align:right;font-size:12px;${bg}">$${fmt(Number(l.precio_unitario))}</td>
@@ -105,13 +125,8 @@ export function generateCotizacionPDF(
 <title>Cotización ${folioStr}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;background:#e2e8f0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{max-width:860px;margin:24px auto;background:#fff;border-radius:10px;box-shadow:0 4px 28px rgba(0,0,0,.14);overflow:hidden}
-  /* Barra de acciones */
-  .no-print{padding:12px 24px;background:#f1f5f9;display:flex;gap:10px;justify-content:center;border-bottom:1px solid #e2e8f0}
-  .no-print button{padding:9px 26px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;letter-spacing:.3px;transition:opacity .15s}
-  .btn-save{background:#0f172a;color:#fff} .btn-save:hover{opacity:.85}
-  .btn-close{background:#e2e8f0;color:#475569} .btn-close:hover{background:#cbd5e1}
+  body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:860px;background:#fff;overflow:hidden}
   /* Header */
   .header{display:flex;justify-content:space-between;align-items:flex-start;padding:28px 36px 22px;border-bottom:1px solid #e2e8f0;gap:24px}
   .header-left{flex:1}
@@ -145,21 +160,10 @@ export function generateCotizacionPDF(
   .obs strong{color:#0f172a}
   /* Footer */
   .footer{background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 36px;text-align:center;font-size:11px;color:#94a3b8;line-height:1.8}
-  @media print{
-    .no-print{display:none!important}
-    body{background:#fff}
-    .page{margin:0;border-radius:0;box-shadow:none;max-width:100%}
-    @page{size:A4 portrait;margin:14mm 12mm}
-  }
 </style>
 </head>
 <body>
 <div class="page">
-
-  <div class="no-print">
-    <button class="btn-save" onclick="window.print()">⬇&nbsp;&nbsp;Guardar como PDF / Imprimir</button>
-    <button class="btn-close" onclick="window.close()">✕&nbsp;&nbsp;Cerrar</button>
-  </div>
 
   <!-- Encabezado empresa + número de cotización -->
   <div class="header">
@@ -200,7 +204,6 @@ export function generateCotizacionPDF(
       <thead>
         <tr>
           <th class="c" style="width:30px">#</th>
-          <th style="width:105px">Clave</th>
           <th>Descripción</th>
           <th class="r" style="width:55px">Cant.</th>
           <th class="r" style="width:90px">Precio unit.</th>
@@ -232,12 +235,62 @@ export function generateCotizacionPDF(
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=960,height=820,scrollbars=yes,resizable=yes');
-  if (!win) {
-    alert('Activa las ventanas emergentes en tu navegador para generar el PDF.');
-    return;
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.left = '-10000px';
+  iframe.style.top = '0';
+  iframe.style.width = '900px';
+  iframe.style.height = '1200px';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) throw new Error('No se pudo preparar el documento');
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    await new Promise<void>((resolve) => {
+      if (doc.readyState === 'complete') resolve();
+      else iframe.addEventListener('load', () => resolve(), { once: true });
+    });
+    await waitForImages(doc);
+
+    const pageEl = doc.querySelector<HTMLElement>('.page');
+    if (!pageEl) throw new Error('No se pudo generar el contenido de la cotización');
+
+    const canvas = await html2canvas(pageEl, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while (heightLeft > 0) {
+      position -= pageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    const fechaArchivo = new Date(nota.created_at)
+      .toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      .replace(/\//g, '-');
+    const filename = sanitizeFilename(`Cotizaciones-${clienteNombre}-${fechaArchivo}`) + '.pdf';
+
+    pdf.save(filename);
+  } finally {
+    document.body.removeChild(iframe);
   }
-  win.document.write(html);
-  win.document.close();
-  win.onload = () => { win.focus(); };
 }
