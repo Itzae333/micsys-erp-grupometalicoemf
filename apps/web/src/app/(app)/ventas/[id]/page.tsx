@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle, Download } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
@@ -16,6 +16,7 @@ import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
@@ -100,6 +101,7 @@ export default function NotaDetallePage() {
 
   // Reimprimir
   const [printing, setPrinting] = useState(false);
+  const [descargando, setDescargando] = useState(false);
 
   // Carga / entrega de mercancía
   const [dlgCarga, setDlgCarga] = useState(false);
@@ -322,6 +324,16 @@ export default function NotaDetallePage() {
       // Bridge no disponible — no bloquear la UI
     } finally {
       setPrinting(false);
+    }
+  }
+
+  async function descargarComprobante() {
+    if (!nota) return;
+    setDescargando(true);
+    try {
+      await generateComprobantePDF(nota, empresa, ubicacion);
+    } finally {
+      setDescargando(false);
     }
   }
 
@@ -594,6 +606,12 @@ export default function NotaDetallePage() {
               {printing ? 'Imprimiendo…' : 'Reimprimir'}
             </Button>
           )}
+          {esCerrada && canCancel && (
+            <Button variant="secondary" disabled={descargando} onClick={() => void descargarComprobante()}>
+              <Download className="h-4 w-4 mr-1.5" />
+              {descargando ? 'Generando…' : 'Descargar'}
+            </Button>
+          )}
           {puedeCargar && (
             <Button variant="secondary" onClick={openCarga}>
               <PackageCheck className="h-4 w-4 mr-1.5" />
@@ -742,8 +760,11 @@ export default function NotaDetallePage() {
               {nota.lineas.map((l, i) => (
                 <tr key={l.id} className={cn('border-b border-steel-50', i === nota.lineas.length - 1 && 'border-b-0')}>
                   <td className="px-4 py-3">
-                    <p className="text-body-sm font-semibold text-steel-900">{l.clave}</p>
-                    <p className="text-meta text-steel-500">{l.articulo?.descripcion_1 ?? ''}</p>
+                    <p className="text-body-sm font-semibold text-steel-900 break-words">
+                      {[l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5]
+                        .filter(Boolean).join(' · ') || l.clave}
+                    </p>
+                    <p className="text-meta text-steel-400">{l.clave}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-700">{l.cantidad}</td>
                   <td className="px-4 py-3 text-right text-body-sm text-steel-700">{formatPrecio(l.precio_unitario)}</td>
@@ -1310,7 +1331,8 @@ export default function NotaDetallePage() {
               {cargaPendientes.lineas.map((l) => (
                 <div key={l.id} className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-semibold text-steel-900">{l.clave}</p>
+                    <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
+                    <p className="text-meta text-steel-400">{l.clave}</p>
                     <p className="text-meta text-steel-500">
                       Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
                     </p>

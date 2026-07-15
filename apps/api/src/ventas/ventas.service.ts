@@ -32,6 +32,15 @@ const NOTA_INCLUDE = {
 
 type NotaRaw = Prisma.NotaVentaGetPayload<{ include: typeof NOTA_INCLUDE }>;
 
+// URL pública donde este API sirve /uploads/ (logos) — necesaria para que el logo
+// se vea en correos, ya que ahí no hay origen desde el cual resolver rutas relativas.
+const API_PUBLIC_URL = (process.env.API_PUBLIC_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+
+function resolveLogoUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_PUBLIC_URL}${url}`;
+}
+
 @Injectable()
 export class VentasService {
   constructor(private prisma: PrismaService) {}
@@ -649,7 +658,7 @@ export class VentasService {
     // Logo: ubicacion primero, luego empresa
     const rawLogoUrl = ubicacion?.logo_url ?? empresa?.logo_url ?? null;
     const logoHtml = rawLogoUrl
-      ? `<img src="${rawLogoUrl}" alt="Logo" style="max-height:70px;max-width:180px;display:block;margin:0 auto 10px;">`
+      ? `<img src="${resolveLogoUrl(rawLogoUrl)}" alt="Logo" style="max-height:70px;max-width:180px;display:block;margin:0 auto 10px;">`
       : '';
 
     const razonSocial = (ubicacion?.razon_social ?? empresa?.razon_social ?? empresa?.nombre ?? '').toUpperCase();
@@ -675,8 +684,7 @@ export class VentasService {
       const bg = idx % 2 === 1 ? '#f8fafc' : '#ffffff';
       return `
         <tr>
-          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-family:monospace;font-size:12px;font-weight:700;color:#0f172a;">${l.clave}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-size:12px;color:#475569;">${descs || '—'}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-size:12px;color:#475569;">${descs || l.clave}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">${Number(l.cantidad).toLocaleString('es-MX')}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">$${fmt(Number(l.precio_unitario))}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:13px;font-weight:700;color:#0f172a;">$${fmt(Number(l.subtotal))}</td>
@@ -684,28 +692,28 @@ export class VentasService {
     }).join('');
 
     // Totales
-    const subtotalRow = `<tr><td colspan="4" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
+    const subtotalRow = `<tr><td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
     const descuentoRow = Number(nota.descuento) > 0
-      ? `<tr><td colspan="4" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
+      ? `<tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
       : '';
 
     let pagoHtml = '';
     if (!esCotizacion && dto.extra) {
       if (dto.extra.tipo_cierre === 'CREDITO') {
-        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
+        pagoHtml = `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else if (dto.extra.tipo_cierre === 'PENDIENTE') {
-        pagoHtml = `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">Pendiente de cobro</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
+        pagoHtml = `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">Pendiente de cobro</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else {
         pagoHtml = (dto.extra.pagos ?? []).filter((p) => p.monto > 0).map((p) =>
-          `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">${p.metodo}</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(p.monto))}</td></tr>`,
+          `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">${p.metodo}</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(p.monto))}</td></tr>`,
         ).join('');
         if (dto.extra.cambio && dto.extra.cambio > 0) {
-          pagoHtml += `<tr><td colspan="4" style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">Cambio</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">$${fmt(Number(dto.extra.cambio))}</td></tr>`;
+          pagoHtml += `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">Cambio</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#94a3b8;">$${fmt(Number(dto.extra.cambio))}</td></tr>`;
         }
       }
     }
 
-    const totalRow = `<tr style="background:#0f172a;"><td colspan="4" style="padding:12px 8px;text-align:right;color:#f8fafc;font-weight:700;font-size:14px;letter-spacing:.5px;">TOTAL</td><td style="padding:12px 8px;text-align:right;color:#ffffff;font-weight:900;font-size:18px;">$${fmt(Number(nota.total))}</td></tr>`;
+    const totalRow = `<tr style="background:#0f172a;"><td colspan="3" style="padding:12px 8px;text-align:right;color:#f8fafc;font-weight:700;font-size:14px;letter-spacing:.5px;">TOTAL</td><td style="padding:12px 8px;text-align:right;color:#ffffff;font-weight:900;font-size:18px;">$${fmt(Number(nota.total))}</td></tr>`;
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -757,7 +765,6 @@ export class VentasService {
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <thead>
         <tr style="background:#0f172a;">
-          <th style="padding:9px 8px;text-align:left;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Clave</th>
           <th style="padding:9px 8px;text-align:left;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Descripción</th>
           <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Cant.</th>
           <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">P.U.</th>

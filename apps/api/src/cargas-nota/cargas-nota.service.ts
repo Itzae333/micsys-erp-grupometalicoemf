@@ -116,7 +116,13 @@ export class CargasNotaService {
       include: {
         lineas: {
           include: {
-            articulo: { select: { id: true, clave: true, descripcion_1: true } },
+            articulo: {
+              select: {
+                id: true, clave: true,
+                descripcion_1: true, descripcion_2: true, descripcion_3: true,
+                descripcion_4: true, descripcion_5: true,
+              },
+            },
             carga_lineas: { where: { carga: { anulada: false } }, select: { cantidad_cargada: true } },
           },
         },
@@ -133,11 +139,15 @@ export class CargasNotaService {
       estatus: nota.estatus,
       lineas: nota.lineas.map((l) => {
         const cargado = l.carga_lineas.reduce((s, c) => s + Number(c.cantidad_cargada), 0);
+        const descripcion = [
+          l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3,
+          l.articulo?.descripcion_4, l.articulo?.descripcion_5,
+        ].filter(Boolean).join(' · ') || null;
         return {
           id: l.id,
           articulo_id: l.articulo_id,
           clave: l.clave,
-          descripcion: l.articulo?.descripcion_1 ?? null,
+          descripcion,
           cantidad: Number(l.cantidad),
           cargado,
           pendiente: +(Number(l.cantidad) - cargado).toFixed(3),

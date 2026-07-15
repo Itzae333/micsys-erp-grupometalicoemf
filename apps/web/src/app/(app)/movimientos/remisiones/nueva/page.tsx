@@ -28,6 +28,11 @@ interface LineaCarrito {
 
 const SLOTS = [1, 2, 3, 4, 5];
 
+function descripcionCompleta(art: Articulo): string {
+  return [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
+    .filter(Boolean).join(' · ');
+}
+
 export default function NuevaRemisionPage() {
   useBlockRoles(['SUPER_USUARIO']);
   const router = useRouter();
@@ -98,7 +103,7 @@ export default function NuevaRemisionPage() {
     .filter(({ l }) => {
       if (!cartQ) return true;
       const qLow = cartQ.toLowerCase();
-      return [l.articulo.clave, l.articulo.descripcion_1, l.articulo.descripcion_2]
+      return [l.articulo.clave, descripcionCompleta(l.articulo)]
         .filter(Boolean).join(' ').toLowerCase().includes(qLow);
     });
 
@@ -244,7 +249,7 @@ export default function NuevaRemisionPage() {
                       >
                         <td className="px-4 py-2.5 min-w-0">
                           <p className="font-semibold text-steel-900 leading-tight break-words">
-                            {art.descripcion_1 || art.clave}
+                            {descripcionCompleta(art) || art.clave}
                           </p>
                           <p className="text-meta text-steel-400">{art.clave}</p>
                         </td>
@@ -323,7 +328,7 @@ export default function NuevaRemisionPage() {
                   {carritoFiltrado.map(({ l, idx }) => (
                     <tr key={`${l.articulo.id}-${idx}`} className="bg-white">
                       <td className="px-4 py-2.5 min-w-0">
-                        <p className="font-semibold text-steel-900 leading-tight break-words">{l.articulo.descripcion_1 || l.articulo.clave}</p>
+                        <p className="font-semibold text-steel-900 leading-tight break-words">{descripcionCompleta(l.articulo) || l.articulo.clave}</p>
                         <p className="text-meta text-steel-400">{l.articulo.clave}</p>
                       </td>
                       <td className="px-2 py-2.5 text-center">
