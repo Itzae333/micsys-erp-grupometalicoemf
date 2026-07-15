@@ -1094,11 +1094,11 @@ export default function NotaDetallePage() {
                     className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors"
                   >
                     <div>
-                      <p className="text-body-sm font-semibold text-steel-900">{art.clave}</p>
-                      <p className="text-meta text-steel-500">
+                      <p className="text-body-sm font-semibold text-steel-900 break-words">
                         {[art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
-                          .filter(Boolean).join(' · ')}
+                          .filter(Boolean).join(' · ') || art.clave}
                       </p>
+                      <p className="text-meta text-steel-400">{art.clave}</p>
                     </div>
                   </button>
                 ))}

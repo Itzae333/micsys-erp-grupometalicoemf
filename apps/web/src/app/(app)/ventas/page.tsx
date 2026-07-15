@@ -24,10 +24,11 @@ import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from
 import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
 
 // ── Estatus ──────────────────────────────────────────────────
-const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
+const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
   COTIZACION: { label: 'Cotización', variant: 'cargada' },
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
   PENDIENTE:  { label: 'Pendiente',  variant: 'pending' },
+  REABIERTA:  { label: 'En edición', variant: 'incomplete' },
   PAGADA:     { label: 'Pagada',     variant: 'paid' },
   CREDITO:    { label: 'Crédito',    variant: 'credit' },
   CANCELADA:  { label: 'Cancelada',  variant: 'cancelled' },
