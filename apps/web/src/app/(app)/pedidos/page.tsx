@@ -148,8 +148,8 @@ export default function PedidosPage() {
   // ── Cargar clientes ─────────────────────────────────────────
   useEffect(() => {
     if (!dlgNuevo || !empresa) return;
-    api.get<{ data: Cliente[] }>('/clientes?limit=200')
-      .then((r) => setClientes(r.data)).catch(() => null);
+    api.get<Cliente[]>('/clientes')
+      .then(setClientes).catch(() => null);
   }, [dlgNuevo, empresa]);
 
   // ── Buscar artículos con debounce ───────────────────────────

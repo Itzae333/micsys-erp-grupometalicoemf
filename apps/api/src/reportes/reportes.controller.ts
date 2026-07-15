@@ -2,6 +2,8 @@ import { Controller, Get, Query, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { ReportesService } from './reportes.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @ApiTags('Reportes')
 @ApiBearerAuth()
@@ -12,9 +14,12 @@ export class ReportesController {
   constructor(private reportes: ReportesService) {}
 
   @Get('dashboard')
-  @ApiOperation({ summary: 'KPIs del día y del mes para el dashboard principal' })
-  getDashboard(@Headers('x-ubicacion-id') ubicacionId: string) {
-    return this.reportes.getDashboard(ubicacionId);
+  @ApiOperation({ summary: 'KPIs del dashboard principal — el contenido varía según el rol del usuario' })
+  getDashboard(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.reportes.getDashboard(ubicacionId, user.rol);
   }
 
   @Get('dashboard-global')

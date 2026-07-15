@@ -16,13 +16,22 @@ async function bootstrap() {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const express = require('express') as typeof import('express');
-  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
-  // Servir /uploads/ con header CORS explícito (se registra antes que enableCors)
+  // Servir /uploads/ con header CORS explícito (se registra antes que enableCors).
+  // Se refleja el Origin real del request, igual que enableCors({ origin: true }),
+  // porque el logo se consume vía fetch() (modo CORS) al armar tickets ESC/POS.
   app.use(
     '/uploads',
-    (_req: unknown, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
-      (res as unknown as import('http').ServerResponse).setHeader('Access-Control-Allow-Origin', frontendUrl);
+    (
+      req: { headers: { origin?: string } },
+      res: { setHeader: (k: string, v: string) => void },
+      next: () => void,
+    ) => {
+      const origin = req.headers.origin;
+      if (origin) {
+        (res as unknown as import('http').ServerResponse).setHeader('Access-Control-Allow-Origin', origin);
+        (res as unknown as import('http').ServerResponse).setHeader('Vary', 'Origin');
+      }
       next();
     },
     express.static(join(process.cwd(), 'uploads')),

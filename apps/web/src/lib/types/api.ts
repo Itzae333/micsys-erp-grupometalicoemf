@@ -580,6 +580,60 @@ export interface DashboardData {
   ventas_diarias: DiaVenta[];
 }
 
+export interface DashboardEncargadoData {
+  ventas_hoy: { total: number; count: number };
+  clientes_frecuentes: {
+    cliente_id: string | null;
+    cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null } | null;
+    notas: number;
+  }[];
+}
+
+export interface DashboardVendedorData {
+  top_productos: {
+    articulo_id: string; clave: string; descripcion_1: string | null;
+    cantidad: number; precio_1: number | null;
+  }[];
+}
+
+export interface DashboardAlmacenistaData {
+  top_productos: {
+    articulo_id: string; clave: string; descripcion_1: string | null;
+    cantidad: number; existencia_1: number | null;
+  }[];
+}
+
+export interface DashboardJefeManufacturaData {
+  ops_activas: number;
+  ordenes: {
+    id: string; folio: number; estatus: string;
+    cantidad_objetivo: number; cantidad_producida: number;
+    articulo: { id: string; clave: string; descripcion_1: string | null } | null;
+  }[];
+}
+
+export interface DashboardJefeRHData {
+  empleados_activos: number;
+  asistencia_hoy: { estatus: string; count: number }[];
+  ausentes_hoy: {
+    empleado_id: string;
+    empleado: { id: string; nombre: string; apellidos: string; puesto: string } | null;
+  }[];
+}
+
+export interface DashboardFabricaData {
+  top_productos: {
+    articulo_id: string; clave: string; descripcion_1: string | null;
+    cantidad: number; existencia_1: number | null;
+  }[];
+  ops_activas: number;
+  ordenes: {
+    id: string; folio: number; estatus: string;
+    cantidad_objetivo: number; cantidad_producida: number;
+    articulo: { id: string; clave: string; descripcion_1: string | null } | null;
+  }[];
+}
+
 export interface ReporteVentasData {
   resumen: { total: number; subtotal: number; descuento: number; count: number };
   por_estatus: { estatus: string; count: number; total: number }[];

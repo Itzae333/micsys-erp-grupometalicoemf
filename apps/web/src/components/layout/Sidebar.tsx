@@ -35,12 +35,15 @@ import { NotificacionesPanel } from '@/components/global/NotificacionesPanel';
 import { GlobalSearch } from '@/components/global/GlobalSearch';
 import { usePwaInstall } from '@/lib/pwa/use-pwa-install';
 import type { RolUsuario } from '@/lib/store/auth.store';
+import type { TipoUbicacion } from '@/lib/types/api';
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ReactNode;
   roles: RolUsuario[];
+  /** Ubicaciones de este tipo NO ven el item, sin importar el rol. */
+  ocultarParaTipos?: TipoUbicacion[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -55,12 +58,14 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Ventas',
     icon: <ShoppingCart className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/pedidos',
     label: 'Pedidos',
     icon: <ClipboardList className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/inventario',
@@ -91,24 +96,28 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Clientes',
     icon: <Users className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/ventas/corte-caja',
     label: 'Corte de Caja',
     icon: <Calculator className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/gastos',
     label: 'Gastos',
     icon: <Receipt className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/compras',
     label: 'Compras',
     icon: <ClipboardList className="h-4 w-4" />,
     roles: ['ADMIN', 'ENCARGADO'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/rh',
@@ -121,6 +130,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Reportes',
     icon: <BarChart3 className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
+    ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/historial-legacy',
@@ -157,7 +167,9 @@ export function Sidebar() {
   }
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => usuario && item.roles.includes(usuario.rol),
+    (item) =>
+      usuario && item.roles.includes(usuario.rol) &&
+      (!item.ocultarParaTipos || !ubicacion?.tipo || !item.ocultarParaTipos.includes(ubicacion.tipo)),
   );
 
   const nombreCompleto = usuario ? `${usuario.nombre} ${usuario.apellidos}` : '';

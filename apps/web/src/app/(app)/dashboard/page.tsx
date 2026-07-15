@@ -1,12 +1,29 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, FileText, Users, Factory, Truck, CreditCard, RefreshCw, Building2 } from 'lucide-react';
+import { TrendingUp, FileText, Users, Factory, Truck, CreditCard, RefreshCw, Building2, Package, UserCheck } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { StatCard } from '@/components/ui/stat-card';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import type { DashboardData } from '@/lib/types/api';
+import type {
+  DashboardData,
+  DashboardEncargadoData,
+  DashboardVendedorData,
+  DashboardAlmacenistaData,
+  DashboardJefeManufacturaData,
+  DashboardJefeRHData,
+  DashboardFabricaData,
+} from '@/lib/types/api';
+
+type DashboardResponse =
+  | DashboardData
+  | DashboardEncargadoData
+  | DashboardVendedorData
+  | DashboardAlmacenistaData
+  | DashboardJefeManufacturaData
+  | DashboardJefeRHData
+  | DashboardFabricaData;
 
 interface EmpresaKpi {
   empresa_id: string;
@@ -34,12 +51,24 @@ export default function DashboardPage() {
   const { usuario } = useAuthStore();
   const { ubicacion } = useContextoStore();
   const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';
+  const isEncargado = usuario?.rol === 'ENCARGADO';
+  const isVendedor = usuario?.rol === 'VENDEDOR';
+  const isAlmacenista = usuario?.rol === 'ALMACENISTA';
+  const isJefeManufactura = usuario?.rol === 'JEFE_MANUFACTURA';
+  const isJefeRH = usuario?.rol === 'JEFE_RH';
+  // Roles operativos con vista mínima acorde a su tarea del día — el resto
+  // (ADMIN, SUPER_USUARIO) sigue viendo el dashboard completo de siempre.
+  const esRolTrimado = isEncargado || isVendedor || isAlmacenista || isJefeManufactura || isJefeRH;
+  // Fábrica no vende — ningún dashboard de rol aplica ahí (el de ENCARGADO
+  // está pensado para mostrador). Cualquier rol que no sea ADMIN/SUPER_USUARIO
+  // ve el mismo dashboard fijo de fábrica en su lugar.
+  const esFabrica = ubicacion?.tipo === 'FABRICA' && !isSuperUsuario && usuario?.rol !== 'ADMIN';
   // El super usuario opera sobre todas las empresas/ubicaciones (solo lectura),
   // así que normalmente no tiene una ubicación seleccionada en el contexto —
   // el dashboard por ubicación no aplica y se muestra la vista consolidada.
   const sinUbicacion = isSuperUsuario && !ubicacion?.id;
 
-  const [data, setData]           = useState<DashboardData | null>(null);
+  const [data, setData]           = useState<DashboardResponse | null>(null);
   const [loading, setLoading]     = useState(!sinUbicacion);
   const [global, setGlobal]       = useState<DashboardGlobal | null>(null);
   const [globalLoading, setGlobalLoading] = useState(false);
@@ -48,7 +77,7 @@ export default function DashboardPage() {
     if (sinUbicacion) return;
     setLoading(true);
     try {
-      const d = await api.get<DashboardData>('/reportes/dashboard');
+      const d = await api.get<DashboardResponse>('/reportes/dashboard');
       setData(d);
     } catch { /* silently fail */ }
     finally { setLoading(false); }
@@ -66,11 +95,18 @@ export default function DashboardPage() {
 
   useEffect(() => { void load(); void loadGlobal(); }, [load, loadGlobal]);
 
-  const d = data;
+  const d = !esRolTrimado ? (data as DashboardData | null) : null;
   const ventasHoy = d?.ventas_hoy.total ?? 0;
   const ventasMes = d?.ventas_mes.total ?? 0;
   const countHoy = d?.ventas_hoy.count ?? 0;
   const countMes = d?.ventas_mes.count ?? 0;
+
+  const dEncargado = isEncargado && !esFabrica ? (data as DashboardEncargadoData | null) : null;
+  const dVendedor = isVendedor && !esFabrica ? (data as DashboardVendedorData | null) : null;
+  const dAlmacenista = isAlmacenista && !esFabrica ? (data as DashboardAlmacenistaData | null) : null;
+  const dJefeManufactura = isJefeManufactura && !esFabrica ? (data as DashboardJefeManufacturaData | null) : null;
+  const dJefeRH = isJefeRH && !esFabrica ? (data as DashboardJefeRHData | null) : null;
+  const dFabrica = esFabrica ? (data as DashboardFabricaData | null) : null;
 
   return (
     <div>
@@ -98,7 +134,7 @@ export default function DashboardPage() {
         )}
 
         {/* KPI cards — primera fila (requiere una ubicación de contexto) */}
-        {!sinUbicacion && (
+        {!sinUbicacion && !esRolTrimado && (
         <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
@@ -243,6 +279,300 @@ export default function DashboardPage() {
           </div>
         </div>
         </>
+        )}
+
+        {/* ENCARGADO — solo ventas de hoy y clientes frecuentes */}
+        {isEncargado && !sinUbicacion && !esFabrica && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                label="Ventas hoy"
+                value={loading ? '—' : fmt(dEncargado?.ventas_hoy.total ?? 0)}
+                description={loading ? '' : `${dEncargado?.ventas_hoy.count ?? 0} nota${(dEncargado?.ventas_hoy.count ?? 0) !== 1 ? 's' : ''} cerrada${(dEncargado?.ventas_hoy.count ?? 0) !== 1 ? 's' : ''}`}
+                accent
+              />
+            </div>
+            <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Clientes frecuentes</h3>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+              ) : !dEncargado?.clientes_frecuentes.length ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Sin clientes frecuentes últimamente</div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Notas (7 días)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {dEncargado.clientes_frecuentes.map((c) => (
+                      <tr key={c.cliente_id ?? c.cliente?.id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2 text-steel-900 truncate max-w-[200px]">
+                          {c.cliente?.razon_social || `${c.cliente?.nombre ?? ''} ${c.cliente?.apellidos ?? ''}`.trim() || 'Cliente'}
+                        </td>
+                        <td className="px-4 py-2 text-right text-steel-600 tabular-nums">{c.notas}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* VENDEDOR — solo precios de productos más vendidos */}
+        {isVendedor && !sinUbicacion && !esFabrica && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-brand-600" />
+              <h3 className="text-body font-semibold text-steel-900">Precios de productos más vendidos</h3>
+            </div>
+            {loading ? (
+              <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+            ) : !dVendedor?.top_productos.length ? (
+              <div className="p-8 text-center text-body-sm text-steel-400">Sin ventas en los últimos 7 días</div>
+            ) : (
+              <table className="w-full text-body-sm">
+                <thead>
+                  <tr className="border-b border-steel-100">
+                    <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Cant.</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Precio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-steel-50">
+                  {dVendedor.top_productos.map((a) => (
+                    <tr key={a.articulo_id} className="hover:bg-steel-50 transition-colors">
+                      <td className="px-4 py-2 text-steel-900 truncate max-w-[200px]">{a.descripcion_1 ?? a.clave}</td>
+                      <td className="px-4 py-2 text-right text-steel-600 tabular-nums">{a.cantidad.toLocaleString('es-MX')}</td>
+                      <td className="px-4 py-2 text-right text-steel-900 font-medium tabular-nums">
+                        {a.precio_1 != null ? fmt(a.precio_1) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* ALMACENISTA — solo productos más vendidos y su existencia */}
+        {isAlmacenista && !sinUbicacion && !esFabrica && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+              <Package className="h-4 w-4 text-brand-600" />
+              <h3 className="text-body font-semibold text-steel-900">Productos más vendidos · existencias</h3>
+            </div>
+            {loading ? (
+              <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+            ) : !dAlmacenista?.top_productos.length ? (
+              <div className="p-8 text-center text-body-sm text-steel-400">Sin ventas en los últimos 7 días</div>
+            ) : (
+              <table className="w-full text-body-sm">
+                <thead>
+                  <tr className="border-b border-steel-100">
+                    <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Cant. vendida</th>
+                    <th className="px-4 py-2 text-right font-medium text-steel-500">Existencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-steel-50">
+                  {dAlmacenista.top_productos.map((a) => (
+                    <tr key={a.articulo_id} className="hover:bg-steel-50 transition-colors">
+                      <td className="px-4 py-2 text-steel-900 truncate max-w-[200px]">{a.descripcion_1 ?? a.clave}</td>
+                      <td className="px-4 py-2 text-right text-steel-600 tabular-nums">{a.cantidad.toLocaleString('es-MX')}</td>
+                      <td className="px-4 py-2 text-right text-steel-900 font-medium tabular-nums">
+                        {a.existencia_1 ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* JEFE_MANUFACTURA — solo órdenes de producción activas */}
+        {isJefeManufactura && !sinUbicacion && !esFabrica && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                label="OPs activas"
+                value={loading ? '—' : String(dJefeManufactura?.ops_activas ?? 0)}
+                description="Abiertas + en proceso"
+                accent
+              />
+            </div>
+            <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+                <Factory className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Órdenes en proceso</h3>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+              ) : !dJefeManufactura?.ordenes.length ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Sin órdenes activas</div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Folio</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Avance</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Estatus</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {dJefeManufactura.ordenes.map((o) => (
+                      <tr key={o.id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2 text-steel-600 tabular-nums">#{o.folio}</td>
+                        <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{o.articulo?.descripcion_1 ?? o.articulo?.clave ?? '—'}</td>
+                        <td className="px-4 py-2 text-right text-steel-600 tabular-nums">
+                          {o.cantidad_producida.toLocaleString('es-MX')} / {o.cantidad_objetivo.toLocaleString('es-MX')}
+                        </td>
+                        <td className="px-4 py-2 text-right text-steel-500 capitalize">{o.estatus.toLowerCase().replace('_', ' ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* JEFE_RH — solo asistencia del día */}
+        {isJefeRH && !sinUbicacion && !esFabrica && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                label="Empleados activos"
+                value={loading ? '—' : String(dJefeRH?.empleados_activos ?? 0)}
+                description="Plantilla activa"
+                accent
+              />
+              {dJefeRH?.asistencia_hoy.map((a) => (
+                <StatCard
+                  key={a.estatus}
+                  label={a.estatus.charAt(0) + a.estatus.slice(1).toLowerCase()}
+                  value={String(a.count)}
+                  description="Hoy"
+                />
+              ))}
+            </div>
+            <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Ausentes hoy</h3>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+              ) : !dJefeRH?.ausentes_hoy.length ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Sin ausencias hoy</div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Empleado</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Puesto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {dJefeRH.ausentes_hoy.map((a) => (
+                      <tr key={a.empleado_id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2 text-steel-900">{a.empleado ? `${a.empleado.nombre} ${a.empleado.apellidos}` : '—'}</td>
+                        <td className="px-4 py-2 text-steel-500">{a.empleado?.puesto ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* FABRICA — dashboard fijo por tipo de ubicación (cualquier rol, excepto ADMIN/SUPER_USUARIO) */}
+        {esFabrica && !sinUbicacion && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                label="OPs activas"
+                value={loading ? '—' : String(dFabrica?.ops_activas ?? 0)}
+                description="Abiertas + en proceso"
+                accent
+              />
+            </div>
+            <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+                <Factory className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Órdenes en proceso</h3>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+              ) : !dFabrica?.ordenes.length ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Sin órdenes activas</div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Folio</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Avance</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Estatus</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {dFabrica.ordenes.map((o) => (
+                      <tr key={o.id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2 text-steel-600 tabular-nums">#{o.folio}</td>
+                        <td className="px-4 py-2 text-steel-900 truncate max-w-[160px]">{o.articulo?.descripcion_1 ?? o.articulo?.clave ?? '—'}</td>
+                        <td className="px-4 py-2 text-right text-steel-600 tabular-nums">
+                          {o.cantidad_producida.toLocaleString('es-MX')} / {o.cantidad_objetivo.toLocaleString('es-MX')}
+                        </td>
+                        <td className="px-4 py-2 text-right text-steel-500 capitalize">{o.estatus.toLowerCase().replace('_', ' ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-steel-100 flex items-center gap-2">
+                <Package className="h-4 w-4 text-brand-600" />
+                <h3 className="text-body font-semibold text-steel-900">Productos más movidos · existencias</h3>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Cargando…</div>
+              ) : !dFabrica?.top_productos.length ? (
+                <div className="p-8 text-center text-body-sm text-steel-400">Sin movimientos en los últimos 7 días</div>
+              ) : (
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Cant.</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Existencia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {dFabrica.top_productos.map((a) => (
+                      <tr key={a.articulo_id} className="hover:bg-steel-50 transition-colors">
+                        <td className="px-4 py-2 text-steel-900 truncate max-w-[200px]">{a.descripcion_1 ?? a.clave}</td>
+                        <td className="px-4 py-2 text-right text-steel-600 tabular-nums">{a.cantidad.toLocaleString('es-MX')}</td>
+                        <td className="px-4 py-2 text-right text-steel-900 font-medium tabular-nums">
+                          {a.existencia_1 ?? '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
         )}
 
         {/* Dashboard global — solo SUPER_USUARIO */}

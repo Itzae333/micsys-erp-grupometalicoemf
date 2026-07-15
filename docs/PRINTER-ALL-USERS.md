@@ -1,9 +1,11 @@
-# Instalar la ticketera para que la vea SYSTEM (todos los usuarios)
+# Instalar la ticketera para que la vea Local System (todos los usuarios)
 
-El print-bridge corre como `SYSTEM` vía tarea programada (arranca con Windows,
-sin depender de que un usuario específico inicie sesión). Para que `SYSTEM`
-pueda imprimir, la impresora debe quedar registrada como impresora **local
-de máquina**, no como una conexión atada al perfil de un usuario.
+El print-bridge corre como Servicio de Windows real (registrado con NSSM,
+nombre `GrupoMetalicoEMF-PrintBridge`, visible en `services.msc`) bajo la
+cuenta `Local System` — arranca con Windows, sin depender de que un usuario
+específico inicie sesión. Para que `Local System` pueda imprimir, la
+impresora debe quedar registrada como impresora **local de máquina**, no
+como una conexión atada al perfil de un usuario.
 
 > No existe un checkbox literal de "compartir para todos los usuarios" en
 > impresoras locales USB — ese registro solo aplica a compartir por red hacia
@@ -33,11 +35,12 @@ de máquina**, no como una conexión atada al perfil de un usuario.
    otra PC) — así queda como objeto local del spooler, visible a todos los
    perfiles y a SYSTEM.
 
-## Verificación directa (la que realmente confirma si SYSTEM la ve)
+## Verificación directa (la que realmente confirma si Local System la ve)
 
 No confíes solo en `Get-Printer` corrido como usuario normal — eso no prueba
-que SYSTEM tenga acceso. Para probarlo de verdad, usa **PsExec** (Sysinternals,
-gratis, de Microsoft) para abrir una sesión como SYSTEM y consultar desde ahí:
+que Local System tenga acceso. Para probarlo de verdad, usa **PsExec**
+(Sysinternals, gratis, de Microsoft) para abrir una sesión como SYSTEM y
+consultar desde ahí:
 
 ```powershell
 # Descarga PsExec si no lo tienes: https://learn.microsoft.com/sysinternals/downloads/psexec
@@ -49,7 +52,7 @@ Dentro de esa consola (que corre como SYSTEM):
 Get-Printer | Select Name, Type, PortName
 ```
 
-Si `TICKETERA` aparece ahí, SYSTEM la ve y el print-bridge va a poder
+Si `TICKETERA` aparece ahí, Local System la ve y el print-bridge va a poder
 imprimir. Si no aparece, hay que reinstalar el driver como Administrador
 (paso 2-3) — probablemente se instaló con un usuario sin privilegios o quedó
 como conexión de red en vez de impresora local.
@@ -58,5 +61,15 @@ como conexión de red en vez de impresora local.
 
 Después de corregir la instalación de la impresora, corre de nuevo
 `PrintBridge-Setup.exe` como Administrador (o solo reinicia la PC si ya
-estaba instalado) para que la tarea `GrupoMetalicoEMF-PrintBridge` arranque
-limpia y confirme conexión (`TASK_OK` en vez de `TASK_OK_NOT_RESPONDING`).
+estaba instalado) para que el servicio `GrupoMetalicoEMF-PrintBridge`
+arranque limpio. El instalador confirma al final si respondió en
+`http://localhost:7788` o no; si algo falla, revisa
+`C:\Program Files\GrupoMetalicoEMF\PrintBridge\install.log` (pasos del
+instalador) y `service-stderr.log` (errores del servicio ya corriendo) — se
+pueden mandar por WhatsApp/correo para diagnosticar sin acceso remoto a esa
+PC. También puedes revisar el estado desde `services.msc` (buscar
+"GrupoMetalicoEMF Print Bridge") o con:
+
+```powershell
+Get-Service GrupoMetalicoEMF-PrintBridge
+```

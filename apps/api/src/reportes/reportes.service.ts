@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { Prisma } from '@grupometalicoemf/database';
+import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 
 function serializeDecimal(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -46,7 +46,35 @@ export class ReportesService {
 
   // ── Dashboard ──────────────────────────────────────────────
 
-  async getDashboard(ubicacionId: string) {
+  /**
+   * Despacha al dashboard según el rol: ADMIN/SUPER_USUARIO ven el completo
+   * de siempre; los roles operativos ven una vista mínima acorde a su tarea
+   * (evita over-fetch en tablets con conectividad intermitente).
+   *
+   * FABRICA es la excepción: como no vende, el dashboard de rol (ej. el de
+   * ENCARGADO, pensado para mostrador) no aplica ahí — cualquier rol que no
+   * sea ADMIN/SUPER_USUARIO ve el mismo dashboard fijo de fábrica.
+   */
+  async getDashboard(ubicacionId: string, rol: RolUsuario) {
+    if (rol !== 'SUPER_USUARIO' && rol !== 'ADMIN') {
+      const ubicacion = await this.prisma.ubicacion.findUnique({
+        where: { id: ubicacionId },
+        select: { empresa_id: true, tipo: true },
+      });
+      if (ubicacion?.tipo === 'FABRICA') {
+        return this.getDashboardFabrica(ubicacionId, ubicacion.empresa_id);
+      }
+    }
+
+    if (rol === 'ENCARGADO') return this.getDashboardEncargado(ubicacionId);
+    if (rol === 'VENDEDOR') return this.getDashboardVendedor(ubicacionId);
+    if (rol === 'ALMACENISTA') return this.getDashboardAlmacenista(ubicacionId);
+    if (rol === 'JEFE_MANUFACTURA') return this.getDashboardJefeManufactura(ubicacionId);
+    if (rol === 'JEFE_RH') return this.getDashboardJefeRH(ubicacionId);
+    return this.getDashboardCompleto(ubicacionId);
+  }
+
+  private async getDashboardCompleto(ubicacionId: string) {
     const hoy = new Date();
     const iniHoy = startOfDay(hoy);
     const finHoy = endOfDay(hoy);
@@ -174,6 +202,254 @@ export class ReportesService {
         subtotal: dec(a._sum?.subtotal),
       })),
       ventas_diarias: ventasDiarias,
+    };
+  }
+
+  /** Solo lo esencial para operar el día a día de una ubicación: ventas de hoy y quién compra seguido. */
+  private async getDashboardEncargado(ubicacionId: string) {
+    const hoy = new Date();
+    const iniHoy = startOfDay(hoy);
+    const finHoy = endOfDay(hoy);
+    const sieteDiasAtras = startOfDay(new Date(hoy.getTime() - 6 * 24 * 60 * 60 * 1000));
+
+    const [ventasHoy, clientesFrecuentesRaw] = await Promise.all([
+      this.prisma.notaVenta.aggregate({
+        where: {
+          ubicacion_id: ubicacionId,
+          estatus: { in: ['PAGADA', 'CREDITO'] },
+          created_at: { gte: iniHoy, lte: finHoy },
+        },
+        _sum: { total: true },
+        _count: true,
+      }),
+      this.prisma.notaVenta.groupBy({
+        by: ['cliente_id'],
+        where: {
+          ubicacion_id: ubicacionId,
+          cliente_id: { not: null },
+          estatus: { in: ['PAGADA', 'CREDITO'] },
+          created_at: { gte: sieteDiasAtras },
+        },
+        _count: { _all: true },
+        orderBy: { _count: { cliente_id: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    const clienteIds = clientesFrecuentesRaw.map((c) => c.cliente_id).filter((id): id is string => id !== null);
+    const clientes = clienteIds.length
+      ? await this.prisma.cliente.findMany({
+          where: { id: { in: clienteIds } },
+          select: { id: true, nombre: true, apellidos: true, razon_social: true },
+        })
+      : [];
+    const clienteMap = new Map(clientes.map((c) => [c.id, c]));
+
+    return {
+      ventas_hoy: {
+        total: dec(ventasHoy._sum?.total),
+        count: ventasHoy._count,
+      },
+      clientes_frecuentes: clientesFrecuentesRaw.map((c) => ({
+        cliente_id: c.cliente_id,
+        cliente: c.cliente_id ? (clienteMap.get(c.cliente_id) ?? null) : null,
+        notas: c._count._all,
+      })),
+    };
+  }
+
+  /** Top artículos vendidos (por cantidad, no por monto) en los últimos 7 días — base para VENDEDOR/ALMACENISTA. */
+  private async getTopArticulosPorCantidad(ubicacionId: string, sieteDiasAtras: Date) {
+    return this.prisma.notaVentaLinea.groupBy({
+      by: ['articulo_id', 'clave'],
+      where: {
+        nota: {
+          ubicacion_id: ubicacionId,
+          estatus: { in: ['PAGADA', 'CREDITO'] },
+          created_at: { gte: sieteDiasAtras },
+        },
+      },
+      _sum: { cantidad: true },
+      orderBy: { _sum: { cantidad: 'desc' } },
+      take: 5,
+    });
+  }
+
+  /** Solo lo que un vendedor de mostrador necesita: qué se está vendiendo y a qué precio. */
+  private async getDashboardVendedor(ubicacionId: string) {
+    const sieteDiasAtras = startOfDay(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+    const topRaw = await this.getTopArticulosPorCantidad(ubicacionId, sieteDiasAtras);
+
+    const articuloIds = topRaw.map((a) => a.articulo_id);
+    const articulos = articuloIds.length
+      ? await this.prisma.articulo.findMany({
+          where: { id: { in: articuloIds } },
+          select: { id: true, clave: true, descripcion_1: true, precio_1: true },
+        })
+      : [];
+    const articuloMap = new Map(articulos.map((a) => [a.id, a]));
+
+    return {
+      top_productos: topRaw.map((a) => ({
+        articulo_id: a.articulo_id,
+        clave: a.clave,
+        descripcion_1: articuloMap.get(a.articulo_id)?.descripcion_1 ?? null,
+        cantidad: dec(a._sum?.cantidad),
+        precio_1: articuloMap.get(a.articulo_id)?.precio_1 != null ? dec(articuloMap.get(a.articulo_id)?.precio_1) : null,
+      })),
+    };
+  }
+
+  /** Solo lo que un almacenista necesita: qué se vende más y cuánto queda en existencia. */
+  private async getDashboardAlmacenista(ubicacionId: string) {
+    const sieteDiasAtras = startOfDay(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+    const topRaw = await this.getTopArticulosPorCantidad(ubicacionId, sieteDiasAtras);
+
+    const articuloIds = topRaw.map((a) => a.articulo_id);
+    const articulos = articuloIds.length
+      ? await this.prisma.articulo.findMany({
+          where: { id: { in: articuloIds } },
+          select: { id: true, clave: true, descripcion_1: true, existencia_1: true },
+        })
+      : [];
+    const articuloMap = new Map(articulos.map((a) => [a.id, a]));
+
+    return {
+      top_productos: topRaw.map((a) => ({
+        articulo_id: a.articulo_id,
+        clave: a.clave,
+        descripcion_1: articuloMap.get(a.articulo_id)?.descripcion_1 ?? null,
+        cantidad: dec(a._sum?.cantidad),
+        existencia_1: articuloMap.get(a.articulo_id)?.existencia_1 != null ? dec(articuloMap.get(a.articulo_id)?.existencia_1) : null,
+      })),
+    };
+  }
+
+  /** Solo lo que el jefe de producción necesita: qué órdenes están activas y su avance. */
+  private async getDashboardJefeManufactura(ubicacionId: string) {
+    const ubicacion = await this.prisma.ubicacion.findUnique({
+      where: { id: ubicacionId },
+      select: { empresa_id: true },
+    });
+    const empresaId = ubicacion?.empresa_id ?? '';
+
+    const [opsActivas, ordenesRaw] = await Promise.all([
+      this.prisma.ordenProduccion.count({
+        where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'EN_PROCESO'] } },
+      }),
+      this.prisma.ordenProduccion.findMany({
+        where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'EN_PROCESO'] } },
+        orderBy: { created_at: 'desc' },
+        take: 10,
+        select: {
+          id: true, folio: true, estatus: true,
+          cantidad_objetivo: true, cantidad_producida: true,
+          articulo: { select: { id: true, clave: true, descripcion_1: true } },
+        },
+      }),
+    ]);
+
+    return {
+      ops_activas: opsActivas,
+      ordenes: ordenesRaw.map((o) => ({
+        id: o.id,
+        folio: o.folio,
+        estatus: o.estatus,
+        cantidad_objetivo: dec(o.cantidad_objetivo),
+        cantidad_producida: dec(o.cantidad_producida),
+        articulo: o.articulo,
+      })),
+    };
+  }
+
+  /**
+   * Dashboard fijo para cualquier rol (que no sea ADMIN/SUPER_USUARIO) en una
+   * ubicación FABRICA — combina el top de productos/existencias de ALMACENISTA
+   * con las órdenes activas de JEFE_MANUFACTURA, porque en una fábrica el
+   * dashboard de rol (ej. ENCARGADO pensado para mostrador) no aplica.
+   */
+  private async getDashboardFabrica(ubicacionId: string, empresaId: string) {
+    const sieteDiasAtras = startOfDay(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+
+    const [topRaw, opsActivas, ordenesRaw] = await Promise.all([
+      this.getTopArticulosPorCantidad(ubicacionId, sieteDiasAtras),
+      this.prisma.ordenProduccion.count({
+        where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'EN_PROCESO'] } },
+      }),
+      this.prisma.ordenProduccion.findMany({
+        where: { empresa_id: empresaId, estatus: { in: ['ABIERTA', 'EN_PROCESO'] } },
+        orderBy: { created_at: 'desc' },
+        take: 10,
+        select: {
+          id: true, folio: true, estatus: true,
+          cantidad_objetivo: true, cantidad_producida: true,
+          articulo: { select: { id: true, clave: true, descripcion_1: true } },
+        },
+      }),
+    ]);
+
+    const articuloIds = topRaw.map((a) => a.articulo_id);
+    const articulos = articuloIds.length
+      ? await this.prisma.articulo.findMany({
+          where: { id: { in: articuloIds } },
+          select: { id: true, clave: true, descripcion_1: true, existencia_1: true },
+        })
+      : [];
+    const articuloMap = new Map(articulos.map((a) => [a.id, a]));
+
+    return {
+      top_productos: topRaw.map((a) => ({
+        articulo_id: a.articulo_id,
+        clave: a.clave,
+        descripcion_1: articuloMap.get(a.articulo_id)?.descripcion_1 ?? null,
+        cantidad: dec(a._sum?.cantidad),
+        existencia_1: articuloMap.get(a.articulo_id)?.existencia_1 != null ? dec(articuloMap.get(a.articulo_id)?.existencia_1) : null,
+      })),
+      ops_activas: opsActivas,
+      ordenes: ordenesRaw.map((o) => ({
+        id: o.id,
+        folio: o.folio,
+        estatus: o.estatus,
+        cantidad_objetivo: dec(o.cantidad_objetivo),
+        cantidad_producida: dec(o.cantidad_producida),
+        articulo: o.articulo,
+      })),
+    };
+  }
+
+  /** Solo lo que el jefe de RH necesita: quién llegó hoy y quién falta. */
+  private async getDashboardJefeRH(ubicacionId: string) {
+    const ubicacion = await this.prisma.ubicacion.findUnique({
+      where: { id: ubicacionId },
+      select: { empresa_id: true },
+    });
+    const empresaId = ubicacion?.empresa_id ?? '';
+    const hoy = startOfDay(new Date());
+
+    const [empleadosActivos, asistenciaHoyRaw, ausentesHoyRaw] = await Promise.all([
+      this.prisma.empleado.count({ where: { empresa_id: empresaId, activo: true } }),
+      this.prisma.registroAsistencia.groupBy({
+        by: ['estatus'],
+        where: { empresa_id: empresaId, fecha: hoy },
+        _count: { _all: true },
+      }),
+      this.prisma.registroAsistencia.findMany({
+        where: { empresa_id: empresaId, fecha: hoy, estatus: 'AUSENTE' },
+        take: 10,
+        select: {
+          empleado_id: true,
+          empleado: { select: { id: true, nombre: true, apellidos: true, puesto: true } },
+        },
+      }),
+    ]);
+
+    return {
+      empleados_activos: empleadosActivos,
+      asistencia_hoy: asistenciaHoyRaw.map((a) => ({ estatus: a.estatus, count: a._count._all })),
+      ausentes_hoy: ausentesHoyRaw.map((a) => ({
+        empleado_id: a.empleado_id,
+        empleado: a.empleado,
+      })),
     };
   }
 

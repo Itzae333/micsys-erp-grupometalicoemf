@@ -351,7 +351,7 @@ async function main() {
   console.log('Credenciales:');
   console.log('  super@grupometalicoemf.com    → SuperPass2026!    (SUPER_USUARIO)');
   console.log('  admin@emfimifar.com           → AdminEmf2026!     (ADMIN - EMFIMIFAR)');
-  console.log('  admin@metalicoslyeva.com      → AdminLyeva2026!   (ADMIN - Metálicos Lyeva)');
+  console.log('  admin@metalicosleyva.com      → AdminLeyva2026!   (ADMIN - Metálicos Lyeva)');
   console.log('  admin@laminasmonterrey.com    → AdminLaminas2026! (ADMIN - Láminas Monterrey)');
   console.log('  encargado@emfimifar.com       → Encargado2026!    (ENCARGADO)');
   console.log('  vendedor@emfimifar.com        → Vendedor2026!     (VENDEDOR)');

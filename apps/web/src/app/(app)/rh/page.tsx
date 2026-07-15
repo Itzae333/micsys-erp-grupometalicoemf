@@ -236,7 +236,8 @@ interface NominaData {
 
 export default function RhPage() {
   const { usuario } = useAuthStore();
-  const { empresa } = useContextoStore();
+  const { empresa, ubicacion } = useContextoStore();
+  const esPuntoVenta = ubicacion?.tipo === 'PUNTO_VENTA';
 
   const canWrite     = ['SUPER_USUARIO', 'ADMIN', 'JEFE_RH'].includes(usuario?.rol ?? '');
   const canManufact  = ['SUPER_USUARIO', 'ADMIN', 'JEFE_MANUFACTURA'].includes(usuario?.rol ?? '');
@@ -244,6 +245,12 @@ export default function RhPage() {
   const isAdminPlus  = ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? '');
 
   const [tab, setTab] = useState<Tab>('empleados');
+
+  // Un punto de venta no produce — si el tab de Producción quedó activo
+  // (ej. al cambiar de ubicación con ese tab abierto), regresa a Empleados.
+  useEffect(() => {
+    if (esPuntoVenta && tab === 'produccion') setTab('empleados');
+  }, [esPuntoVenta, tab]);
 
   // ── Estado — Empleados ─────────────────────────────────────
 
@@ -642,13 +649,13 @@ export default function RhPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-steel-100 p-1 rounded-lg w-fit">
-        {([
+        {(([
           { key: 'empleados',  label: 'Empleados',  icon: <Users className="h-3.5 w-3.5" /> },
           { key: 'areas',      label: 'Áreas',      icon: <Layers className="h-3.5 w-3.5" /> },
           { key: 'asistencia', label: 'Asistencia', icon: <CalendarDays className="h-3.5 w-3.5" /> },
           { key: 'produccion', label: 'Producción', icon: <Factory className="h-3.5 w-3.5" /> },
           { key: 'nomina',     label: 'Nómina',     icon: <DollarSign className="h-3.5 w-3.5" /> },
-        ] as const).map(({ key, label, icon }) => (
+        ] as const).filter(({ key }) => !(esPuntoVenta && key === 'produccion'))).map(({ key, label, icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}

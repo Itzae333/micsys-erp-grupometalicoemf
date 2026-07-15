@@ -140,9 +140,10 @@ function norm(str) {
     .replace(/[^\x00-\x7E]/g, '?');
 }
 
-/** Buffer de texto con salto de línea */
-function ln(str) {
-  return Buffer.from(norm(str) + '\n', 'latin1');
+/** Buffer de texto con salto de línea; `w` opcional trunca el ancho */
+function ln(str, w) {
+  const s = norm(str);
+  return Buffer.from((w ? s.substring(0, w) : s) + '\n', 'latin1');
 }
 
 /** Línea con texto izquierda y texto derecha, relleno de espacios entre ambos */
@@ -179,6 +180,30 @@ function wrapCenter(str) {
   }
   if (current) lines.push(current);
   return Buffer.concat(lines.map((line) => center(line)));
+}
+
+/**
+ * Envuelve texto largo en varias líneas por palabra, sin agregar padding.
+ * Úsalo cuando el hardware ya está en ALIGN_CENTER (ESC a 1): agregar
+ * padding manual encima haría que la impresora centre el bloque
+ * "espacios + texto" y el texto visible termine corrido a la derecha.
+ */
+function wrapPlain(str) {
+  const w = config.columns;
+  const words = norm(str).split(' ').filter(Boolean);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? current + ' ' + word : word;
+    if (candidate.length > w) {
+      if (current) lines.push(current);
+      current = word.length > w ? word.substring(0, w) : word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return Buffer.concat(lines.map((line) => ln(line)));
 }
 
 /** Línea de separación */
@@ -240,20 +265,22 @@ function pushHeader(ticket, push) {
     push(ln(mainName));
     push(CMD.NORMAL, CMD.BOLD_OFF);
   }
+  // ALIGN_CENTER de hardware ya está activo (arriba): se usa ln() plano,
+  // no center()/wrapCenter(), para no centrar dos veces (ver wrapPlain).
   if (ticket.ubicacion?.razon_social) {
-    push(center(ticket.ubicacion.razon_social));
+    push(ln(ticket.ubicacion.razon_social, config.columns));
   }
   // Datos fiscales — se imprimen en la cabecera de todos los tipos de ticket
   if (ticket.ubicacion?.rfc) {
-    push(center('RFC: ' + ticket.ubicacion.rfc +
-      (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : '')));
+    push(ln('RFC: ' + ticket.ubicacion.rfc +
+      (ticket.ubicacion.telefono ? '  Tel: ' + ticket.ubicacion.telefono : ''), config.columns));
   } else if (ticket.ubicacion?.telefono) {
-    push(center('Tel: ' + ticket.ubicacion.telefono));
+    push(ln('Tel: ' + ticket.ubicacion.telefono, config.columns));
   }
   if (ticket.ubicacion?.regimen_fiscal) {
-    push(center('Régimen Fiscal: ' + ticket.ubicacion.regimen_fiscal));
+    push(ln('Régimen Fiscal: ' + ticket.ubicacion.regimen_fiscal, config.columns));
   }
-  if (ticket.ubicacion?.direccion) push(wrapCenter(ticket.ubicacion.direccion));
+  if (ticket.ubicacion?.direccion) push(wrapPlain(ticket.ubicacion.direccion));
 }
 
 /**
@@ -730,11 +757,18 @@ function sendViaWindowsPrinter(buffer) {
         '-File', scriptPath,
         printerName,
         tmpFile,
-      ], { timeout: 12000, stdio: 'pipe' });
+      // 25s: Add-Type compila C# al vuelo la primera vez, y un antivirus
+      // escaneando powershell.exe en tiempo real puede hacerlo bastante lento.
+      ], { timeout: 25000, stdio: 'pipe' });
 
       resolve();
     } catch (err) {
-      const stderr = err.stderr ? err.stderr.toString().trim() : err.message;
+      let stderr = err.stderr ? err.stderr.toString().trim() : '';
+      if (!stderr) {
+        stderr = err.killed
+          ? `El proceso de PowerShell se mató por exceder el tiempo límite (${err.signal ?? 'timeout'}) — revisa si un antivirus está escaneando/ralentizando powershell.exe.`
+          : (err.message || 'Sin detalle (stderr vacío).');
+      }
       reject(new Error(`Error PowerShell al imprimir en "${printerName}": ${stderr}`));
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
