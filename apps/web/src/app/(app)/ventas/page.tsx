@@ -137,6 +137,7 @@ export default function VentasPage() {
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAdmin = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   // Dialog reimprimir / reenviar
   const [dlgReimprimir, setDlgReimprimir] = useState<NotaVenta | null>(null);
@@ -539,9 +540,10 @@ export default function VentasPage() {
     } catch {}
   }
 
-  // ── Descartar cotización (cancelación conservando folio) ──
-  function openDescartarCotizacion() {
-    setMotivoDescarte('SOLO_CONSULTA_PRECIO');
+  // ── Descartar cotización / cancelar nota abierta (conserva folio) ──
+  function openDescartarCotizacion(nota: NotaVenta) {
+    setNotaActiva(nota);
+    setMotivoDescarte('');
     setComentarioDescarte('');
     setDescartarError(null);
     setDlgDescartar(true);
@@ -568,6 +570,7 @@ export default function VentasPage() {
       setDlgLinea(false);
       setNotaActiva(null);
       loadNotas();
+      void refreshDetalleNota();
     } catch (err) {
       setDescartarError(err instanceof Error ? err.message : 'Error al descartar');
     } finally {
@@ -954,7 +957,7 @@ export default function VentasPage() {
                 </>
               )}
               {esCotizacionActiva && canWrite && (
-                <Button variant="ghost" size="sm" onClick={openDescartarCotizacion}>
+                <Button variant="ghost" size="sm" onClick={() => openDescartarCotizacion(notaActiva)}>
                   <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
                   Descartar
                 </Button>
@@ -1203,7 +1206,7 @@ export default function VentasPage() {
                 )}
                 {esCotizacionActiva && canWrite && (
                   <div className="px-4 pb-4">
-                    <Button variant="ghost" className="w-full" onClick={openDescartarCotizacion}>
+                    <Button variant="ghost" className="w-full" onClick={() => openDescartarCotizacion(notaActiva)}>
                       <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
                       Descartar cotización
                     </Button>
@@ -1528,6 +1531,12 @@ export default function VentasPage() {
                       Cobrar
                     </Button>
                   )}
+                  {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canCancel && (
+                    <Button variant="ghost" size="sm" onClick={() => openDescartarCotizacion(detalleNota)}>
+                      <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
+                      Cancelar
+                    </Button>
+                  )}
                   {detalleNota.estatus === 'CREDITO' && canWrite && (
                     <Button size="sm" className="bg-amber-500 hover:bg-amber-600 border-amber-500" onClick={() => openAbonar(detalleNota)}>
                       Abonar
@@ -1651,11 +1660,11 @@ export default function VentasPage() {
       <Dialog
         open={dlgDescartar}
         onClose={() => setDlgDescartar(false)}
-        title="¿Descartar cotización?"
+        title={notaActiva?.estatus === 'COTIZACION' ? '¿Descartar cotización?' : '¿Cancelar nota?'}
         size="sm"
       >
         <p className="text-body text-steel-600 mb-4">
-          {notaActiva && `La cotización #${String(notaActiva.folio).padStart(4, '0')} `}
+          {notaActiva && `La ${notaActiva.estatus === 'COTIZACION' ? 'cotización' : 'nota'} #${String(notaActiva.folio).padStart(4, '0')} `}
           quedará marcada como cancelada — el folio se conserva, no se borra el registro.
         </p>
         <div className="mb-3">
@@ -1684,7 +1693,7 @@ export default function VentasPage() {
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setDlgDescartar(false)}>No, mantener</Button>
           <Button type="button" variant="destructive" loading={descartando} onClick={onDescartarCotizacion}>
-            Sí, descartar
+            {notaActiva?.estatus === 'COTIZACION' ? 'Sí, descartar' : 'Sí, cancelar'}
           </Button>
         </DialogFooter>
       </Dialog>
