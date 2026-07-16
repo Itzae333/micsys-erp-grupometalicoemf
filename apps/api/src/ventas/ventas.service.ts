@@ -299,7 +299,15 @@ export class VentasService {
 
       for (const p of dto.pagos) {
         await tx.pago.create({
-          data: { nota_id: notaId, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null },
+          data: {
+            nota_id: notaId,
+            metodo: p.metodo,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+            // En una reedición el pago corrige el cobro original: debe quedar
+            // fechado el día de la venta, no el día de la corrección.
+            ...(esReedicion ? { created_at: nota.created_at } : {}),
+          },
         });
       }
 
@@ -422,11 +430,24 @@ export class VentasService {
       throw new BadRequestException('El comentario es obligatorio cuando el motivo es "Otro"');
     }
 
-    if (nota.estatus === 'CREDITO' && nota.cliente_id) {
-      await this.prisma.cliente.update({
-        where: { id: nota.cliente_id },
-        data: { saldo_pendiente: { decrement: Number(nota.total) } },
+    // El cargo a la cuenta del cliente puede ser menor a nota.total (si hubo
+    // anticipo), y una nota REABIERTA que ya estaba a crédito conserva el cargo
+    // previo sin revertir hasta que se vuelva a cerrar (ver `cerrar()` y
+    // `findOne()`) — por eso se recalcula desde MovimientoCuenta en vez de
+    // asumir nota.total, y se revierte también si sigue REABIERTA.
+    const teniaCredito = nota.estatus === 'CREDITO' || (nota.estatus === 'REABIERTA' && nota.es_credito);
+    if (teniaCredito && nota.cliente_id) {
+      const cargoPrevio = await this.prisma.movimientoCuenta.aggregate({
+        where: { nota_id: notaId, tipo: 'CARGO' },
+        _sum: { monto: true },
       });
+      const montoCargo = Number(cargoPrevio._sum.monto ?? 0);
+      if (montoCargo > 0) {
+        await this.prisma.cliente.update({
+          where: { id: nota.cliente_id },
+          data: { saldo_pendiente: { decrement: montoCargo } },
+        });
+      }
     }
 
     const result = await this.prisma.notaVenta.update({

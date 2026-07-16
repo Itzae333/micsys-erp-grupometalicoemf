@@ -591,6 +591,13 @@ export default function NotaDetallePage() {
 
   const totalPagos = pagos.reduce((s, p) => s + (p.monto || 0), 0);
   const cambio = nota ? +(totalPagos - nota.total).toFixed(2) : 0;
+  const saldoCredito = nota ? +Math.max(0, nota.total - totalPagos).toFixed(2) : 0;
+  const saldoPendienteEfectivo = nota?.cliente
+    ? Math.max(0, nota.cliente.saldo_pendiente - (nota.credito_previo ?? 0))
+    : 0;
+  const excedeLimite = !!nota?.cliente && nota.cliente.limite_credito > 0
+    && saldoCredito > 0 && saldoPendienteEfectivo + saldoCredito > nota.cliente.limite_credito;
+  const puedeConfirmarCobro = !!nota && !excedeLimite && (saldoCredito === 0 || !!nota.cliente_id);
 
   if (loading) {
     return (
@@ -702,7 +709,7 @@ export default function NotaDetallePage() {
               Solicitar edición
             </Button>
           )}
-          {((['ABIERTA', 'PENDIENTE'].includes(nota.estatus) && canCancel)
+          {((['ABIERTA', 'PENDIENTE', 'REABIERTA'].includes(nota.estatus) && canCancel)
             || (nota.estatus === 'COTIZACION' && canWrite)) && (
             <Button variant="ghost" onClick={openCancelar}>
               <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
@@ -1261,6 +1268,25 @@ export default function NotaDetallePage() {
               )}
             </div>
 
+            {saldoCredito > 0 && nota.cliente_id && !excedeLimite && (
+              <div className="bg-steel-50 border border-steel-200 rounded-md px-3 py-2">
+                <p className="text-body-sm text-steel-600">
+                  El saldo de <span className="font-semibold text-steel-900">{formatPrecio(saldoCredito)}</span> se cargará a la cuenta del cliente.
+                </p>
+              </div>
+            )}
+            {saldoCredito > 0 && !nota.cliente_id && (
+              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+                <p className="text-body-sm text-brand-600">Asigna un cliente a la nota para registrar el saldo restante como crédito, o completa el pago.</p>
+              </div>
+            )}
+            {excedeLimite && (
+              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+                <p className="text-body-sm text-brand-600">
+                  Excede el límite de crédito. Saldo actual: {formatPrecio(saldoPendienteEfectivo)} · Límite: {formatPrecio(nota.cliente!.limite_credito)}
+                </p>
+              </div>
+            )}
             {cobrandoError && (
               <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
                 <p className="text-body-sm text-brand-600">{cobrandoError}</p>
@@ -1269,8 +1295,8 @@ export default function NotaDetallePage() {
 
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={() => setDlgCobrar(false)}>Cancelar</Button>
-              <Button type="button" loading={cobrando} disabled={totalPagos < nota.total} onClick={onCobrar}>
-                Confirmar cobro
+              <Button type="button" loading={cobrando} disabled={!puedeConfirmarCobro} onClick={onCobrar}>
+                {saldoCredito > 0 ? 'Cobrar y cargar a crédito' : 'Confirmar cobro'}
               </Button>
             </DialogFooter>
           </div>
