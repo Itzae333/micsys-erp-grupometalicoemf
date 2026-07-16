@@ -932,6 +932,10 @@ export class VentasService {
       porEstatus[est].count++;
       porEstatus[est].total = +(porEstatus[est].total + Number(nota.total)).toFixed(2);
 
+      // Una nota cancelada no es venta ni dinero cobrado — se cuenta arriba
+      // solo para el desglose "por estatus", no en ventas/métodos/cobrado.
+      if (est === 'CANCELADA') continue;
+
       const notaTotal = Number(nota.total);
       totalVentas = +(totalVentas + notaTotal).toFixed(2);
 

@@ -822,7 +822,9 @@ export default function NotaDetallePage() {
         </div>
       </div>
 
-      {/* Líneas */}
+      {/* Líneas (ocultas si la nota está cancelada: los datos se conservan
+          para auditoría, pero no se muestran como si fuera una venta activa) */}
+      {nota.estatus !== 'CANCELADA' && (
       <div className="bg-white border border-steel-200 rounded-xl overflow-hidden mb-4">
         <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
           <p className="text-body font-semibold text-steel-900">Artículos</p>
@@ -905,9 +907,10 @@ export default function NotaDetallePage() {
           <span className="text-display-sm font-bold text-steel-900">{formatPrecio(nota.total)}</span>
         </div>
       </div>
+      )}
 
-      {/* ── Historial de pagos (PAGADA / CREDITO) ────────────── */}
-      {nota.pagos.length > 0 && (
+      {/* ── Historial de pagos (PAGADA / CREDITO) — oculto si está cancelada */}
+      {nota.pagos.length > 0 && nota.estatus !== 'CANCELADA' && (
         <div className="bg-white border border-steel-200 rounded-xl overflow-hidden mb-4">
           <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
             <p className="text-body font-semibold text-steel-900">

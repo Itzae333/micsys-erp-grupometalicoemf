@@ -1443,7 +1443,12 @@ export default function VentasPage() {
                 </div>
 
                 {/* Artículos */}
-                {detalleNota.lineas.length === 0 ? (
+                {detalleNota.estatus === 'CANCELADA' ? (
+                  <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
+                    <XCircle className="h-8 w-8 text-steel-300 mx-auto mb-2" />
+                    <p className="text-body-sm text-steel-400">Nota cancelada</p>
+                  </div>
+                ) : detalleNota.lineas.length === 0 ? (
                   <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
                     <Receipt className="h-8 w-8 text-steel-300 mx-auto mb-2" />
                     <p className="text-body-sm text-steel-400">Sin artículos en el carrito</p>
