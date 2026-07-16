@@ -196,7 +196,7 @@ export interface NotaVenta {
   ubicacion_id: string;
   usuario_id: string;
   cliente_id: string | null;
-  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; limite_credito: number; saldo_pendiente: number } | null;
+  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null; limite_credito: number; saldo_pendiente: number } | null;
   usuario: { id: string; nombre: string; apellidos: string } | null;
   estatus: EstatusNota;
   version: number;

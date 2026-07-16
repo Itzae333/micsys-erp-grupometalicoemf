@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 
 const AbonoSchema = z.object({
   monto: z.number({ coerce: true }).min(0.01, 'Monto mínimo $0.01'),
@@ -44,6 +45,7 @@ export default function CuentaClientePage() {
   const [abonoOpen, setAbonoOpen] = useState(false);
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [abonoConfirmado, setAbonoConfirmado] = useState<{ monto: number; saldoRestante: number } | null>(null);
 
   const canAbono = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAjuste = ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? '');
@@ -80,6 +82,10 @@ export default function CuentaClientePage() {
     try {
       await api.post(`/cuentas/${clienteId}/abonos`, data);
       setAbonoOpen(false);
+      setAbonoConfirmado({
+        monto: data.monto,
+        saldoRestante: Math.max(0, (cliente?.saldo_pendiente ?? 0) - data.monto),
+      });
       resetAbono();
       load();
     } catch (err) {
@@ -141,6 +147,35 @@ export default function CuentaClientePage() {
           </div>
         )}
       </div>
+
+      {/* Confirmación de abono + aviso a grupo de Créditos */}
+      {abonoConfirmado && (
+        <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-6">
+          <div className="flex-1">
+            <p className="text-body-sm text-green-700">
+              Abono registrado: <strong>{formatPrecio(abonoConfirmado.monto)}</strong>
+              {' · '}Saldo restante: <strong>{formatPrecio(abonoConfirmado.saldoRestante)}</strong>
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const mensaje = `🟢 Abono registrado\nCliente: ${nombre}\nMonto abonado: ${formatPrecio(abonoConfirmado.monto)}\nSaldo restante: ${formatPrecio(abonoConfirmado.saldoRestante)}`;
+              window.open(buildWhatsAppGroupLink(mensaje), '_blank');
+              setAbonoConfirmado(null);
+            }}
+          >
+            Avisar grupo de Créditos
+          </Button>
+          <button
+            onClick={() => setAbonoConfirmado(null)}
+            className="text-steel-400 hover:text-steel-600 text-body-sm flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Acciones */}
       {cliente && cliente.saldo_pendiente > 0 && (

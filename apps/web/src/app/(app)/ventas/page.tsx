@@ -22,6 +22,8 @@ import { cn, formatPrecio } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
+import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
+import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -600,6 +602,18 @@ export default function VentasPage() {
     }
   }
 
+  // ── Enviar cotización por WhatsApp ─────────────────────────
+  function enviarCotizacionWhatsApp(nota: NotaVenta) {
+    const nombreCliente = nota.cliente
+      ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
+      : '';
+    const mensaje = `Hola ${nombreCliente}, aquí tu cotización #${String(nota.folio).padStart(4, '0')}`;
+    const link = buildWhatsAppClientLink(nota.cliente?.telefono, mensaje);
+    if (!link) return;
+    void generateCotizacionPDF(nota, empresa, ubicacion);
+    window.open(link, '_blank');
+  }
+
   // ── Enviar ticket al print bridge ─────────────────────────
   async function printTicket(
     nota: NotaVenta,
@@ -918,6 +932,15 @@ export default function VentasPage() {
                   <Button
                     variant="secondary"
                     size="sm"
+                    disabled={!notaActiva.cliente?.telefono}
+                    title={!notaActiva.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
+                    onClick={() => enviarCotizacionWhatsApp(notaActiva)}
+                  >
+                    WhatsApp
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => { setEmailDest(notaActiva.cliente?.email ?? ''); setEmailError(null); setEmailOk(false); setDlgEmail('cotizacion'); }}
                   >
                     Enviar
@@ -1160,6 +1183,15 @@ export default function VentasPage() {
                   <div className="px-4 pb-2 flex gap-2">
                     <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>
                       PDF
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      disabled={!notaActiva.cliente?.telefono}
+                      title={!notaActiva.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
+                      onClick={() => enviarCotizacionWhatsApp(notaActiva)}
+                    >
+                      WhatsApp
                     </Button>
                     <Button
                       className="flex-1"
@@ -1464,6 +1496,15 @@ export default function VentasPage() {
                     <>
                       <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(detalleNota, empresa, ubicacion)}>
                         PDF
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!detalleNota.cliente?.telefono}
+                        title={!detalleNota.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
+                        onClick={() => enviarCotizacionWhatsApp(detalleNota)}
+                      >
+                        WhatsApp
                       </Button>
                       <Button size="sm" onClick={() => void convertirAVenta(detalleNota).then(async () => { await loadNotas(); void refreshDetalleNota(); })}>
                         Convertir a venta
@@ -2337,6 +2378,24 @@ export default function VentasPage() {
               >
                 ✉️ Enviar por correo electrónico
               </Button>
+              {postCobro.tipoCierre === 'CREDITO' && (
+                <Button
+                  variant="secondary"
+                  className="justify-start"
+                  onClick={() => {
+                    const nombreCliente = postCobro.nota.cliente
+                      ? (postCobro.nota.cliente.razon_social ?? `${postCobro.nota.cliente.nombre} ${postCobro.nota.cliente.apellidos ?? ''}`.trim())
+                      : '';
+                    const mensaje = esAbono
+                      ? `🟢 Abono registrado (cuenta #${String(postCobro.nota.folio).padStart(4, '0')})\nCliente: ${nombreCliente}\nMonto abonado: ${formatPrecio(totalAbonado)}\nSaldo restante: $${saldoRestante.toFixed(2)}`
+                      : `🔴 Venta a crédito #${String(postCobro.nota.folio).padStart(4, '0')}\nCliente: ${nombreCliente}\nMonto: ${formatPrecio(postCobro.nota.total)}`;
+                    void generateComprobantePDF(postCobro.nota, empresa, ubicacion);
+                    window.open(buildWhatsAppGroupLink(mensaje), '_blank');
+                  }}
+                >
+                  📲 Avisar grupo de Créditos
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 className="justify-start text-steel-400"

@@ -9,7 +9,7 @@ import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, Cancela
 import type { Prisma } from '@grupometalicoemf/database';
 
 const NOTA_INCLUDE = {
-  cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, limite_credito: true, saldo_pendiente: true } },
+  cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true } },
   usuario: { select: { id: true, nombre: true, apellidos: true } },
   lineas: {
     include: {

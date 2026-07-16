@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn, formatPrecio } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
+import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
@@ -380,6 +381,30 @@ export default function NotaDetallePage() {
     }
   }
 
+  function enviarComprobanteWhatsApp() {
+    if (!nota) return;
+    const nombreCliente = nota.cliente
+      ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
+      : '';
+    const mensaje = `Hola ${nombreCliente}, aquí tu ticket de la venta #${String(nota.folio).padStart(4, '0')}`;
+    const link = buildWhatsAppClientLink(nota.cliente?.telefono, mensaje);
+    if (!link) return;
+    void generateComprobantePDF(nota, empresa, ubicacion);
+    window.open(link, '_blank');
+  }
+
+  function avisarGrupoCreditos() {
+    if (!nota) return;
+    const nombreCliente = nota.cliente
+      ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
+      : '';
+    const totalPagadoCalc = nota.pagos.reduce((s, p) => s + p.monto, 0);
+    const saldo = Math.max(0, +(nota.total - totalPagadoCalc).toFixed(2));
+    const mensaje = `🔴 Venta a crédito #${String(nota.folio).padStart(4, '0')}\nCliente: ${nombreCliente}\nSaldo pendiente: $${saldo.toFixed(2)}`;
+    void generateComprobantePDF(nota, empresa, ubicacion);
+    window.open(buildWhatsAppGroupLink(mensaje), '_blank');
+  }
+
   // ── Carga / entrega de mercancía ────────────────────────────
   async function openCarga() {
     if (!nota) return;
@@ -655,6 +680,16 @@ export default function NotaDetallePage() {
               {descargando ? 'Generando…' : 'Descargar'}
             </Button>
           )}
+          {esCerrada && canCancel && (
+            <Button
+              variant="secondary"
+              disabled={!nota.cliente?.telefono}
+              title={!nota.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
+              onClick={enviarComprobanteWhatsApp}
+            >
+              WhatsApp
+            </Button>
+          )}
           {puedeCargar && (
             <Button variant="secondary" onClick={openCarga}>
               <PackageCheck className="h-4 w-4 mr-1.5" />
@@ -748,6 +783,9 @@ export default function NotaDetallePage() {
             <p className="text-body-sm text-amber-600">Cobrado</p>
             <p className="text-body font-bold text-amber-800">${totalPagado.toFixed(2)}</p>
           </div>
+          <Button variant="secondary" size="sm" onClick={avisarGrupoCreditos}>
+            Avisar grupo de Créditos
+          </Button>
         </div>
       )}
 
