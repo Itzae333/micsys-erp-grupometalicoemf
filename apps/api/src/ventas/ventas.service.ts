@@ -842,7 +842,9 @@ export class VentasService {
 
     const where: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,
-      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'CANCELADA', 'INCOMPLETA', 'FINALIZADA'] as any[] },
+      // Las canceladas no son venta ni dinero cobrado: se excluyen por completo
+      // del corte (ni lista, ni "por estatus", ni impresión).
+      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'INCOMPLETA', 'FINALIZADA'] as any[] },
     };
     if (desde || hasta) {
       where.created_at = {
@@ -931,10 +933,6 @@ export class VentasService {
       if (!porEstatus[est]) porEstatus[est] = { count: 0, total: 0 };
       porEstatus[est].count++;
       porEstatus[est].total = +(porEstatus[est].total + Number(nota.total)).toFixed(2);
-
-      // Una nota cancelada no es venta ni dinero cobrado — se cuenta arriba
-      // solo para el desglose "por estatus", no en ventas/métodos/cobrado.
-      if (est === 'CANCELADA') continue;
 
       const notaTotal = Number(nota.total);
       totalVentas = +(totalVentas + notaTotal).toFixed(2);

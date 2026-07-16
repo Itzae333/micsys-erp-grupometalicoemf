@@ -1366,7 +1366,9 @@ export default function VentasPage() {
                             <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <span className="font-semibold text-steel-900">{formatPrecio(nota.total)}</span>
+                            <span className="font-semibold text-steel-900">
+                              {formatPrecio(nota.estatus === 'CANCELADA' ? 0 : nota.total)}
+                            </span>
                           </td>
                         </tr>
                       );
