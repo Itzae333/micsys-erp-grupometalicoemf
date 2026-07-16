@@ -137,7 +137,6 @@ export default function VentasPage() {
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAdmin = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
-  const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   // Dialog reimprimir / reenviar
   const [dlgReimprimir, setDlgReimprimir] = useState<NotaVenta | null>(null);
@@ -1531,7 +1530,7 @@ export default function VentasPage() {
                       Cobrar
                     </Button>
                   )}
-                  {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canCancel && (
+                  {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canWrite && (
                     <Button variant="ghost" size="sm" onClick={() => openDescartarCotizacion(detalleNota)}>
                       <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
                       Cancelar
