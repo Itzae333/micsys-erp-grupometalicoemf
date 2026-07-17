@@ -8,6 +8,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
 import type { Prisma } from '@grupometalicoemf/database';
 
+// México opera en horario estándar fijo (UTC-6, sin horario de verano desde
+// 2022). Los filtros "por día" (corte de caja, período Hoy/Semana/etc.) deben
+// usar el día calendario del negocio, no el día UTC del servidor — si no, una
+// venta después de las 18:00 hora local queda contada en el día UTC siguiente.
+function inicioDiaMx(fecha: string): Date {
+  return new Date(`${fecha}T00:00:00-06:00`);
+}
+function finDiaMx(fecha: string): Date {
+  return new Date(`${fecha}T23:59:59.999-06:00`);
+}
+
 const NOTA_INCLUDE = {
   cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true } },
   usuario: { select: { id: true, nombre: true, apellidos: true } },
@@ -56,7 +67,7 @@ export class VentasService {
 
     const where: Prisma.NotaVentaWhereInput = { ubicacion_id: ubicacionId };
     if (estatus) where.estatus = estatus as any;
-    if (desde) where.created_at = { gte: new Date(desde) };
+    if (desde) where.created_at = { gte: inicioDiaMx(desde) };
     if (q) {
       const folioNum = parseInt(q, 10);
       where.OR = [
@@ -848,24 +859,24 @@ export class VentasService {
     };
     if (desde || hasta) {
       where.created_at = {
-        ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
       };
     }
 
     const whereAnticipos: Prisma.AnticiposPedidoWhereInput = { ubicacion_id: ubicacionId };
     if (desde || hasta) {
       whereAnticipos.created_at = {
-        ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
       };
     }
 
     const whereGastos: Prisma.GastoWhereInput = { ubicacion_id: ubicacionId };
     if (desde || hasta) {
       whereGastos.created_at = {
-        ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
       };
     }
 
@@ -874,13 +885,13 @@ export class VentasService {
     const wherePagosCredito: Prisma.PagoWhereInput = {
       nota: {
         ubicacion_id: ubicacionId,
-        ...(desde ? { created_at: { lt: new Date(desde) } } : {}),
+        ...(desde ? { created_at: { lt: inicioDiaMx(desde) } } : {}),
       },
     };
     if (desde || hasta) {
       wherePagosCredito.created_at = {
-        ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta + 'T23:59:59') } : {}),
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
       };
     }
 
