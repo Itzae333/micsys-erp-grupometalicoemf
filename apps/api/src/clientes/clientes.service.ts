@@ -90,16 +90,22 @@ export class ClientesService {
     const cliente = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    // Notas en crédito ordenadas de más antigua a más nueva
+    const saldoPendiente = Number(cliente.saldo_pendiente);
+    if (dto.monto > saldoPendiente) {
+      throw new BadRequestException(
+        `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${saldoPendiente.toFixed(2)})`,
+      );
+    }
+
+    // Notas en crédito ordenadas de más antigua a más nueva. El cliente puede
+    // deber también por conceptos que no son una venta (ajuste manual, deuda
+    // migrada — ver CuentasService.registrarAjuste), así que no todo el saldo
+    // tiene por qué estar respaldado por una nota.
     const notas = await this.prisma.notaVenta.findMany({
       where: { cliente_id: id, ubicacion_id: ubicacionId, estatus: 'CREDITO' },
       orderBy: { created_at: 'asc' },
       include: { pagos: { select: { monto: true } } },
     });
-
-    if (notas.length === 0) {
-      throw new BadRequestException('El cliente no tiene notas en crédito');
-    }
 
     let saldoDisponible = dto.monto;
     const notasPagadas: Array<{
@@ -155,15 +161,35 @@ export class ClientesService {
         notasPagadas.push({ nota_id: nota.id, folio: nota.folio, total: totalNota, monto_pagado: montoPago, nuevo_estatus: nuevoEstatus });
       }
 
+      // Lo que sobre después de cubrir las notas en crédito no se pierde: es
+      // saldo que el cliente debe por otro concepto (no ligado a ninguna nota),
+      // así que se aplica como un abono general a la cuenta.
+      if (saldoDisponible > 0) {
+        const saldoClienteDespues = Math.max(0, +(saldoClienteActual - saldoDisponible).toFixed(2));
+        await tx.movimientoCuenta.create({
+          data: {
+            ubicacion_id: ubicacionId,
+            cliente_id: id,
+            tipo: 'ABONO',
+            monto: saldoDisponible,
+            saldo_antes: saldoClienteActual,
+            saldo_despues: saldoClienteDespues,
+            concepto: 'Abono a cuenta — saldo general',
+            usuario_id: usuarioId,
+          },
+        });
+        saldoClienteActual = saldoClienteDespues;
+        saldoDisponible = 0;
+      }
+
       return tx.cliente.update({ where: { id }, data: { saldo_pendiente: saldoClienteActual } });
     });
 
-    const totalAplicado = +(dto.monto - Math.max(0, saldoDisponible)).toFixed(2);
     return {
       cliente: this.serialize(clienteActualizado),
       notas_pagadas: notasPagadas,
-      total_aplicado: totalAplicado,
-      sobrante: Math.max(0, saldoDisponible),
+      total_aplicado: dto.monto,
+      sobrante: 0,
     };
   }
 

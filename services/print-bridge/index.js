@@ -350,22 +350,28 @@ function buildEscPosBuffer(ticket) {
   }
 
   // ── Comprobante de abono a cuenta ──────────────────────
+  // tipo === 'abono_cuenta' cubre dos casos, distinguidos por lo que trae el
+  // payload: abono a ventas a crédito (con notas_pagadas + metodo) y abono a
+  // otra deuda / concepto sin nota (sin notas_pagadas, con concepto en vez de
+  // metodo). ticket.titulo permite personalizar el encabezado en cada caso.
   if (ticket.tipo === 'abono_cuenta') {
     pushHeader(ticket, push);
     push(CMD.ALIGN_LEFT, sep());
-    push(CMD.BOLD_ON, center('COMPROBANTE DE ABONO'), CMD.BOLD_OFF);
+    push(CMD.BOLD_ON, center(ticket.titulo ?? 'COMPROBANTE DE ABONO'), CMD.BOLD_OFF);
     push(row('Fecha', norm(ticket.fecha ?? '')));
     push(sep());
     push(ln('Cliente: ' + norm(ticket.cliente?.nombre ?? 'N/A')));
     if (ticket.cliente?.telefono) push(ln('Tel: ' + norm(ticket.cliente.telefono)));
     push(sep());
-    push(ln('DESGLOSE:'));
-    for (const n of (ticket.notas_pagadas ?? [])) {
-      const estado = n.nuevo_estatus === 'PAGADA' ? 'PAGADA' : 'CREDITO';
-      push(row('  Nota #' + norm(n.folio), '$' + formatMoney(Number(n.monto_pagado))));
-      push(ln('  Estatus: ' + estado));
+    if (ticket.notas_pagadas && ticket.notas_pagadas.length > 0) {
+      push(ln('DESGLOSE:'));
+      for (const n of ticket.notas_pagadas) {
+        const estado = n.nuevo_estatus === 'PAGADA' ? 'PAGADA' : 'CREDITO';
+        push(row('  Nota #' + norm(n.folio), '$' + formatMoney(Number(n.monto_pagado))));
+        push(ln('  Estatus: ' + estado));
+      }
+      push(sep('='));
     }
-    push(sep('='));
     push(CMD.BOLD_ON);
     push(row('TOTAL ABONADO', '$' + formatMoney(Number(ticket.total_aplicado ?? 0))));
     const saldoRest = Number(ticket.saldo_restante ?? 0);
@@ -376,7 +382,11 @@ function buildEscPosBuffer(ticket) {
     }
     push(CMD.BOLD_OFF);
     push(sep(), CMD.ALIGN_CENTER);
-    push(ln('Metodo: ' + norm(ticket.metodo ?? '')));
+    if (ticket.metodo) {
+      push(ln('Metodo: ' + norm(ticket.metodo)));
+    } else if (ticket.concepto) {
+      push(ln('Concepto: ' + norm(ticket.concepto)));
+    }
     push(ln('!Gracias por su pago!'));
     push(CMD.ALIGN_LEFT);
     push(CMD.FEED(config.cutFeedLines ?? 5));

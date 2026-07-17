@@ -9,18 +9,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
-import type { CuentaClienteDetalle, MovimientoCuenta } from '@/lib/types/api';
+import { useContextoStore } from '@/lib/store/contexto.store';
+import type { CuentaClienteDetalle, MovimientoCuenta, AbonarCuentaResult } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { generateEstadoCuentaPDF } from '@/lib/utils/estado-cuenta-pdf';
 
-const AbonoSchema = z.object({
-  monto: z.number({ coerce: true }).min(0.01, 'Monto mínimo $0.01'),
-  concepto: z.string().optional(),
-});
-type AbonoForm = z.infer<typeof AbonoSchema>;
+const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
+const METODO_LABEL: Record<string, string> = {
+  EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+};
 
 const AjusteSchema = z.object({
   tipo: z.enum(['CARGO', 'ABONO']),
@@ -39,6 +41,7 @@ export default function CuentaClientePage() {
   const router = useRouter();
   const { clienteId } = useParams<{ clienteId: string }>();
   const { usuario } = useAuthStore();
+  const { empresa, ubicacion } = useContextoStore();
 
   const [detalle, setDetalle] = useState<CuentaClienteDetalle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,16 +49,19 @@ export default function CuentaClientePage() {
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [abonoConfirmado, setAbonoConfirmado] = useState<{ monto: number; saldoRestante: number } | null>(null);
+  const [descargandoEstado, setDescargandoEstado] = useState(false);
+
+  // Abono — el cliente puede deber por ventas a crédito (ligadas a una nota) y/o
+  // por otros conceptos (ajuste manual); si tiene ambos, se elige a cuál aplica.
+  const [abonoDestino, setAbonoDestino] = useState<'VENTAS' | 'OTRAS'>('VENTAS');
+  const [abonoMonto, setAbonoMonto] = useState(0);
+  const [abonoMetodo, setAbonoMetodo] = useState<string>('EFECTIVO');
+  const [abonoReferencia, setAbonoReferencia] = useState('');
+  const [abonoConcepto, setAbonoConcepto] = useState('');
+  const [abonoSubmitting, setAbonoSubmitting] = useState(false);
 
   const canAbono = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAjuste = ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? '');
-
-  const {
-    register: regAbono,
-    handleSubmit: handleAbono,
-    reset: resetAbono,
-    formState: { errors: errorsAbono, isSubmitting: submittingAbono },
-  } = useForm<AbonoForm>({ resolver: zodResolver(AbonoSchema) });
 
   const {
     register: regAjuste,
@@ -77,19 +83,90 @@ export default function CuentaClientePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function onAbono(data: AbonoForm) {
-    setFormError(null);
+  async function printAbonoTicket(opts: {
+    titulo: string;
+    totalAplicado: number;
+    saldoRestante: number;
+    notasPagadas?: AbonarCuentaResult['notas_pagadas'];
+    metodo?: string;
+    concepto?: string;
+  }) {
+    if (!cliente) return;
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+    const payload = {
+      tipo: 'abono_cuenta',
+      titulo: opts.titulo,
+      logo_escpos_b64,
+      empresa: { nombre: empresa?.nombre ?? '' },
+      ubicacion: {
+        nombre: ubicacion?.nombre ?? '',
+        ...buildTicketUbicacionFiscal(ubicacion),
+      },
+      cliente: { nombre, telefono: cliente.telefono ?? null },
+      fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
+      notas_pagadas: opts.notasPagadas ?? [],
+      total_aplicado: opts.totalAplicado,
+      saldo_restante: opts.saldoRestante,
+      metodo: opts.metodo,
+      concepto: opts.concepto,
+    };
     try {
-      await api.post(`/cuentas/${clienteId}/abonos`, data);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // Print bridge no disponible — no bloquear la UI
+    }
+  }
+
+  async function onAbono() {
+    if (abonoMonto <= 0) return;
+    setFormError(null);
+    setAbonoSubmitting(true);
+    try {
+      if (abonoDestino === 'VENTAS') {
+        const result = await api.post<AbonarCuentaResult>(`/clientes/${clienteId}/abonar-cuenta`, {
+          monto: abonoMonto,
+          metodo: abonoMetodo,
+          referencia: abonoReferencia || undefined,
+        });
+        void printAbonoTicket({
+          titulo: 'ABONO A VENTA A CRÉDITO',
+          totalAplicado: result.total_aplicado,
+          saldoRestante: Number(result.cliente.saldo_pendiente),
+          notasPagadas: result.notas_pagadas,
+          metodo: METODO_LABEL[abonoMetodo] ?? abonoMetodo,
+        });
+      } else {
+        const saldoRestante = Math.max(0, (cliente?.saldo_pendiente ?? 0) - abonoMonto);
+        await api.post(`/cuentas/${clienteId}/abonos`, {
+          monto: abonoMonto,
+          concepto: abonoConcepto || undefined,
+        });
+        void printAbonoTicket({
+          titulo: 'ABONO A CUENTA / OTRA DEUDA',
+          totalAplicado: abonoMonto,
+          saldoRestante,
+          concepto: abonoConcepto || 'Abono a cuenta',
+        });
+      }
       setAbonoOpen(false);
       setAbonoConfirmado({
-        monto: data.monto,
-        saldoRestante: Math.max(0, (cliente?.saldo_pendiente ?? 0) - data.monto),
+        monto: abonoMonto,
+        saldoRestante: Math.max(0, (cliente?.saldo_pendiente ?? 0) - abonoMonto),
       });
-      resetAbono();
       load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Error al registrar abono');
+    } finally {
+      setAbonoSubmitting(false);
     }
   }
 
@@ -105,10 +182,37 @@ export default function CuentaClientePage() {
     }
   }
 
+  async function descargarEstadoCuenta() {
+    if (!cliente) return;
+    setDescargandoEstado(true);
+    try {
+      // Se piden todos los movimientos (no solo la página que ya está en
+      // pantalla) para que el estado de cuenta quede completo.
+      const data = await api.get<CuentaClienteDetalle>(`/cuentas/${clienteId}?limit=1000`);
+      const c = data.cliente;
+      await generateEstadoCuentaPDF(
+        {
+          nombre: c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim(),
+          telefono: c.telefono,
+          saldo_pendiente: c.saldo_pendiente,
+          saldo_ventas_credito: c.saldo_ventas_credito,
+          saldo_otras_deudas: c.saldo_otras_deudas,
+        },
+        data.movimientos,
+        empresa,
+        ubicacion,
+      );
+    } finally {
+      setDescargandoEstado(false);
+    }
+  }
+
   const cliente = detalle?.cliente;
   const nombre = cliente
     ? (cliente.razon_social ?? `${cliente.nombre} ${cliente.apellidos ?? ''}`.trim())
     : '…';
+  const saldoVentasCredito = cliente?.saldo_ventas_credito ?? 0;
+  const saldoOtrasDeudas = cliente?.saldo_otras_deudas ?? 0;
 
   return (
     <div className="p-6 max-w-3xl">
@@ -148,6 +252,20 @@ export default function CuentaClientePage() {
         )}
       </div>
 
+      {/* Desglose: ventas a crédito vs otros conceptos (deudas migradas, ajustes) */}
+      {cliente && (saldoVentasCredito > 0 || saldoOtrasDeudas > 0) && (
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="rounded-xl p-4 border border-steel-200 bg-white">
+            <p className="text-body-sm text-steel-500 mb-1">Ventas a crédito</p>
+            <p className="text-display-sm font-bold text-steel-900">{formatPrecio(saldoVentasCredito)}</p>
+          </div>
+          <div className="rounded-xl p-4 border border-steel-200 bg-white">
+            <p className="text-body-sm text-steel-500 mb-1">Otras deudas / otros conceptos</p>
+            <p className="text-display-sm font-bold text-steel-900">{formatPrecio(saldoOtrasDeudas)}</p>
+          </div>
+        </div>
+      )}
+
       {/* Confirmación de abono + aviso a grupo de Créditos */}
       {abonoConfirmado && (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-6">
@@ -182,7 +300,15 @@ export default function CuentaClientePage() {
         <div className="flex gap-2 mb-6">
           {canAbono && (
             <Button
-              onClick={() => { setFormError(null); resetAbono(); setAbonoOpen(true); }}
+              onClick={() => {
+                setFormError(null);
+                setAbonoDestino(saldoVentasCredito > 0 ? 'VENTAS' : 'OTRAS');
+                setAbonoMonto(0);
+                setAbonoMetodo('EFECTIVO');
+                setAbonoReferencia('');
+                setAbonoConcepto('');
+                setAbonoOpen(true);
+              }}
               className="flex items-center gap-1.5"
             >
               <TrendingDown className="h-4 w-4" />
@@ -243,7 +369,19 @@ export default function CuentaClientePage() {
 
       {/* Movimientos */}
       <div>
-        <h2 className="text-body font-semibold text-steel-900 mb-3">Historial de movimientos</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-body font-semibold text-steel-900">Historial de movimientos</h2>
+          {cliente && (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={descargandoEstado}
+              onClick={() => void descargarEstadoCuenta()}
+            >
+              Descargar estado de cuenta
+            </Button>
+          )}
+        </div>
 
         {loading ? (
           <div className="space-y-2">
@@ -313,11 +451,41 @@ export default function CuentaClientePage() {
       {/* Dialog — Abono */}
       <Dialog
         open={abonoOpen}
-        onClose={() => { setAbonoOpen(false); resetAbono(); setFormError(null); }}
+        onClose={() => { setAbonoOpen(false); setFormError(null); }}
         title="Registrar abono"
         size="sm"
       >
-        <form onSubmit={handleAbono(onAbono)} className="space-y-4">
+        <div className="space-y-4">
+          {saldoVentasCredito > 0 && saldoOtrasDeudas > 0 && (
+            <div>
+              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Aplicar a</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAbonoDestino('VENTAS')}
+                  className={`flex-1 rounded-md border px-3 py-2 text-body-sm font-medium transition-colors ${
+                    abonoDestino === 'VENTAS'
+                      ? 'border-brand-600 bg-brand-50 text-brand-700'
+                      : 'border-steel-300 text-steel-600 hover:bg-steel-50'
+                  }`}
+                >
+                  Ventas a crédito
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAbonoDestino('OTRAS')}
+                  className={`flex-1 rounded-md border px-3 py-2 text-body-sm font-medium transition-colors ${
+                    abonoDestino === 'OTRAS'
+                      ? 'border-brand-600 bg-brand-50 text-brand-700'
+                      : 'border-steel-300 text-steel-600 hover:bg-steel-50'
+                  }`}
+                >
+                  Otras deudas
+                </button>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
               Monto <span className="text-brand-600">*</span>
@@ -327,17 +495,47 @@ export default function CuentaClientePage() {
               step="0.01"
               min="0.01"
               placeholder="0.00"
-              error={errorsAbono.monto?.message}
-              {...regAbono('monto', { valueAsNumber: true })}
+              value={abonoMonto || ''}
+              onChange={(e) => setAbonoMonto(parseFloat(e.target.value) || 0)}
             />
-            {cliente && (
-              <p className="text-meta text-steel-400 mt-1">Saldo actual: {formatPrecio(cliente.saldo_pendiente)}</p>
-            )}
+            <p className="text-meta text-steel-400 mt-1">
+              Saldo en {abonoDestino === 'VENTAS' ? 'ventas a crédito' : 'otras deudas'}: {formatPrecio(abonoDestino === 'VENTAS' ? saldoVentasCredito : saldoOtrasDeudas)}
+            </p>
           </div>
-          <div>
-            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
-            <Input placeholder="Pago en efectivo, transferencia…" {...regAbono('concepto')} />
-          </div>
+
+          {abonoDestino === 'VENTAS' ? (
+            <>
+              <div>
+                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Método</label>
+                <select
+                  className="h-9 w-full rounded-md border border-steel-300 bg-white px-3 text-body text-steel-900 focus:outline-none focus:ring-2 focus:ring-brand-600"
+                  value={abonoMetodo}
+                  onChange={(e) => setAbonoMetodo(e.target.value)}
+                >
+                  {METODOS_PAGO.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
+                </select>
+              </div>
+              {abonoMetodo !== 'EFECTIVO' && (
+                <div>
+                  <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Referencia</label>
+                  <Input
+                    placeholder="Últimos 4 / folio…"
+                    value={abonoReferencia}
+                    onChange={(e) => setAbonoReferencia(e.target.value)}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <div>
+              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
+              <Input
+                placeholder="Pago en efectivo, transferencia…"
+                value={abonoConcepto}
+                onChange={(e) => setAbonoConcepto(e.target.value)}
+              />
+            </div>
+          )}
 
           {formError && (
             <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
@@ -346,14 +544,14 @@ export default function CuentaClientePage() {
           )}
 
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => { setAbonoOpen(false); resetAbono(); setFormError(null); }}>
+            <Button type="button" variant="secondary" onClick={() => { setAbonoOpen(false); setFormError(null); }}>
               Cancelar
             </Button>
-            <Button type="submit" loading={submittingAbono}>
+            <Button type="button" loading={abonoSubmitting} disabled={abonoMonto <= 0} onClick={() => void onAbono()}>
               Registrar abono
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </Dialog>
 
       {/* Dialog — Ajuste manual */}

@@ -567,11 +567,6 @@ export default function ClientesVentasPage() {
                       </div>
                     )}
                   </div>
-                  {abonarResult.sobrante > 0 && (
-                    <div className="px-4 py-1.5 bg-amber-50 text-amber-700 text-[10px] text-center">
-                      Sobrante {formatPrecio(abonarResult.sobrante)} — no había más notas en crédito
-                    </div>
-                  )}
                   <div className="px-4 py-2 text-center text-steel-400 text-[10px]">¡Gracias por su pago!</div>
                 </div>
                 {/* Acciones */}

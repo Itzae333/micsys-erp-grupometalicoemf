@@ -308,6 +308,11 @@ export interface CuentaClienteResumen {
   precio_num: number | null;
   limite_credito: number;
   saldo_pendiente: number;
+  // Solo vienen en GET /cuentas/:clienteId — desglose de saldo_pendiente entre
+  // ventas a crédito (ligadas a una NotaVenta) y otros conceptos (ajuste manual:
+  // deuda migrada, venta de un activo que no es inventario, etc.).
+  saldo_ventas_credito?: number;
+  saldo_otras_deudas?: number;
 }
 
 export interface CuentaClienteDetalle {

@@ -41,7 +41,7 @@ export class CuentasService {
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
     const skip = (page - 1) * limit;
-    const [total, movimientos] = await Promise.all([
+    const [total, movimientos, notasCredito] = await Promise.all([
       this.prisma.movimientoCuenta.count({ where: { cliente_id: clienteId, ubicacion_id: ubicacionId } }),
       this.prisma.movimientoCuenta.findMany({
         where: { cliente_id: clienteId, ubicacion_id: ubicacionId },
@@ -53,7 +53,22 @@ export class CuentasService {
           nota: { select: { id: true, folio: true } },
         },
       }),
+      this.prisma.notaVenta.findMany({
+        where: { cliente_id: clienteId, ubicacion_id: ubicacionId, estatus: 'CREDITO' },
+        include: { pagos: { select: { monto: true } } },
+      }),
     ]);
+
+    // El saldo del cliente puede venir de ventas a crédito (ligadas a una
+    // NotaVenta) y/o de otros conceptos (ajuste manual: deuda migrada, venta
+    // de un activo que no es inventario, etc.) — se desglosa para que el
+    // front pueda mostrarlos por separado y elegir a cuál aplicar un abono.
+    const saldoVentasCredito = notasCredito.reduce((s, n) => {
+      const pagado = n.pagos.reduce((sp, p) => sp + Number(p.monto), 0);
+      return s + Math.max(0, +(Number(n.total) - pagado).toFixed(2));
+    }, 0);
+    const saldoPendiente = Number(cliente.saldo_pendiente);
+    const saldoOtrasDeudas = Math.max(0, +(saldoPendiente - saldoVentasCredito).toFixed(2));
 
     return {
       cliente: {
@@ -64,7 +79,9 @@ export class CuentasService {
         telefono: cliente.telefono,
         precio_num: cliente.precio_num,
         limite_credito: Number(cliente.limite_credito),
-        saldo_pendiente: Number(cliente.saldo_pendiente),
+        saldo_pendiente: saldoPendiente,
+        saldo_ventas_credito: +saldoVentasCredito.toFixed(2),
+        saldo_otras_deudas: saldoOtrasDeudas,
       },
       movimientos: movimientos.map((m) => this.serializeMovimiento(m)),
       total,
