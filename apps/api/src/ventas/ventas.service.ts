@@ -12,11 +12,17 @@ import type { Prisma } from '@grupometalicoemf/database';
 // 2022). Los filtros "por día" (corte de caja, período Hoy/Semana/etc.) deben
 // usar el día calendario del negocio, no el día UTC del servidor — si no, una
 // venta después de las 18:00 hora local queda contada en el día UTC siguiente.
+//
+// Algunos llamadores mandan una fecha plana "YYYY-MM-DD" (inputs type="date",
+// como el corte de caja) y otros ya mandan un instante ISO completo con hora
+// (ej. el filtro de período del listado, vía `new Date(...).toISOString()`).
+// Si ya trae hora, es un instante preciso — se respeta tal cual, no se le
+// concatena nada (concatenar rompe el string y produce una fecha inválida).
 function inicioDiaMx(fecha: string): Date {
-  return new Date(`${fecha}T00:00:00-06:00`);
+  return fecha.includes('T') ? new Date(fecha) : new Date(`${fecha}T00:00:00-06:00`);
 }
 function finDiaMx(fecha: string): Date {
-  return new Date(`${fecha}T23:59:59.999-06:00`);
+  return fecha.includes('T') ? new Date(fecha) : new Date(`${fecha}T23:59:59.999-06:00`);
 }
 
 const NOTA_INCLUDE = {
@@ -895,7 +901,25 @@ export class VentasService {
       };
     }
 
-    const [notas, anticiposPedido, gastos, pagosCredito] = await Promise.all([
+    // Igual que wherePagosCredito, pero sobre MovimientoCuenta (tipo ABONO) en vez
+    // de Pago — necesario porque Pago no tiene usuario_id y no sabemos quién cobró
+    // el abono. Se usa solo para armar el desglose por vendedor de "pagos_credito"
+    // (Metálicos Lyeva); los montos/método de pagos_credito siguen viniendo de Pago.
+    const whereMovimientosAbono: Prisma.MovimientoCuentaWhereInput = {
+      tipo: 'ABONO',
+      nota: {
+        ubicacion_id: ubicacionId,
+        ...(desde ? { created_at: { lt: inicioDiaMx(desde) } } : {}),
+      },
+    };
+    if (desde || hasta) {
+      whereMovimientosAbono.created_at = {
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
+      };
+    }
+
+    const [notas, anticiposPedido, gastos, pagosCredito, movimientosAbono] = await Promise.all([
       this.prisma.notaVenta.findMany({
         where,
         orderBy: { created_at: 'asc' },
@@ -926,6 +950,14 @@ export class VentasService {
         where: wherePagosCredito,
         orderBy: { created_at: 'asc' },
         include: { nota: { select: { folio: true } } },
+      }),
+      this.prisma.movimientoCuenta.findMany({
+        where: whereMovimientosAbono,
+        orderBy: { created_at: 'asc' },
+        include: {
+          nota: { select: { folio: true } },
+          usuario: { select: { id: true, nombre: true, apellidos: true } },
+        },
       }),
     ]);
 
@@ -1016,6 +1048,22 @@ export class VentasService {
       totalPagosCredito = +(totalPagosCredito + monto).toFixed(2);
     }
 
+    // Agrupado por usuario (vendedor) de los pagos de crédito — igual que
+    // por_usuario en notas, solo lo usa Metálicos Lyeva; el resto lo ignora.
+    const pagosCreditoPorUsuarioMap = new Map<string, { usuario_id: string; nombre: string; total: number; detalle: { folio: number; monto: number; fecha: Date }[] }>();
+    for (const mov of movimientosAbono) {
+      const usuarioId = mov.usuario?.id ?? 'sin-usuario';
+      const nombre = mov.usuario ? `${mov.usuario.nombre} ${mov.usuario.apellidos ?? ''}`.trim() : 'Sin usuario';
+      if (!pagosCreditoPorUsuarioMap.has(usuarioId)) {
+        pagosCreditoPorUsuarioMap.set(usuarioId, { usuario_id: usuarioId, nombre, total: 0, detalle: [] });
+      }
+      const grupo = pagosCreditoPorUsuarioMap.get(usuarioId)!;
+      const monto = Number(mov.monto);
+      grupo.total = +(grupo.total + monto).toFixed(2);
+      grupo.detalle.push({ folio: mov.nota?.folio ?? 0, monto, fecha: mov.created_at });
+    }
+    const pagosCreditoPorUsuario = Array.from(pagosCreditoPorUsuarioMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     const totalEntregarEfectivo = +(
       metodos['EFECTIVO'].total +
       metodoPagosCredito['EFECTIVO'].total -
@@ -1088,6 +1136,7 @@ export class VentasService {
           monto: Number(p.monto),
           fecha: p.created_at,
         })),
+        por_usuario: pagosCreditoPorUsuario,
       },
       gastos: gastos.map((g) => ({
         id: g.id,

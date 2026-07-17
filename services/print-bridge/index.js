@@ -456,11 +456,24 @@ function buildEscPosBuffer(ticket) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('PAGOS DE CREDITO'), CMD.BOLD_OFF);
       push(sep('-'));
-      for (const p of ticket.pagos_credito.detalle) {
-        const folioStr = 'N' + String(p.folio).padStart(5, '0');
-        push(dotRow(folioStr, '$' + formatMoney(Number(p.monto)) + '  ' + norm(p.metodo ?? '')));
+      if (ticket.pagos_credito.por_usuario && ticket.pagos_credito.por_usuario.length > 0) {
+        // Metálicos Lyeva: agrupado por quién cobró el abono.
+        for (const grupo of ticket.pagos_credito.por_usuario) {
+          push(CMD.BOLD_ON, ln(norm(grupo.nombre || 'Sin usuario')), CMD.BOLD_OFF);
+          for (const p of grupo.detalle) {
+            const folioStr = 'N' + String(p.folio).padStart(5, '0');
+            push(dotRow('  ' + folioStr, '$' + formatMoney(Number(p.monto))));
+          }
+          push(dotRow('  TOTAL', '$' + formatMoney(Number(grupo.total ?? 0))));
+          push(sep('-'));
+        }
+      } else {
+        for (const p of ticket.pagos_credito.detalle) {
+          const folioStr = 'N' + String(p.folio).padStart(5, '0');
+          push(dotRow(folioStr, '$' + formatMoney(Number(p.monto)) + '  ' + norm(p.metodo ?? '')));
+        }
+        push(sep('-'));
       }
-      push(sep('-'));
       push(CMD.BOLD_ON, dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total ?? 0))), CMD.BOLD_OFF);
     }
 

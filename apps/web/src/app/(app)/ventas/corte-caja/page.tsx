@@ -28,10 +28,17 @@ interface GastoCorte {
   metodo_pago: string; usuario: string; created_at: string;
 }
 interface PagoCreditoDetalle { folio: number; metodo: string; monto: number; fecha: string; }
+interface PagoCreditoPorUsuario {
+  usuario_id: string;
+  nombre: string;
+  total: number;
+  detalle: { folio: number; monto: number; fecha: string }[];
+}
 interface PagosCreditoResumen {
   total: number; count: number;
   por_metodo: Record<string, MetodoResumen>;
   detalle: PagoCreditoDetalle[];
+  por_usuario?: PagoCreditoPorUsuario[];
 }
 interface PorUsuarioResumen {
   usuario_id: string;
@@ -152,7 +159,10 @@ export default function CorteCajaPage() {
           total_entregar_efectivo: data.total_entregar_efectivo ?? data.por_metodo?.['EFECTIVO']?.total ?? 0,
           por_metodo: data.por_metodo,
           por_estatus: data.por_estatus,
-          pagos_credito: data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] },
+          pagos_credito: {
+            ...(data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] }),
+            por_usuario: agruparPorUsuario ? data.pagos_credito?.por_usuario : undefined,
+          },
           notas: data.notas,
           gastos: data.gastos,
           por_usuario: agruparPorUsuario ? data.por_usuario : undefined,
@@ -194,6 +204,43 @@ export default function CorteCajaPage() {
       </td>
       <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(n.total)}</td>
     </tr>
+  );
+
+  const totalesFooterRows = (data: CorteCajaData) => (
+    <>
+      <tr className="bg-steel-900">
+        <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-white">
+          TOTAL COBRADO
+        </td>
+        <td className="px-4 py-3 text-right text-base font-bold text-white">
+          {fmt(data.total_cobrado)}
+        </td>
+      </tr>
+      {metodos.map((m) => {
+        const res = data.por_metodo[m] ?? { count: 0, total: 0 };
+        if (res.total === 0) return null;
+        return (
+          <tr key={m} className="bg-steel-800/60">
+            <td colSpan={6} className="px-4 py-1.5 text-right text-xs font-medium text-steel-300">
+              Total en {METODO_LABEL[m]}
+            </td>
+            <td className="px-4 py-1.5 text-right text-sm font-semibold text-steel-100">
+              {fmt(res.total)}
+            </td>
+          </tr>
+        );
+      })}
+      {data.total_gastos > 0 && (
+        <tr className="bg-steel-800">
+          <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
+            TOTAL NETO (tras gastos)
+          </td>
+          <td className="px-4 py-2.5 text-right text-base font-bold text-emerald-300">
+            {fmt(data.total_neto)}
+          </td>
+        </tr>
+      )}
+    </>
   );
 
   const notaTableHead = (
@@ -320,32 +367,76 @@ export default function CorteCajaPage() {
               <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
                 Pagos de crédito
               </h2>
-              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-steel-50 border-b border-steel-200">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagosCredito.detalle.map((p, i) => (
-                      <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
-                        <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
-                        <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[p.metodo] ?? p.metodo}</td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(p.monto)}</td>
+              {agruparPorUsuario && (pagosCredito.por_usuario?.length ?? 0) > 0 ? (
+                <div className="space-y-4">
+                  {pagosCredito.por_usuario!.map((grupo) => (
+                    <div key={grupo.usuario_id} className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-steel-100 border-b border-steel-200">
+                        <span className="text-sm font-bold text-steel-900">{grupo.nombre}</span>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-steel-50 border-b border-steel-200">
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {grupo.detalle.map((p, i) => (
+                            <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                              <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(p.monto)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-steel-900">
+                            <td className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL</td>
+                            <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(grupo.total)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))}
+                  <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tfoot>
+                        <tr className="bg-steel-900">
+                          <td className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
+                          <td className="px-4 py-3 text-right text-base font-bold text-white w-40">{fmt(pagosCredito.total)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-steel-50 border-b border-steel-200">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-steel-900">
-                      <td colSpan={2} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
-                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(pagosCredito.total)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {pagosCredito.detalle.map((p, i) => (
+                        <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                          <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
+                          <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[p.metodo] ?? p.metodo}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(p.monto)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-steel-900">
+                        <td colSpan={2} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
+                        <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(pagosCredito.total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -418,6 +509,11 @@ export default function CorteCajaPage() {
                     </table>
                   </div>
                 ))}
+                <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <tfoot>{totalesFooterRows(data)}</tfoot>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
@@ -434,40 +530,7 @@ export default function CorteCajaPage() {
                     )}
                   </tbody>
                   {data.notas.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-steel-900">
-                        <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-white">
-                          TOTAL COBRADO
-                        </td>
-                        <td className="px-4 py-3 text-right text-base font-bold text-white">
-                          {fmt(data.total_cobrado)}
-                        </td>
-                      </tr>
-                      {metodos.map((m) => {
-                        const res = data.por_metodo[m] ?? { count: 0, total: 0 };
-                        if (res.total === 0) return null;
-                        return (
-                          <tr key={m} className="bg-steel-800/60">
-                            <td colSpan={6} className="px-4 py-1.5 text-right text-xs font-medium text-steel-300">
-                              Total en {METODO_LABEL[m]}
-                            </td>
-                            <td className="px-4 py-1.5 text-right text-sm font-semibold text-steel-100">
-                              {fmt(res.total)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {data.total_gastos > 0 && (
-                        <tr className="bg-steel-800">
-                          <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
-                            TOTAL NETO (tras gastos)
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-base font-bold text-emerald-300">
-                            {fmt(data.total_neto)}
-                          </td>
-                        </tr>
-                      )}
-                    </tfoot>
+                    <tfoot>{totalesFooterRows(data)}</tfoot>
                   )}
                 </table>
               </div>
