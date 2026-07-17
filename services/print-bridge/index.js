@@ -403,9 +403,7 @@ function buildEscPosBuffer(ticket) {
     push(sep('='));
 
     // ── Lista de ventas ─────────────────────────────────
-    push(CMD.BOLD_ON, ln('VENTAS'), CMD.BOLD_OFF);
-    push(sep('-'));
-    for (const n of (ticket.notas ?? [])) {
+    const pushNotaRow = (n, indent) => {
       const folioStr = 'N' + String(n.folio).padStart(5, '0');
       let mLabel;
       if (n.estatus === 'CREDITO') {
@@ -417,9 +415,27 @@ function buildEscPosBuffer(ticket) {
       } else {
         mLabel = norm(n.pagos[0].metodo ?? '');
       }
-      push(dotRow(folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? '  ' + mLabel : '')));
-    }
+      push(dotRow((indent ? '  ' : '') + folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? '  ' + mLabel : '')));
+    };
+
+    push(CMD.BOLD_ON, ln('VENTAS'), CMD.BOLD_OFF);
     push(sep('-'));
+    if (ticket.por_usuario && ticket.por_usuario.length > 0) {
+      // Metálicos Lyeva: agrupado por vendedor con su total en efectivo del día.
+      for (const grupo of ticket.por_usuario) {
+        push(CMD.BOLD_ON, ln(norm(grupo.nombre || 'Sin usuario')), CMD.BOLD_OFF);
+        for (const n of (grupo.notas ?? [])) {
+          pushNotaRow(n, true);
+        }
+        push(dotRow('  TOTAL EFECTIVO', '$' + formatMoney(Number(grupo.total_efectivo ?? 0))));
+        push(sep('-'));
+      }
+    } else {
+      for (const n of (ticket.notas ?? [])) {
+        pushNotaRow(n, false);
+      }
+      push(sep('-'));
+    }
 
     // ── Anticipos de pedidos ────────────────────────────
     if (ticket.anticipos_pedido && ticket.anticipos_pedido.count > 0) {

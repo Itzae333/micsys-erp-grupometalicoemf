@@ -33,6 +33,12 @@ interface PagosCreditoResumen {
   por_metodo: Record<string, MetodoResumen>;
   detalle: PagoCreditoDetalle[];
 }
+interface PorUsuarioResumen {
+  usuario_id: string;
+  nombre: string;
+  notas: NotaCorte[];
+  total_efectivo: number;
+}
 interface CorteCajaData {
   desde: string | null;
   hasta: string | null;
@@ -47,7 +53,14 @@ interface CorteCajaData {
   pagos_credito: PagosCreditoResumen;
   notas: NotaCorte[];
   gastos: GastoCorte[];
+  por_usuario?: PorUsuarioResumen[];
 }
+
+// Metálicos Lyeva pidió el corte de caja agrupado por vendedor (con su total en
+// efectivo del día) en vez de la tabla plana de notas — id fijo seedeado en
+// packages/database/prisma/seed.ts. No existe un mecanismo de configuración por
+// empresa en el proyecto; se resuelve así por ser un caso único de una sola empresa.
+const EMPRESA_METALICOS_LYEVA_ID = 'metalicos-lyeva-id';
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -101,6 +114,8 @@ export default function CorteCajaPage() {
     }
   }, [empresa, ubicacion, desde, hasta]);
 
+  const agruparPorUsuario = empresa?.id === EMPRESA_METALICOS_LYEVA_ID && (data?.por_usuario?.length ?? 0) > 0;
+
   const print = async () => {
     if (!data || !empresa) return;
     try {
@@ -140,6 +155,7 @@ export default function CorteCajaPage() {
           pagos_credito: data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] },
           notas: data.notas,
           gastos: data.gastos,
+          por_usuario: agruparPorUsuario ? data.por_usuario : undefined,
         }),
       });
     } catch {
@@ -148,6 +164,51 @@ export default function CorteCajaPage() {
   };
 
   const metodos = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'];
+
+  const notaRow = (n: NotaCorte, i: number) => (
+    <tr key={n.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+      <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(n.folio).padStart(4, '0')}</td>
+      <td className="px-4 py-2.5 text-steel-500">{fmtHour(n.created_at)}</td>
+      <td className="px-4 py-2.5 text-steel-700 max-w-[160px] truncate">{n.cliente.nombre}</td>
+      <td className="px-4 py-2.5">
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ESTATUS_BADGE[n.estatus] ?? 'bg-steel-100 text-steel-800'}`}>
+          {n.estatus}
+        </span>
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex gap-1 flex-wrap">
+          {n.pagos.filter((p) => p.monto > 0).map((p, j) => (
+            <span key={j} className="text-xs bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded">
+              {METODO_LABEL[p.metodo] ?? p.metodo} {fmt(p.monto)}
+            </span>
+          ))}
+          {n.pagos.filter((p) => p.monto > 0).length === 0 && (
+            <span className="text-xs text-steel-400">—</span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-2.5 text-right text-xs text-steel-400">
+        {n.cambio > 0 ? (
+          <span className="text-amber-600 font-medium">{fmt(n.cambio)}</span>
+        ) : '—'}
+      </td>
+      <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(n.total)}</td>
+    </tr>
+  );
+
+  const notaTableHead = (
+    <thead>
+      <tr className="bg-steel-50 border-b border-steel-200">
+        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
+        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Hora</th>
+        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cliente</th>
+        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Estatus</th>
+        <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Métodos</th>
+        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cambio</th>
+        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Total</th>
+      </tr>
+    </thead>
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -332,96 +393,85 @@ export default function CorteCajaPage() {
             <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
               Detalle de notas
             </h2>
-            <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-steel-50 border-b border-steel-200">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Hora</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cliente</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Estatus</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Métodos</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cambio</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.notas.map((n, i) => (
-                    <tr key={n.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
-                      <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(n.folio).padStart(4, '0')}</td>
-                      <td className="px-4 py-2.5 text-steel-500">{fmtHour(n.created_at)}</td>
-                      <td className="px-4 py-2.5 text-steel-700 max-w-[160px] truncate">{n.cliente.nombre}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ESTATUS_BADGE[n.estatus] ?? 'bg-steel-100 text-steel-800'}`}>
-                          {n.estatus}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex gap-1 flex-wrap">
-                          {n.pagos.filter((p) => p.monto > 0).map((p, j) => (
-                            <span key={j} className="text-xs bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded">
-                              {METODO_LABEL[p.metodo] ?? p.metodo} {fmt(p.monto)}
-                            </span>
-                          ))}
-                          {n.pagos.filter((p) => p.monto > 0).length === 0 && (
-                            <span className="text-xs text-steel-400">—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-xs text-steel-400">
-                        {n.cambio > 0 ? (
-                          <span className="text-amber-600 font-medium">{fmt(n.cambio)}</span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(n.total)}</td>
-                    </tr>
-                  ))}
-                  {data.notas.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-steel-400">
-                        Sin notas en el rango seleccionado
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {data.notas.length > 0 && (
-                  <tfoot>
-                    <tr className="bg-steel-900">
-                      <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-white">
-                        TOTAL COBRADO
-                      </td>
-                      <td className="px-4 py-3 text-right text-base font-bold text-white">
-                        {fmt(data.total_cobrado)}
-                      </td>
-                    </tr>
-                    {metodos.map((m) => {
-                      const res = data.por_metodo[m] ?? { count: 0, total: 0 };
-                      if (res.total === 0) return null;
-                      return (
-                        <tr key={m} className="bg-steel-800/60">
-                          <td colSpan={6} className="px-4 py-1.5 text-right text-xs font-medium text-steel-300">
-                            Total en {METODO_LABEL[m]}
+            {agruparPorUsuario ? (
+              <div className="space-y-4">
+                {(data.por_usuario ?? []).map((grupo) => (
+                  <div key={grupo.usuario_id} className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-steel-100 border-b border-steel-200">
+                      <span className="text-sm font-bold text-steel-900">{grupo.nombre}</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      {notaTableHead}
+                      <tbody>
+                        {grupo.notas.map((n, i) => notaRow(n, i))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-steel-900">
+                          <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-white">
+                            TOTAL EFECTIVO
                           </td>
-                          <td className="px-4 py-1.5 text-right text-sm font-semibold text-steel-100">
-                            {fmt(res.total)}
+                          <td className="px-4 py-3 text-right text-base font-bold text-white">
+                            {fmt(grupo.total_efectivo)}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {data.total_gastos > 0 && (
-                      <tr className="bg-steel-800">
-                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
-                          TOTAL NETO (tras gastos)
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-base font-bold text-emerald-300">
-                          {fmt(data.total_neto)}
+                      </tfoot>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  {notaTableHead}
+                  <tbody>
+                    {data.notas.map((n, i) => notaRow(n, i))}
+                    {data.notas.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-steel-400">
+                          Sin notas en el rango seleccionado
                         </td>
                       </tr>
                     )}
-                  </tfoot>
-                )}
-              </table>
-            </div>
+                  </tbody>
+                  {data.notas.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-steel-900">
+                        <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-white">
+                          TOTAL COBRADO
+                        </td>
+                        <td className="px-4 py-3 text-right text-base font-bold text-white">
+                          {fmt(data.total_cobrado)}
+                        </td>
+                      </tr>
+                      {metodos.map((m) => {
+                        const res = data.por_metodo[m] ?? { count: 0, total: 0 };
+                        if (res.total === 0) return null;
+                        return (
+                          <tr key={m} className="bg-steel-800/60">
+                            <td colSpan={6} className="px-4 py-1.5 text-right text-xs font-medium text-steel-300">
+                              Total en {METODO_LABEL[m]}
+                            </td>
+                            <td className="px-4 py-1.5 text-right text-sm font-semibold text-steel-100">
+                              {fmt(res.total)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {data.total_gastos > 0 && (
+                        <tr className="bg-steel-800">
+                          <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-bold text-emerald-300">
+                            TOTAL NETO (tras gastos)
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-base font-bold text-emerald-300">
+                            {fmt(data.total_neto)}
+                          </td>
+                        </tr>
+                      )}
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )}
           </div>
         </>
         );

@@ -901,6 +901,7 @@ export class VentasService {
         orderBy: { created_at: 'asc' },
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
+          usuario: { select: { id: true, nombre: true, apellidos: true } },
           pagos: true,
         },
       }),
@@ -1021,6 +1022,50 @@ export class VentasService {
       totalGastosEfectivo
     ).toFixed(2);
 
+    const notasMapeadas = notas.map((n) => {
+      const notaTotal = Number(n.total);
+      const nonCash = n.pagos
+        .filter((p) => p.metodo !== 'EFECTIVO')
+        .reduce((s, p) => s + Number(p.monto), 0);
+      const sumTodos = n.pagos.reduce((s, p) => s + Number(p.monto), 0);
+      const cambio = Math.max(0, +(sumTodos - notaTotal).toFixed(2));
+      const efectivoReal = Math.max(0, +(notaTotal - nonCash).toFixed(2));
+
+      return {
+        id: n.id,
+        folio: n.folio,
+        estatus: n.estatus,
+        total: notaTotal,
+        cambio,
+        created_at: n.created_at,
+        cliente: n.cliente
+          ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
+          : { nombre: 'MOSTRADOR' },
+        pagos: n.pagos.map((p) => ({
+          metodo: p.metodo,
+          monto: p.metodo === 'EFECTIVO' ? efectivoReal : Number(p.monto),
+        })),
+      };
+    });
+
+    // Agrupado por usuario (vendedor) — lo usa Metálicos Lyeva para su corte de
+    // caja personalizado (front + ticket impreso); las demás empresas ignoran
+    // este campo. Se calcula siempre porque es barato (no hace queries extra) y
+    // este método no conoce la empresa, solo la ubicación.
+    const porUsuarioMap = new Map<string, { usuario_id: string; nombre: string; notas: typeof notasMapeadas; total_efectivo: number }>();
+    notas.forEach((n, i) => {
+      const usuarioId = n.usuario?.id ?? 'sin-usuario';
+      const nombre = n.usuario ? `${n.usuario.nombre} ${n.usuario.apellidos ?? ''}`.trim() : 'Sin usuario';
+      if (!porUsuarioMap.has(usuarioId)) {
+        porUsuarioMap.set(usuarioId, { usuario_id: usuarioId, nombre, notas: [], total_efectivo: 0 });
+      }
+      const grupo = porUsuarioMap.get(usuarioId)!;
+      grupo.notas.push(notasMapeadas[i]);
+      const efectivoNota = notasMapeadas[i].pagos.find((p) => p.metodo === 'EFECTIVO')?.monto ?? 0;
+      grupo.total_efectivo = +(grupo.total_efectivo + efectivoNota).toFixed(2);
+    });
+    const porUsuario = Array.from(porUsuarioMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     return {
       desde: desde ?? null,
       hasta: hasta ?? null,
@@ -1068,31 +1113,8 @@ export class VentasService {
           fecha: a.created_at,
         })),
       },
-      notas: notas.map((n) => {
-        const notaTotal = Number(n.total);
-        const nonCash = n.pagos
-          .filter((p) => p.metodo !== 'EFECTIVO')
-          .reduce((s, p) => s + Number(p.monto), 0);
-        const sumTodos = n.pagos.reduce((s, p) => s + Number(p.monto), 0);
-        const cambio = Math.max(0, +(sumTodos - notaTotal).toFixed(2));
-        const efectivoReal = Math.max(0, +(notaTotal - nonCash).toFixed(2));
-
-        return {
-          id: n.id,
-          folio: n.folio,
-          estatus: n.estatus,
-          total: notaTotal,
-          cambio,
-          created_at: n.created_at,
-          cliente: n.cliente
-            ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
-            : { nombre: 'MOSTRADOR' },
-          pagos: n.pagos.map((p) => ({
-            metodo: p.metodo,
-            monto: p.metodo === 'EFECTIVO' ? efectivoReal : Number(p.monto),
-          })),
-        };
-      }),
+      notas: notasMapeadas,
+      por_usuario: porUsuario,
     };
   }
 }
