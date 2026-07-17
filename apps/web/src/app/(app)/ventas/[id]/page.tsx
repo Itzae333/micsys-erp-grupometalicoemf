@@ -6,6 +6,7 @@ import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clo
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { EMPRESA_METALICOS_LYEVA_ID } from '@/lib/empresas';
 import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
@@ -334,6 +335,10 @@ export default function NotaDetallePage() {
         }),
         cliente: nota.cliente
           ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
+          : null,
+        // Metálicos Lyeva pidió que el ticket muestre quién hizo la venta.
+        usuario: empresa?.id === EMPRESA_METALICOS_LYEVA_ID && nota.usuario
+          ? `${nota.usuario.nombre} ${nota.usuario.apellidos ?? ''}`.trim()
           : null,
       },
       lineas: nota.lineas.map((l) => ({

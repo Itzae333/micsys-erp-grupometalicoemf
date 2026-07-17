@@ -625,6 +625,8 @@ function buildEscPosBuffer(ticket) {
   // ── Folio y fecha ──────────────────────────────────────
   push(row('Nota #' + ticket.nota.folio, ticket.nota.fecha));
   if (ticket.nota.cliente) push(ln('Cliente: ' + ticket.nota.cliente));
+  // Solo viene si el front lo mandó (Metálicos Lyeva pidió ver el vendedor).
+  if (ticket.nota.usuario) push(ln('Vendedor: ' + norm(ticket.nota.usuario)));
   push(sep());
 
   // ── Productos ──────────────────────────────────────────

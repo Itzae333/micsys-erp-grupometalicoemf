@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { EMPRESA_METALICOS_LYEVA_ID } from '@/lib/empresas';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,12 +63,6 @@ interface CorteCajaData {
   gastos: GastoCorte[];
   por_usuario?: PorUsuarioResumen[];
 }
-
-// Metálicos Lyeva pidió el corte de caja agrupado por vendedor (con su total en
-// efectivo del día) en vez de la tabla plana de notas — id fijo seedeado en
-// packages/database/prisma/seed.ts. No existe un mecanismo de configuración por
-// empresa en el proyecto; se resuelve así por ser un caso único de una sola empresa.
-const EMPRESA_METALICOS_LYEVA_ID = 'metalicos-lyeva-id';
 
 // ── helpers ──────────────────────────────────────────────────
 
