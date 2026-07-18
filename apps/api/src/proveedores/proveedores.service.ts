@@ -6,11 +6,25 @@ import type { CreateProveedorDto } from './dto/create-proveedor.dto';
 export class ProveedoresService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(empresaId: string) {
-    return this.prisma.proveedor.findMany({
-      where: { empresa_id: empresaId, activo: true },
+  async findAll(empresaId: string, query: { q?: string; limit?: number } = {}) {
+    const where: Record<string, unknown> = { empresa_id: empresaId, activo: true };
+    if (query.q) {
+      where['OR'] = [
+        { nombre: { contains: query.q, mode: 'insensitive' } },
+        { razon_social: { contains: query.q, mode: 'insensitive' } },
+        { telefono: { contains: query.q, mode: 'insensitive' } },
+      ];
+    }
+
+    const data = await this.prisma.proveedor.findMany({
+      where,
       orderBy: { nombre: 'asc' },
+      // Sin búsqueda ni límite explícito, se topa para no traer todo el
+      // catálogo de proveedores de golpe.
+      take: query.limit ?? (query.q ? undefined : 500),
     });
+
+    return { data };
   }
 
   async findOne(id: string, empresaId: string) {

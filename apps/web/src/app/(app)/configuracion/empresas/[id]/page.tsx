@@ -31,6 +31,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/toast';
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i;
 
@@ -74,6 +75,7 @@ const TIPO_COLORS: Record<string, string> = {
 export default function EmpresaDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const toast = useToast();
   const { usuario } = useAuthStore();
   const { empresa: ctxEmpresa, setEmpresa: setCtxEmpresa } = useContextoStore();
 
@@ -208,7 +210,7 @@ export default function EmpresaDetailPage() {
       }
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al subir logo');
+      toast(err instanceof Error ? err.message : 'Error al subir logo', 'error');
     } finally {
       setLogoUploading(null);
     }
@@ -323,6 +325,7 @@ export default function EmpresaDetailPage() {
                   }}
                   className="text-steel-400 hover:text-brand-600 transition-colors"
                   title="Eliminar logo"
+                  aria-label="Eliminar logo"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -424,7 +427,7 @@ export default function EmpresaDetailPage() {
                       >
                         <Columns3 className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEditUbicacion(ub)}>
+                      <Button variant="ghost" size="sm" onClick={() => openEditUbicacion(ub)} aria-label="Editar ubicación">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </>

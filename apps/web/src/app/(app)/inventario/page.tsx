@@ -132,8 +132,8 @@ export default function InventarioPage() {
   const loadProveedores = useCallback(async () => {
     if (!empresa?.id || !ubicacion?.id) return;
     try {
-      const data = await api.get<Proveedor[]>('/proveedores');
-      setProveedores(data);
+      const res = await api.get<{ data: Proveedor[] }>('/proveedores');
+      setProveedores(res.data);
     } catch {
       setProveedores([]);
     }
@@ -273,6 +273,7 @@ export default function InventarioPage() {
             <button
               onClick={() => { setQ(''); setPage(1); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-steel-400 hover:text-steel-700"
+              aria-label="Limpiar búsqueda"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -378,6 +379,7 @@ export default function InventarioPage() {
                           onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeleteTarget(art); }}
                           className="text-steel-400 hover:text-brand-600 p-1.5 rounded hover:bg-brand-50"
                           title="Eliminar"
+                          aria-label="Eliminar artículo"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -403,6 +405,7 @@ export default function InventarioPage() {
               onClick={() => setPage(1)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Primera página"
+              aria-label="Primera página"
             >
               <ChevronsLeft className="h-4 w-4" />
             </button>
@@ -411,6 +414,7 @@ export default function InventarioPage() {
               onClick={() => setPage((p) => p - 1)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Página anterior"
+              aria-label="Página anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -419,6 +423,7 @@ export default function InventarioPage() {
               onClick={() => setPage((p) => p + 1)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Página siguiente"
+              aria-label="Página siguiente"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -427,6 +432,7 @@ export default function InventarioPage() {
               onClick={() => setPage(result.pages)}
               className="p-1.5 rounded hover:bg-steel-100 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Última página"
+              aria-label="Última página"
             >
               <ChevronsRight className="h-4 w-4" />
             </button>

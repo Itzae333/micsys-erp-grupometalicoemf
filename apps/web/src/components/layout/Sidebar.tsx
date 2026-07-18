@@ -326,6 +326,7 @@ export function Sidebar() {
               onClick={handleLogout}
               className="text-steel-500 hover:text-white transition-colors"
               title="Cerrar sesión"
+              aria-label="Cerrar sesión"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>

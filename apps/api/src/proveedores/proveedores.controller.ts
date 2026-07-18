@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Headers } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Headers, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { ProveedoresService } from './proveedores.service';
 import { CreateProveedorDto } from './dto/create-proveedor.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -13,8 +13,14 @@ export class ProveedoresController {
 
   @Get()
   @ApiOperation({ summary: 'Lista de proveedores activos' })
-  findAll(@Headers('x-empresa-id') empresaId: string) {
-    return this.proveedores.findAll(empresaId);
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(
+    @Headers('x-empresa-id') empresaId: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.proveedores.findAll(empresaId, { q, limit: limit ? Number(limit) : undefined });
   }
 
   @Get(':id')

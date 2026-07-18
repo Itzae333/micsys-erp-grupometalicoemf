@@ -28,6 +28,7 @@ export function InstallPWABanner() {
         <button
           onClick={() => setDismissed(true)}
           className="text-steel-500 hover:text-white transition-colors flex-shrink-0"
+          aria-label="Descartar"
         >
           <X className="h-4 w-4" />
         </button>

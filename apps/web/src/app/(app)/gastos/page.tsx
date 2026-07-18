@@ -186,7 +186,7 @@ export default function GastosPage() {
                     <td className="px-4 py-2.5 text-steel-500">{g.usuario ? `${g.usuario.nombre} ${g.usuario.apellidos}` : '—'}</td>
                     <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(g.monto)}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => onEliminar(g.id)} className="text-steel-400 hover:text-brand-600 transition-colors">
+                      <button onClick={() => onEliminar(g.id)} className="text-steel-400 hover:text-brand-600 transition-colors" aria-label="Eliminar gasto">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>

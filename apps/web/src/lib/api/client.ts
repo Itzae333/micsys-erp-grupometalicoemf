@@ -22,27 +22,43 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   if (empresa?.id) headers['x-empresa-id'] = empresa.id;
   if (ubicacion?.id) headers['x-ubicacion-id'] = ubicacion.id;
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...fetchOptions,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+    });
+  } catch {
+    // fetch() en sí falló (sin conexión, DNS, etc.) — no es un error del servidor
+    throw new ApiError(0, 'Sin conexión');
+  }
 
   // Auto-refresh si el token expiró
   if (response.status === 401 && !skipAuth) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
+    const refreshResult = await refreshAccessToken();
+    if (refreshResult.ok) {
       headers['Authorization'] = `Bearer ${useAuthStore.getState().accessToken}`;
-      const retryResponse = await fetch(`${BASE_URL}${path}`, {
-        ...fetchOptions,
-        headers,
-      });
+      let retryResponse: Response;
+      try {
+        retryResponse = await fetch(`${BASE_URL}${path}`, {
+          ...fetchOptions,
+          headers,
+        });
+      } catch {
+        throw new ApiError(0, 'Sin conexión');
+      }
       if (!retryResponse.ok) {
         const error = await retryResponse.json().catch(() => ({ message: 'Error desconocido' }));
         throw new ApiError(retryResponse.status, error.message ?? 'Error del servidor');
       }
       return retryResponse.json() as Promise<T>;
     }
-    // Refresh falló — limpiar sesión
+    if (refreshResult.reason === 'network') {
+      // No se pudo renovar la sesión por falta de conexión — no es una sesión
+      // realmente expirada, así que no se cierra sesión ni se redirige.
+      throw new ApiError(0, 'Sin conexión — no se pudo renovar la sesión');
+    }
+    // El servidor respondió que el refresh token es inválido/expirado — sesión realmente terminada.
     useAuthStore.getState().clearAuth();
     window.location.href = '/login';
     throw new ApiError(401, 'Sesión expirada');
@@ -62,19 +78,26 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   return response.json() as Promise<T>;
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+type RefreshResult = { ok: true } | { ok: false; reason: 'network' | 'rejected' };
+
+async function refreshAccessToken(): Promise<RefreshResult> {
+  let response: Response;
   try {
-    const response = await fetch(`${BASE_URL}/auth/refresh`, {
+    response = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
-    if (!response.ok) return false;
-    const data = await response.json() as { access_token: string };
-    useAuthStore.getState().setAccessToken(data.access_token);
-    return true;
   } catch {
-    return false;
+    // La llamada de red falló (sin conexión) — no significa que el refresh token sea inválido.
+    return { ok: false, reason: 'network' };
   }
+  if (!response.ok) {
+    // El servidor respondió: el refresh token es genuinamente inválido/expirado.
+    return { ok: false, reason: 'rejected' };
+  }
+  const data = await response.json() as { access_token: string };
+  useAuthStore.getState().setAccessToken(data.access_token);
+  return { ok: true };
 }
 
 export class ApiError extends Error {

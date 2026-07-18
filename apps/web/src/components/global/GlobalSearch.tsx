@@ -128,7 +128,7 @@ export function GlobalSearch() {
             <div className="h-4 w-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
           )}
           {!loading && q && (
-            <button onClick={() => { setQ(''); setResults([]); }} className="text-steel-400 hover:text-steel-600">
+            <button onClick={() => { setQ(''); setResults([]); }} className="text-steel-400 hover:text-steel-600" aria-label="Limpiar búsqueda">
               <X className="h-4 w-4" />
             </button>
           )}

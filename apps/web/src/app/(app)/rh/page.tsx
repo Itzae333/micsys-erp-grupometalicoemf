@@ -776,6 +776,7 @@ export default function RhPage() {
                         onClick={() => abrirEditEmp(e)}
                         className="p-1.5 text-steel-400 hover:text-brand-600 transition-colors"
                         title="Editar"
+                        aria-label="Editar empleado"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
@@ -850,6 +851,7 @@ export default function RhPage() {
                           onClick={() => abrirEditArea(a)}
                           className="p-1.5 text-steel-400 hover:text-brand-600 transition-colors"
                           title="Editar"
+                          aria-label="Editar área"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -963,6 +965,7 @@ export default function RhPage() {
                         onClick={() => abrirEditAsist(r)}
                         className="p-1.5 text-steel-400 hover:text-brand-600 transition-colors"
                         title="Editar"
+                        aria-label="Editar asistencia"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>

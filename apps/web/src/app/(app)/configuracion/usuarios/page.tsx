@@ -321,7 +321,7 @@ export default function UsuariosPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Editar">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Editar" aria-label="Editar usuario">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button

@@ -110,7 +110,7 @@ export function ContextSwitcher({ open, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-steel-100">
           <h2 className="text-display-sm font-bold text-steel-900">Cambiar contexto</h2>
-          <button onClick={onClose} className="text-steel-400 hover:text-steel-600 transition-colors">
+          <button onClick={onClose} className="text-steel-400 hover:text-steel-600 transition-colors" aria-label="Cerrar">
             <X className="h-4 w-4" />
           </button>
         </div>

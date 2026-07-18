@@ -7,6 +7,7 @@ import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { cn, formatFechaCorta, formatPrecio } from '@/lib/utils';
 
 interface VentaLegacy {
@@ -78,6 +79,49 @@ const ESTATUS_COLORS: Record<string, string> = {
   CREDITO:   'bg-amber-50 text-amber-700',
   PENDIENTE: 'bg-blue-50 text-blue-700',
 };
+
+const COLUMNAS_VENTAS: DataTableColumn<VentaLegacy>[] = [
+  {
+    key: 'fecha',
+    header: 'Fecha',
+    className: 'text-steel-700 whitespace-nowrap',
+    render: (v) => formatFechaCorta(v.fecha_hora),
+  },
+  {
+    key: 'cliente',
+    header: 'Cliente',
+    className: 'font-medium text-steel-900 max-w-[140px] truncate',
+    render: (v) => v.cliente_nombre || <span className="text-steel-400 font-normal">Sin cliente</span>,
+  },
+  {
+    key: 'sucursal',
+    header: 'Suc.',
+    render: (v) => (
+      <span className="text-caption bg-steel-100 text-steel-600 px-2 py-0.5 rounded-full">
+        {labelSucursal(v.sucursal)}
+      </span>
+    ),
+  },
+  {
+    key: 'total',
+    header: 'Total',
+    align: 'right',
+    className: 'font-medium text-steel-900',
+    render: (v) => formatPrecio(v.total),
+  },
+  {
+    key: 'estatus',
+    header: 'Estatus',
+    render: (v) => (
+      <span className={cn(
+        'text-caption px-2 py-0.5 rounded-full font-medium',
+        ESTATUS_COLORS[v.estatus] ?? 'bg-steel-100 text-steel-600',
+      )}>
+        {v.estatus}
+      </span>
+    ),
+  },
+];
 
 export default function HistorialLegacyPage() {
   const router = useRouter();
@@ -185,6 +229,7 @@ export default function HistorialLegacyPage() {
           <Input
             className="pl-9 h-9"
             placeholder="Buscar cliente…"
+            aria-label="Buscar cliente"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && cargar(1)}
@@ -196,6 +241,7 @@ export default function HistorialLegacyPage() {
           className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
           value={sucursal}
           onChange={(e) => setSucursal(e.target.value)}
+          aria-label="Filtrar por sucursal"
         >
           <option value="">Todas las sucursales</option>
           {sucursales.map((s) => (
@@ -214,6 +260,7 @@ export default function HistorialLegacyPage() {
             className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
+            aria-label="Fecha desde"
           />
           <span className="text-steel-300">—</span>
           <span className="text-meta text-steel-400 hidden sm:block">Hasta</span>
@@ -222,6 +269,7 @@ export default function HistorialLegacyPage() {
             className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
+            aria-label="Fecha hasta"
           />
         </div>
 
@@ -265,56 +313,15 @@ export default function HistorialLegacyPage() {
           ) : (
             <>
               <div className="flex-1 overflow-y-auto bg-white rounded-xl border border-steel-200">
-                <table className="w-full text-body-sm">
-                  <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 font-medium text-steel-600">Fecha</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-steel-600">Cliente</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-steel-600">Suc.</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-steel-600">Total</th>
-                      <th className="text-left px-3 py-2.5 font-medium text-steel-600">Estatus</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-steel-100">
-                    {ventas.map((v, idx) => (
-                      <tr
-                        key={v.id}
-                        ref={(el) => { rowRefs.current[idx] = el; }}
-                        className={cn(
-                          'cursor-pointer transition-colors',
-                          selectedIdx === idx
-                            ? 'bg-brand-50 border-l-2 border-l-brand-600'
-                            : 'hover:bg-steel-50',
-                        )}
-                        onClick={() => seleccionar(idx)}
-                        onDoubleClick={() => router.push(`/historial-legacy/${v.id}`)}
-                      >
-                        <td className="px-3 py-2.5 text-steel-700 whitespace-nowrap">
-                          {formatFechaCorta(v.fecha_hora)}
-                        </td>
-                        <td className="px-3 py-2.5 font-medium text-steel-900 max-w-[140px] truncate">
-                          {v.cliente_nombre || <span className="text-steel-400 font-normal">Sin cliente</span>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="text-caption bg-steel-100 text-steel-600 px-2 py-0.5 rounded-full">
-                            {labelSucursal(v.sucursal)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-medium text-steel-900">
-                          {formatPrecio(v.total)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className={cn(
-                            'text-caption px-2 py-0.5 rounded-full font-medium',
-                            ESTATUS_COLORS[v.estatus] ?? 'bg-steel-100 text-steel-600',
-                          )}>
-                            {v.estatus}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  columns={COLUMNAS_VENTAS}
+                  rows={ventas}
+                  rowKey={(v) => v.id}
+                  rowRef={(el, idx) => { rowRefs.current[idx] = el; }}
+                  isRowSelected={(_, idx) => selectedIdx === idx}
+                  onRowClick={(_, idx) => seleccionar(idx)}
+                  onRowDoubleClick={(v) => router.push(`/historial-legacy/${v.id}`)}
+                />
               </div>
 
               {/* Paginación */}
@@ -323,10 +330,10 @@ export default function HistorialLegacyPage() {
                   {total} ventas · pág {page}/{pages}
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => cargar(page - 1)}>
+                  <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => cargar(page - 1)} aria-label="Página anterior">
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="secondary" size="sm" disabled={page >= pages} onClick={() => cargar(page + 1)}>
+                  <Button variant="secondary" size="sm" disabled={page >= pages} onClick={() => cargar(page + 1)} aria-label="Página siguiente">
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -404,32 +411,47 @@ export default function HistorialLegacyPage() {
 
               {/* Líneas */}
               <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
-                <table className="w-full text-body-sm">
-                  <thead className="bg-steel-50 border-b border-steel-200">
-                    <tr>
-                      <th className="text-left px-4 py-2.5 font-medium text-steel-600">Descripción</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-steel-600">Cant</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-steel-600">Precio</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-steel-100">
-                    {detalle.lineas.map((l) => (
-                      <tr key={l.id}>
-                        <td className="px-4 py-2.5 text-steel-900">{descripcionLinea(l) || '—'}</td>
-                        <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
-                        <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_neto)}</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-steel-900">{formatPrecio(l.total)}</td>
+                <DataTable<LineaLegacy>
+                  columns={[
+                    {
+                      key: 'descripcion',
+                      header: 'Descripción',
+                      className: 'px-4 text-steel-900',
+                      render: (l) => descripcionLinea(l) || '—',
+                    },
+                    {
+                      key: 'cantidad',
+                      header: 'Cant',
+                      align: 'right',
+                      className: 'text-steel-700',
+                      render: (l) => l.cantidad,
+                    },
+                    {
+                      key: 'precio',
+                      header: 'Precio',
+                      align: 'right',
+                      className: 'text-steel-700',
+                      render: (l) => formatPrecio(l.precio_neto),
+                    },
+                    {
+                      key: 'sub',
+                      header: 'Sub',
+                      align: 'right',
+                      className: 'px-4 font-medium text-steel-900',
+                      render: (l) => formatPrecio(l.total),
+                    },
+                  ]}
+                  rows={detalle.lineas}
+                  rowKey={(l) => l.id}
+                  footer={
+                    <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                      <tr>
+                        <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalle.total)}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t-2 border-steel-200 bg-steel-50">
-                    <tr>
-                      <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalle.total)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </tfoot>
+                  }
+                />
               </div>
             </div>
           )}

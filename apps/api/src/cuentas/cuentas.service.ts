@@ -99,16 +99,25 @@ export class CuentasService {
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    const saldoActual = Number(cliente.saldo_pendiente);
-    if (dto.monto > saldoActual) {
+    // Validación rápida (UX) — la autoritativa se repite dentro de la
+    // transacción con el saldo fresco, para no arrastrar un valor desactualizado
+    // si hay otra escritura concurrente sobre el mismo cliente.
+    if (dto.monto > Number(cliente.saldo_pendiente)) {
       throw new BadRequestException(
-        `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${saldoActual.toFixed(2)})`,
+        `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${Number(cliente.saldo_pendiente).toFixed(2)})`,
       );
     }
 
-    const saldoDespues = saldoActual - dto.monto;
-
     return this.prisma.$transaction(async (tx) => {
+      const clienteFresco = await tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
+      const saldoActual = Number(clienteFresco.saldo_pendiente);
+      if (dto.monto > saldoActual) {
+        throw new BadRequestException(
+          `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${saldoActual.toFixed(2)})`,
+        );
+      }
+      const saldoDespues = saldoActual - dto.monto;
+
       const mov = await tx.movimientoCuenta.create({
         data: {
           ubicacion_id: ubicacionId,
@@ -143,11 +152,12 @@ export class CuentasService {
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    const saldoActual = Number(cliente.saldo_pendiente);
-    const saldoDespues =
-      dto.tipo === 'CARGO' ? saldoActual + dto.monto : Math.max(0, saldoActual - dto.monto);
-
     return this.prisma.$transaction(async (tx) => {
+      const clienteFresco = await tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
+      const saldoActual = Number(clienteFresco.saldo_pendiente);
+      const saldoDespues =
+        dto.tipo === 'CARGO' ? saldoActual + dto.monto : Math.max(0, saldoActual - dto.monto);
+
       const mov = await tx.movimientoCuenta.create({
         data: {
           ubicacion_id: ubicacionId,

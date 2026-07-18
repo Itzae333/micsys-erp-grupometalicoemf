@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { api } from '@/lib/api/client';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { EMPRESA_METALICOS_LYEVA_ID } from '@/lib/empresas';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { getPendingCount } from '@/lib/db/sync-queue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calculator, Printer, RefreshCw,
+  Calculator, Printer, RefreshCw, AlertTriangle,
   Banknote, CreditCard, Building2, Package,
 } from 'lucide-react';
 
@@ -99,6 +100,14 @@ export default function CorteCajaPage() {
   const [data, setData] = useState<CorteCajaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingSync, setPendingSync] = useState(0);
+
+  useEffect(() => {
+    getPendingCount().then(setPendingSync).catch(() => {});
+    const onFocus = () => { getPendingCount().then(setPendingSync).catch(() => {}); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   const load = useCallback(async () => {
     if (!empresa) return;
@@ -259,6 +268,14 @@ export default function CorteCajaPage() {
         <Calculator className="h-6 w-6 text-steel-600" />
         <h1 className="text-2xl font-bold text-steel-900">Corte de Caja</h1>
       </div>
+
+      {pendingSync > 0 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          {pendingSync} {pendingSync === 1 ? 'venta pendiente' : 'ventas pendientes'} de sincronizar — este corte
+          puede no incluirlas todavía.
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-steel-200 p-4 flex flex-wrap items-end gap-3">

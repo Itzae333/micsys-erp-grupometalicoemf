@@ -106,12 +106,14 @@ export function NotificacionesPanel() {
                 onClick={() => void load()}
                 className="p-1 text-steel-400 hover:text-steel-700 rounded transition-colors"
                 title="Actualizar"
+                aria-label="Actualizar notificaciones"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={() => setOpen(false)}
                 className="p-1 text-steel-400 hover:text-steel-700 rounded transition-colors"
+                aria-label="Cerrar notificaciones"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

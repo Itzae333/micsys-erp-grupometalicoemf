@@ -93,6 +93,7 @@ export default function PedidosPage() {
   // ── Inline edit líneas ──────────────────────────────────────
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState(false);
 
   // ── Dialog anticipo ─────────────────────────────────────────
   const [dlgAnticipo, setDlgAnticipo] = useState(false);
@@ -230,9 +231,14 @@ export default function PedidosPage() {
 
   // ── Eliminar línea ──────────────────────────────────────────
   async function handleRemoveLinea(lineaId: string) {
-    if (!pedidoActivo) return;
-    await api.delete(`/pedidos/${pedidoActivo.id}/lineas/${lineaId}`);
-    await refreshActivo(pedidoActivo.id);
+    if (!pedidoActivo || savingLinea === lineaId) return;
+    setSavingLinea(lineaId);
+    try {
+      await api.delete(`/pedidos/${pedidoActivo.id}/lineas/${lineaId}`);
+      await refreshActivo(pedidoActivo.id);
+    } finally {
+      setSavingLinea(null);
+    }
   }
 
   // ── Guardar inline ──────────────────────────────────────────
@@ -333,10 +339,15 @@ export default function PedidosPage() {
 
   // ── Cancelar pedido ─────────────────────────────────────────
   async function handleCancelar() {
-    if (!pedidoActivo) return;
+    if (!pedidoActivo || cancelando) return;
     if (!confirm(`¿Cancelar pedido #${pedidoActivo.folio}?`)) return;
-    await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {});
-    await refreshActivo(pedidoActivo.id);
+    setCancelando(true);
+    try {
+      await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {});
+      await refreshActivo(pedidoActivo.id);
+    } finally {
+      setCancelando(false);
+    }
   }
 
   const canEdit = pedidoActivo?.estatus === 'ABIERTO' || pedidoActivo?.estatus === 'PARCIAL';
@@ -447,6 +458,7 @@ export default function PedidosPage() {
               disabled={page === 1}
               onClick={() => { const p = page - 1; setPage(p); loadPedidos(p); }}
               className="p-1 disabled:opacity-30"
+              aria-label="Página anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -455,6 +467,7 @@ export default function PedidosPage() {
               disabled={page === pages}
               onClick={() => { const p = page + 1; setPage(p); loadPedidos(p); }}
               className="p-1 disabled:opacity-30"
+              aria-label="Página siguiente"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -513,7 +526,7 @@ export default function PedidosPage() {
                     </Button>
                   )}
                   {(pedidoActivo.estatus === 'ABIERTO' || pedidoActivo.estatus === 'PARCIAL') && pedidoActivo.anticipos.length === 0 && (
-                    <Button size="sm" variant="destructive" onClick={handleCancelar}>Cancelar</Button>
+                    <Button size="sm" variant="destructive" disabled={cancelando} loading={cancelando} onClick={handleCancelar}>Cancelar</Button>
                   )}
                 </div>
               </div>
@@ -594,20 +607,24 @@ export default function PedidosPage() {
                                       className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
                                       onClick={() => handleSaveLinea(l)}
                                       disabled={isSaving}
+                                      aria-label="Guardar línea"
                                     >
                                       <Check className="h-3.5 w-3.5" />
                                     </button>
                                     <button
                                       className="p-1 text-steel-400 hover:bg-steel-100 rounded"
                                       onClick={() => setLineaDraft((prev) => { const n = { ...prev }; delete n[l.id]; return n; })}
+                                      aria-label="Cancelar edición"
                                     >
                                       <X className="h-3.5 w-3.5" />
                                     </button>
                                   </div>
                                 ) : (
                                   <button
-                                    className="p-1 text-rose-400 hover:bg-rose-50 rounded"
-                                    onClick={() => handleRemoveLinea(l.id)}
+                                    className="p-1 text-rose-400 hover:bg-rose-50 rounded disabled:opacity-40"
+                                    disabled={savingLinea === l.id}
+                                    onClick={() => void handleRemoveLinea(l.id)}
+                                    aria-label="Eliminar línea"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
@@ -897,7 +914,7 @@ function PagosEditor({
             />
           )}
           {pagos.length > 1 && (
-            <button onClick={() => remove(i)} className="p-1 text-steel-400 hover:text-rose-500">
+            <button onClick={() => remove(i)} className="p-1 text-steel-400 hover:text-rose-500" aria-label="Quitar pago">
               <X className="h-3.5 w-3.5" />
             </button>
           )}

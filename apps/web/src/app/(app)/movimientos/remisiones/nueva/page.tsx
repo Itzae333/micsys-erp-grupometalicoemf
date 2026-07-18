@@ -273,6 +273,7 @@ export default function NuevaRemisionPage() {
               size="sm"
               disabled={artsPagPage <= 1}
               onClick={() => void cargarArticulosPag(artsPagPage - 1, artsPagQ)}
+              aria-label="Página anterior"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
@@ -282,6 +283,7 @@ export default function NuevaRemisionPage() {
               size="sm"
               disabled={artsPagPage >= artsPagPages}
               onClick={() => void cargarArticulosPag(artsPagPage + 1, artsPagQ)}
+              aria-label="Página siguiente"
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
@@ -338,7 +340,7 @@ export default function NuevaRemisionPage() {
                         />
                       </td>
                       <td className="px-2 py-2.5">
-                        <button onClick={() => removeLinea(idx)} className="text-steel-300 hover:text-brand-600 transition-colors">
+                        <button onClick={() => removeLinea(idx)} className="text-steel-300 hover:text-brand-600 transition-colors" aria-label="Eliminar línea">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>

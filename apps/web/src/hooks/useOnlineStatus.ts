@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { flushQueue, cleanDoneItems, getPendingCount } from '@/lib/db/sync-queue';
+import { reconcileVentasPendientes } from '@/lib/db/ventas-pendientes';
 
 interface OnlineStatus {
   isOnline: boolean;
@@ -24,6 +25,7 @@ export function useOnlineStatus(): OnlineStatus {
       setIsOnline(true);
       // Cuando se recupera la conexión, procesa la cola automáticamente
       await flushQueue();
+      await reconcileVentasPendientes();
       await cleanDoneItems();
       await refreshPending();
     }

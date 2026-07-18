@@ -72,6 +72,35 @@ export class CancelarNotaDto {
   @IsOptional() @IsString() comentario?: string;
 }
 
+export class VentaRapidaDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() cliente_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() observaciones?: string;
+
+  @ApiProperty({ type: [LineaVentaDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => LineaVentaDto)
+  lineas: LineaVentaDto[];
+
+  @ApiProperty({ enum: ['PAGADA', 'CREDITO', 'PENDIENTE'] })
+  @IsEnum(['PAGADA', 'CREDITO', 'PENDIENTE'])
+  tipo_cierre: 'PAGADA' | 'CREDITO' | 'PENDIENTE';
+
+  @ApiProperty({ type: [PagoDto] })
+  @IsArray()
+  @ArrayMinSize(0)
+  @ValidateNested({ each: true })
+  @Type(() => PagoDto)
+  pagos: PagoDto[];
+
+  @ApiPropertyOptional() @IsOptional() @IsString() fecha_vencimiento?: string;
+
+  @ApiProperty({ description: 'UUID generado en el cliente — clave de idempotencia para reintentos de la cola offline' })
+  @IsString()
+  client_ref: string;
+}
+
 export class AbonarNotaDto {
   @ApiProperty({ type: [PagoDto], description: 'Pagos a registrar en el abono' })
   @IsArray()

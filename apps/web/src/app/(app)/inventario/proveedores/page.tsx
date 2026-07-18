@@ -46,8 +46,8 @@ export default function ProveedoresPage() {
   async function load() {
     setLoading(true);
     try {
-      const data = await api.get<Proveedor[]>('/proveedores');
-      setProveedores(data);
+      const res = await api.get<{ data: Proveedor[] }>('/proveedores');
+      setProveedores(res.data);
     } catch {
       setProveedores([]);
     } finally {

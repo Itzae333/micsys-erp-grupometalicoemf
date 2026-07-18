@@ -361,6 +361,9 @@ model NotaVenta {
   fecha_vencimiento DateTime?
   observaciones     String?
 
+  // Idempotencia para ventas creadas offline: mismo client_ref nunca crea dos notas.
+  origen_offline_ref String? @unique
+
   motivo_cancelacion           String?
   motivo_cancelacion_comentario String?
   cancelado_por_id             String?

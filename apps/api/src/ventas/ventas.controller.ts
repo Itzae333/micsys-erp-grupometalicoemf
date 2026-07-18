@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { VentasService } from './ventas.service';
-import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
+import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto } from './dto/ventas.dto';
 import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
 import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -73,6 +73,17 @@ export class VentasController {
     @Body() dto: CreateNotaDto,
   ) {
     return this.ventas.create(dto, ubicacionId, user.sub);
+  }
+
+  @Post('rapida')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Crear y cerrar una venta completa en una sola operación atómica (usado por el flujo offline)' })
+  ventaRapida(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: VentaRapidaDto,
+  ) {
+    return this.ventas.ventaRapida(dto, ubicacionId, user.sub);
   }
 
   @Post(':id/lineas')

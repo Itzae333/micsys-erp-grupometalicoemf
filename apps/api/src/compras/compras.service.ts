@@ -7,6 +7,7 @@ import {
   AbonoProveedorDto, AjusteCuentaProveedorDto,
 } from './dto/compras.dto';
 import type { EstatusOrdenCompra, OrdenCompra, OrdenCompraLinea } from '@grupometalicoemf/database';
+import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
 
 @Injectable()
 export class ComprasService {
@@ -203,12 +204,12 @@ export class ComprasService {
           select: { [`existencia_${linea.existencia_num}`]: true },
         }) as Record<string, unknown> | null;
 
-        const cantidadAntes = Number(articulo?.[`existencia_${linea.existencia_num}`] ?? 0);
+        const cantidadAntes = articulo ? getExistencia(articulo, linea.existencia_num) : 0;
         const cantidadDespues = cantidadAntes + aCobrar;
 
         await tx.articulo.update({
           where: { id: linea.articulo_id },
-          data: { [`existencia_${linea.existencia_num}`]: cantidadDespues },
+          data: buildExistenciaUpdate(linea.existencia_num, cantidadDespues),
         });
 
         await tx.movimientoInventario.create({

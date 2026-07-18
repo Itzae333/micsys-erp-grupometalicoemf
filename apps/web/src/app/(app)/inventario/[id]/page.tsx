@@ -82,11 +82,11 @@ export default function ArticuloDetailPage() {
       const [art, s, provs] = await Promise.all([
         api.get<Articulo>(`/articulos/${id}`),
         api.get<ConfigColumnasSchema>(`/config-columnas/${empresa.id}/${ubicacion.id}`),
-        api.get<Proveedor[]>('/proveedores'),
+        api.get<{ data: Proveedor[] }>('/proveedores'),
       ]);
       setArticulo(art);
       setSchema(s);
-      setProveedores(provs);
+      setProveedores(provs.data);
     } catch {
       router.replace('/inventario');
     } finally {

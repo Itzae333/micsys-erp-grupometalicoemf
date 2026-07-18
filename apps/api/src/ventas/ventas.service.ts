@@ -3,27 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto } from './dto/ventas.dto';
+import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto } from './dto/ventas.dto';
 import type { Prisma } from '@grupometalicoemf/database';
-
-// México opera en horario estándar fijo (UTC-6, sin horario de verano desde
-// 2022). Los filtros "por día" (corte de caja, período Hoy/Semana/etc.) deben
-// usar el día calendario del negocio, no el día UTC del servidor — si no, una
-// venta después de las 18:00 hora local queda contada en el día UTC siguiente.
-//
-// Algunos llamadores mandan una fecha plana "YYYY-MM-DD" (inputs type="date",
-// como el corte de caja) y otros ya mandan un instante ISO completo con hora
-// (ej. el filtro de período del listado, vía `new Date(...).toISOString()`).
-// Si ya trae hora, es un instante preciso — se respeta tal cual, no se le
-// concatena nada (concatenar rompe el string y produce una fecha inválida).
-function inicioDiaMx(fecha: string): Date {
-  return fecha.includes('T') ? new Date(fecha) : new Date(`${fecha}T00:00:00-06:00`);
-}
-function finDiaMx(fecha: string): Date {
-  return fecha.includes('T') ? new Date(fecha) : new Date(`${fecha}T23:59:59.999-06:00`);
-}
+import { inicioDiaMx, finDiaMx } from '../common/utils/fecha-mx';
 
 const NOTA_INCLUDE = {
   cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true } },
@@ -333,31 +318,14 @@ export class VentasService {
       }
 
       if (esCredito && nota.cliente_id) {
-        const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: nota.cliente_id } });
-        const saldoAntes = Number(cliente.saldo_pendiente);
-        const saldoDespues = saldoAntes + diferencia;
-
-        const concepto = totalPagado > 0
-          ? `Saldo pendiente nota #${nota.folio} (anticipo $${totalPagado.toFixed(2)})`
-          : `Venta a crédito nota #${nota.folio}`;
-
-        await tx.movimientoCuenta.create({
-          data: {
-            ubicacion_id: ubicacionId,
-            cliente_id: nota.cliente_id,
-            tipo: 'CARGO',
-            monto: diferencia,
-            saldo_antes: saldoAntes,
-            saldo_despues: saldoDespues,
-            concepto,
-            nota_id: notaId,
-            usuario_id: usuarioId,
-          },
-        });
-
-        await tx.cliente.update({
-          where: { id: nota.cliente_id },
-          data: { saldo_pendiente: saldoDespues },
+        await this.aplicarCargoCredito(tx, {
+          ubicacionId,
+          clienteId: nota.cliente_id,
+          monto: diferencia,
+          notaId,
+          folio: nota.folio,
+          usuarioId,
+          totalPagado,
         });
       }
 
@@ -513,6 +481,178 @@ export class VentasService {
       where: { id: notaId },
       data: { subtotal, total: subtotal },
     });
+  }
+
+  // Aplica el cargo a la cuenta del cliente cuando una nota queda (parcialmente)
+  // a crédito. Compartido por `cerrar()` y `ventaRapida()`.
+  private async aplicarCargoCredito(
+    tx: Prisma.TransactionClient,
+    params: {
+      ubicacionId: string;
+      clienteId: string;
+      monto: number;
+      notaId: string;
+      folio: number;
+      usuarioId: string;
+      totalPagado: number;
+    },
+  ): Promise<void> {
+    const { ubicacionId, clienteId, monto, notaId, folio, usuarioId, totalPagado } = params;
+
+    const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
+    const saldoAntes = Number(cliente.saldo_pendiente);
+    const saldoDespues = saldoAntes + monto;
+
+    const concepto = totalPagado > 0
+      ? `Saldo pendiente nota #${folio} (anticipo $${totalPagado.toFixed(2)})`
+      : `Venta a crédito nota #${folio}`;
+
+    await tx.movimientoCuenta.create({
+      data: {
+        ubicacion_id: ubicacionId,
+        cliente_id: clienteId,
+        tipo: 'CARGO',
+        monto,
+        saldo_antes: saldoAntes,
+        saldo_despues: saldoDespues,
+        concepto,
+        nota_id: notaId,
+        usuario_id: usuarioId,
+      },
+    });
+
+    await tx.cliente.update({
+      where: { id: clienteId },
+      data: { saldo_pendiente: saldoDespues },
+    });
+  }
+
+  // Folio con lock de fila — evita que dos ventas concurrentes (p. ej. varias
+  // ventas offline sincronizando casi al mismo tiempo) lean el mismo "próximo folio".
+  private async nextFolioLocked(tx: Prisma.TransactionClient, ubicacionId: string): Promise<number> {
+    const rows = await tx.$queryRaw<{ folio: number }[]>`
+      SELECT folio FROM notas_venta WHERE ubicacion_id = ${ubicacionId} ORDER BY folio DESC LIMIT 1 FOR UPDATE
+    `;
+    return (rows[0]?.folio ?? 0) + 1;
+  }
+
+  // ─── Venta rápida (crea + cierra en una sola operación atómica) ────────
+  // Pensado para el flujo offline: una venta completa (contado o crédito) se
+  // encola como UNA sola mutación, sin depender de IDs generados en pasos
+  // previos. `client_ref` es la clave de idempotencia — reintentos de la cola
+  // de sincronización con el mismo valor nunca crean una segunda nota.
+  async ventaRapida(dto: VentaRapidaDto, ubicacionId: string, usuarioId: string) {
+    const existente = await this.prisma.notaVenta.findUnique({
+      where: { origen_offline_ref: dto.client_ref },
+    });
+    if (existente) return this.findOne(existente.id, ubicacionId);
+
+    if (dto.tipo_cierre === 'CREDITO' && !dto.cliente_id) {
+      throw new BadRequestException('Se requiere cliente para una venta a crédito');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const folio = await this.nextFolioLocked(tx, ubicacionId);
+
+      const nota = await tx.notaVenta.create({
+        data: {
+          folio,
+          ubicacion_id: ubicacionId,
+          usuario_id: usuarioId,
+          cliente_id: dto.cliente_id ?? null,
+          observaciones: dto.observaciones ?? null,
+          estatus: 'ABIERTA',
+          subtotal: 0,
+          total: 0,
+          origen_offline_ref: dto.client_ref,
+        },
+      });
+
+      let subtotal = 0;
+      for (const l of dto.lineas) {
+        const art = await tx.articulo.findFirst({
+          where: { id: l.articulo_id, ubicacion_id: ubicacionId },
+        });
+        if (!art) throw new NotFoundException(`Artículo ${l.articulo_id} no encontrado`);
+
+        const lineaSubtotal = this.calcSubtotal(l.cantidad, l.precio_unitario, l.descuento ?? 0);
+        subtotal += lineaSubtotal;
+        await tx.notaVentaLinea.create({
+          data: {
+            nota_id: nota.id,
+            articulo_id: art.id,
+            clave: art.clave,
+            cantidad: l.cantidad,
+            precio_unitario: l.precio_unitario,
+            descuento: l.descuento ?? 0,
+            subtotal: lineaSubtotal,
+          },
+        });
+      }
+      subtotal = +subtotal.toFixed(2);
+
+      if (dto.tipo_cierre === 'PENDIENTE') {
+        return tx.notaVenta.update({
+          where: { id: nota.id },
+          data: { subtotal, total: subtotal, estatus: 'PENDIENTE' },
+          include: NOTA_INCLUDE,
+        });
+      }
+
+      const totalPagado = dto.pagos.reduce((s, p) => s + p.monto, 0);
+      const diferencia = +Math.max(0, subtotal - totalPagado).toFixed(2);
+      const esCredito = dto.tipo_cierre === 'CREDITO' || diferencia > 0;
+
+      if (esCredito && !dto.cliente_id) {
+        throw new BadRequestException(
+          `Se requiere cliente asignado para registrar el saldo restante ($${diferencia.toFixed(2)}) a crédito`,
+        );
+      }
+
+      if (esCredito && dto.cliente_id) {
+        const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: dto.cliente_id } });
+        const limite = Number(cliente.limite_credito);
+        const saldoActual = Number(cliente.saldo_pendiente);
+        if (limite > 0 && saldoActual + diferencia > limite) {
+          throw new UnprocessableEntityException(
+            `La venta excede el límite de crédito del cliente (límite $${limite.toFixed(2)}, saldo actual $${saldoActual.toFixed(2)}, cargo $${diferencia.toFixed(2)})`,
+          );
+        }
+      }
+
+      for (const p of dto.pagos) {
+        await tx.pago.create({
+          data: { nota_id: nota.id, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null },
+        });
+      }
+
+      if (esCredito && dto.cliente_id) {
+        await this.aplicarCargoCredito(tx, {
+          ubicacionId,
+          clienteId: dto.cliente_id,
+          monto: diferencia,
+          notaId: nota.id,
+          folio,
+          usuarioId,
+          totalPagado,
+        });
+      }
+
+      return tx.notaVenta.update({
+        where: { id: nota.id },
+        data: {
+          subtotal,
+          total: subtotal,
+          estatus: esCredito ? 'CREDITO' : 'PAGADA',
+          es_credito: esCredito,
+          fecha_vencimiento: dto.fecha_vencimiento ? new Date(dto.fecha_vencimiento) : null,
+          cerrada_at: new Date(),
+        },
+        include: NOTA_INCLUDE,
+      });
+    });
+
+    return this.serializeNota(result);
   }
 
   private serializeNota(nota: NotaRaw, creditoPrevio = 0) {

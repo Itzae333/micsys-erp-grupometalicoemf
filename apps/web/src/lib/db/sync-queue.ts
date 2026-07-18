@@ -62,9 +62,23 @@ async function _processItem(item: SyncQueueItem): Promise<boolean> {
       body: item.method !== 'DELETE' ? item.body : undefined,
     });
 
-    if (response.ok || response.status === 422) {
-      // 422 = servidor rechazó la operación por regla de negocio — no reintentar
-      await emfDb.syncQueue.update(item.id, { status: 'done' });
+    if (response.ok) {
+      await emfDb.syncQueue.update(item.id, { status: 'done', httpStatus: response.status });
+      return true;
+    }
+
+    if (response.status === 422) {
+      // 422 = servidor rechazó la operación por regla de negocio (ej. límite de
+      // crédito excedido) — no se reintenta, pero se guarda el motivo para que
+      // la pantalla de revisión pueda mostrarlo.
+      let message = 'Rechazado por el servidor';
+      try {
+        const body = await response.json();
+        if (typeof body?.message === 'string') message = body.message;
+      } catch {
+        // sin cuerpo JSON legible — se usa el mensaje genérico
+      }
+      await emfDb.syncQueue.update(item.id, { status: 'done', httpStatus: 422, lastError: message });
       return true;
     }
 
@@ -93,9 +107,11 @@ export async function getPendingCount(): Promise<number> {
   return emfDb.syncQueue.where('status').equals('pending').count();
 }
 
-// Limpia los items completados (status = 'done') para no crecer infinitamente
+// Limpia los items completados exitosamente (status = 'done') para no crecer
+// infinitamente. Los rechazados por 422 (ver getRejectedItems) NO se borran
+// aquí — necesitan revisión manual primero.
 export async function cleanDoneItems(): Promise<void> {
-  await emfDb.syncQueue.where('status').equals('done').delete();
+  await emfDb.syncQueue.where('status').equals('done').and((i) => i.httpStatus !== 422).delete();
 }
 
 // Retorna items con error para mostrar al usuario
@@ -103,10 +119,23 @@ export async function getErrorItems(): Promise<SyncQueueItem[]> {
   return emfDb.syncQueue.where('status').equals('error').toArray();
 }
 
+// Retorna items rechazados por el servidor con 422 (ej. crédito excedido) —
+// terminaron en 'done' (no se reintentan solos) pero necesitan revisión manual.
+export async function getRejectedItems(): Promise<SyncQueueItem[]> {
+  const done = await emfDb.syncQueue.where('status').equals('done').toArray();
+  return done.filter((i) => i.httpStatus === 422);
+}
+
 // Reintenta manualmente un item en error
 export async function retryItem(id: number): Promise<boolean> {
   const item = await emfDb.syncQueue.get(id);
   if (!item) return false;
-  await emfDb.syncQueue.update(id, { status: 'pending', retries: 0, lastError: undefined });
+  await emfDb.syncQueue.update(id, { status: 'pending', retries: 0, lastError: undefined, httpStatus: undefined });
   return _processItem({ ...item, status: 'pending', retries: 0 });
+}
+
+// Descarta un item (error o rechazado) sin reintentar — el llamador es
+// responsable de limpiar cualquier registro relacionado (ej. VentaPendiente).
+export async function discardErrorItem(id: number): Promise<void> {
+  await emfDb.syncQueue.delete(id);
 }

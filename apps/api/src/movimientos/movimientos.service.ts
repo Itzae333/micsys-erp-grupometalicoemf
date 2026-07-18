@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { EntradaDto, SalidaDto, TransferenciaDto, AjusteDto } from './dto/movimientos.dto';
 import type { Prisma } from '@grupometalicoemf/database';
+import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
 
 const MOV_INCLUDE = {
   articulo: { select: { id: true, clave: true, descripcion_1: true, descripcion_2: true } },
@@ -51,13 +52,13 @@ export class MovimientosService {
   // ─── Registrar entrada ────────────────────────────────────────
 
   async registrarEntrada(dto: EntradaDto, ubicacionId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
-    if (!(articulo as any).activo) throw new BadRequestException('El artículo está inactivo');
-
-    const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
-    const cantidadDespues = cantidadAntes + dto.cantidad;
-
     return this.prisma.$transaction(async (tx) => {
+      const articulo = await this.findArticulo(tx, dto.articulo_id, ubicacionId);
+      if (!(articulo as any).activo) throw new BadRequestException('El artículo está inactivo');
+
+      const cantidadAntes = getExistencia(articulo, dto.existencia_num);
+      const cantidadDespues = cantidadAntes + dto.cantidad;
+
       const mov = await tx.movimientoInventario.create({
         data: {
           ubicacion_id:    ubicacionId,
@@ -76,7 +77,7 @@ export class MovimientosService {
 
       await tx.articulo.update({
         where: { id: dto.articulo_id },
-        data:  this.buildExistenciaUpdate(dto.existencia_num, cantidadDespues),
+        data:  buildExistenciaUpdate(dto.existencia_num, cantidadDespues),
       });
 
       return this.serialize(mov);
@@ -86,12 +87,12 @@ export class MovimientosService {
   // ─── Registrar salida ─────────────────────────────────────────
 
   async registrarSalida(dto: SalidaDto, ubicacionId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
-
-    const cantidadAntes   = this.getExistencia(articulo, dto.existencia_num);
-    const cantidadDespues = cantidadAntes - dto.cantidad;
-
     return this.prisma.$transaction(async (tx) => {
+      const articulo = await this.findArticulo(tx, dto.articulo_id, ubicacionId);
+
+      const cantidadAntes   = getExistencia(articulo, dto.existencia_num);
+      const cantidadDespues = cantidadAntes - dto.cantidad;
+
       const mov = await tx.movimientoInventario.create({
         data: {
           ubicacion_id:    ubicacionId,
@@ -109,7 +110,7 @@ export class MovimientosService {
 
       await tx.articulo.update({
         where: { id: dto.articulo_id },
-        data:  this.buildExistenciaUpdate(dto.existencia_num, cantidadDespues),
+        data:  buildExistenciaUpdate(dto.existencia_num, cantidadDespues),
       });
 
       return this.serialize(mov);
@@ -119,15 +120,15 @@ export class MovimientosService {
   // ─── Registrar transferencia ──────────────────────────────────
 
   async registrarTransferencia(dto: TransferenciaDto, ubicacionId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
-
-    const cantAntes    = this.getExistencia(articulo, dto.existencia_num_origen);
-    const cantAntesDst = this.getExistencia(articulo, dto.existencia_num_destino);
-
     const refId    = randomUUID();
     const concepto = dto.concepto ?? 'Transferencia interna';
 
     return this.prisma.$transaction(async (tx) => {
+      const articulo = await this.findArticulo(tx, dto.articulo_id, ubicacionId);
+
+      const cantAntes    = getExistencia(articulo, dto.existencia_num_origen);
+      const cantAntesDst = getExistencia(articulo, dto.existencia_num_destino);
+
       const out = await tx.movimientoInventario.create({
         data: {
           ubicacion_id:    ubicacionId,
@@ -162,8 +163,8 @@ export class MovimientosService {
       await tx.articulo.update({
         where: { id: dto.articulo_id },
         data: {
-          ...this.buildExistenciaUpdate(dto.existencia_num_origen, cantAntes - dto.cantidad),
-          ...this.buildExistenciaUpdate(dto.existencia_num_destino, cantAntesDst + dto.cantidad),
+          ...buildExistenciaUpdate(dto.existencia_num_origen, cantAntes - dto.cantidad),
+          ...buildExistenciaUpdate(dto.existencia_num_destino, cantAntesDst + dto.cantidad),
         },
       });
 
@@ -174,13 +175,13 @@ export class MovimientosService {
   // ─── Registrar ajuste ─────────────────────────────────────────
 
   async registrarAjuste(dto: AjusteDto, ubicacionId: string, usuarioId: string) {
-    const articulo = await this.findArticulo(dto.articulo_id, ubicacionId);
-
-    const cantidadAntes = this.getExistencia(articulo, dto.existencia_num);
-    const delta = dto.cantidad_nueva - cantidadAntes;
-    const tipo  = delta >= 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO';
-
     return this.prisma.$transaction(async (tx) => {
+      const articulo = await this.findArticulo(tx, dto.articulo_id, ubicacionId);
+
+      const cantidadAntes = getExistencia(articulo, dto.existencia_num);
+      const delta = dto.cantidad_nueva - cantidadAntes;
+      const tipo  = delta >= 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO';
+
       const mov = await tx.movimientoInventario.create({
         data: {
           ubicacion_id:    ubicacionId,
@@ -198,7 +199,7 @@ export class MovimientosService {
 
       await tx.articulo.update({
         where: { id: dto.articulo_id },
-        data:  this.buildExistenciaUpdate(dto.existencia_num, dto.cantidad_nueva),
+        data:  buildExistenciaUpdate(dto.existencia_num, dto.cantidad_nueva),
       });
 
       return this.serialize(mov);
@@ -207,20 +208,12 @@ export class MovimientosService {
 
   // ─── Privados ─────────────────────────────────────────────────
 
-  private async findArticulo(articuloId: string, ubicacionId: string) {
-    const art = await this.prisma.articulo.findFirst({
+  private async findArticulo(tx: Prisma.TransactionClient, articuloId: string, ubicacionId: string) {
+    const art = await tx.articulo.findFirst({
       where: { id: articuloId, ubicacion_id: ubicacionId },
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     return art;
-  }
-
-  private getExistencia(articulo: Record<string, unknown>, num: number): number {
-    return Number((articulo as any)[`existencia_${num}`] ?? 0);
-  }
-
-  private buildExistenciaUpdate(num: number, val: number): Record<string, number> {
-    return { [`existencia_${num}`]: val };
   }
 
   private serialize(m: MovRaw) {

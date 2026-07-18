@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useToast } from '@/components/ui/toast';
 import type {
   OrdenCompra, OrdenesCompraPage, Proveedor,
   CuentaProveedorDetalle, EstatusOrdenCompra,
@@ -193,6 +194,7 @@ interface LineaForm {
 // ── Main Page ─────────────────────────────────────────────────
 
 export default function ComprasPage() {
+  const toast = useToast();
   const { usuario } = useAuthStore();
   const canApprove  = ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? '');
   const canWrite    = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
@@ -328,7 +330,7 @@ export default function ComprasPage() {
       setOcSeleccionada(updated);
       cargarOrdenes();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error al aprobar');
+      toast(e instanceof Error ? e.message : 'Error al aprobar', 'error');
     }
   }
 
@@ -339,7 +341,7 @@ export default function ComprasPage() {
       setOcSeleccionada(null);
       cargarOrdenes();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error al cancelar');
+      toast(e instanceof Error ? e.message : 'Error al cancelar', 'error');
     }
   }
 
@@ -664,6 +666,7 @@ export default function ComprasPage() {
                         type="button"
                         onClick={() => removeLinea(linea.key)}
                         className="text-steel-400 hover:text-brand-600 transition-colors"
+                        aria-label="Eliminar línea"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

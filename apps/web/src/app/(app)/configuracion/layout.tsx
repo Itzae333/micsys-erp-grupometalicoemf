@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, Users, Columns3, DatabaseZap, Printer, Shield, Database } from 'lucide-react';
+import { Building2, Users, Columns3, DatabaseZap, Printer, Shield, Database, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -63,6 +63,12 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
       matchPrefix: '/configuracion/sistema',
       label: 'Sistema',
       icon: <Database className="h-3.5 w-3.5" />,
+    },
+    {
+      href: '/configuracion/sincronizacion',
+      matchPrefix: '/configuracion/sincronizacion',
+      label: 'Sincronización',
+      icon: <WifiOff className="h-3.5 w-3.5" />,
     },
   ];
 

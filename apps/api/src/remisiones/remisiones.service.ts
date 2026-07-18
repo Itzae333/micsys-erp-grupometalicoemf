@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
 import type { Prisma } from '@grupometalicoemf/database';
+import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
 
 const REM_INCLUDE = {
   empresa_origen:  { select: { id: true, nombre: true, logo_url: true } },
@@ -84,9 +85,9 @@ export class RemisionesService {
 
   // ─── Detalle por ID ───────────────────────────────────────────
 
-  async getById(id: string) {
-    const rem = await this.prisma.remision.findUnique({
-      where: { id },
+  async getById(id: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, OR: [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }] },
       include: REM_INCLUDE,
     });
     if (!rem) throw new NotFoundException('Remisión no encontrada');
@@ -95,9 +96,9 @@ export class RemisionesService {
 
   // ─── Detalle por folio (para QR scan) ────────────────────────
 
-  async getByFolio(folio: string) {
-    const rem = await this.prisma.remision.findUnique({
-      where: { folio },
+  async getByFolio(folio: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { folio, OR: [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }] },
       include: REM_INCLUDE,
     });
     if (!rem) throw new NotFoundException('Remisión no encontrada');
@@ -142,9 +143,9 @@ export class RemisionesService {
 
   // ─── Enviar → EN_TRANSITO ─────────────────────────────────────
 
-  async enviar(id: string, usuarioId: string) {
-    const rem = await this.prisma.remision.findUnique({
-      where: { id },
+  async enviar(id: string, usuarioId: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, empresa_origen_id: empresaId },
       include: { lineas: true },
     });
     if (!rem) throw new NotFoundException('Remisión no encontrada');
@@ -159,7 +160,7 @@ export class RemisionesService {
         });
         if (!art) throw new NotFoundException(`Artículo ${linea.articulo_clave} no encontrado en ubicación origen`);
 
-        const cantAntes   = Number((art as any)[`existencia_${linea.slot_origen}`] ?? 0);
+        const cantAntes   = getExistencia(art, linea.slot_origen);
         const cantDespues = cantAntes - Number(linea.cantidad_enviada);
 
         await tx.movimientoInventario.create({
@@ -179,7 +180,7 @@ export class RemisionesService {
 
         await tx.articulo.update({
           where: { id: linea.articulo_id },
-          data: { [`existencia_${linea.slot_origen}`]: cantDespues },
+          data: buildExistenciaUpdate(linea.slot_origen, cantDespues),
         });
       }
 
@@ -193,14 +194,14 @@ export class RemisionesService {
       });
     });
 
-    return this.getById(id);
+    return this.getById(id, empresaId);
   }
 
   // ─── Recibir ──────────────────────────────────────────────────
 
-  async recibir(id: string, dto: RecibirRemisionDto, usuarioId: string) {
-    const rem = await this.prisma.remision.findUnique({
-      where: { id },
+  async recibir(id: string, dto: RecibirRemisionDto, usuarioId: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, empresa_destino_id: empresaId },
       include: { lineas: true },
     });
     if (!rem) throw new NotFoundException('Remisión no encontrada');
@@ -224,7 +225,7 @@ export class RemisionesService {
         });
 
         if (artDst && cantRecibida > 0) {
-          const cantAntes   = Number((artDst as any)[`existencia_${linea.slot_destino}`] ?? 0);
+          const cantAntes   = getExistencia(artDst, linea.slot_destino);
           const cantDespues = cantAntes + cantRecibida;
 
           await tx.movimientoInventario.create({
@@ -244,7 +245,7 @@ export class RemisionesService {
 
           await tx.articulo.update({
             where: { id: artDst.id },
-            data: { [`existencia_${linea.slot_destino}`]: cantDespues },
+            data: buildExistenciaUpdate(linea.slot_destino, cantDespues),
           });
         }
 
@@ -264,13 +265,15 @@ export class RemisionesService {
       });
     });
 
-    return this.getById(id);
+    return this.getById(id, empresaId);
   }
 
   // ─── Cancelar (solo BORRADOR) ─────────────────────────────────
 
-  async cancelar(id: string) {
-    const rem = await this.prisma.remision.findUnique({ where: { id } });
+  async cancelar(id: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, OR: [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }] },
+    });
     if (!rem) throw new NotFoundException('Remisión no encontrada');
     if (rem.estatus !== 'BORRADOR') {
       throw new BadRequestException('Solo se pueden cancelar remisiones en BORRADOR');

@@ -24,8 +24,8 @@ export class RemisionesController {
 
   @Get('folio/:folio')
   @ApiOperation({ summary: 'Buscar remisión por folio (para QR scan)' })
-  getByFolio(@Param('folio') folio: string) {
-    return this.remisiones.getByFolio(folio);
+  getByFolio(@Param('folio') folio: string, @CurrentUser() user: JwtPayload) {
+    return this.remisiones.getByFolio(folio, user.empresa_id);
   }
 
   @Get()
@@ -56,8 +56,8 @@ export class RemisionesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalle de remisión' })
-  getById(@Param('id') id: string) {
-    return this.remisiones.getById(id);
+  getById(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.remisiones.getById(id, user.empresa_id);
   }
 
   @Post()
@@ -77,7 +77,7 @@ export class RemisionesController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.remisiones.enviar(id, user.sub);
+    return this.remisiones.enviar(id, user.sub, user.empresa_id);
   }
 
   @Patch(':id/recibir')
@@ -88,13 +88,13 @@ export class RemisionesController {
     @Body() dto: RecibirRemisionDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.remisiones.recibir(id, dto, user.sub);
+    return this.remisiones.recibir(id, dto, user.sub, user.empresa_id);
   }
 
   @Delete(':id')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Cancelar remisión (solo BORRADOR)' })
-  cancelar(@Param('id') id: string) {
-    return this.remisiones.cancelar(id);
+  cancelar(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.remisiones.cancelar(id, user.empresa_id);
   }
 }

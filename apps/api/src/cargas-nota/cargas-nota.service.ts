@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RegistrarCargaDto } from './dto/cargas-nota.dto';
+import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
+
+// Las cargas de nota siempre descuentan del sub-almacén principal (slot 1).
+const SLOT_CARGA = 1;
 
 const ESTATUS_CON_CARGA_PERMITIDA = ['PAGADA', 'CREDITO', 'INCOMPLETA'];
 
@@ -47,7 +51,7 @@ export class CargasNotaService {
         const art = await tx.articulo.findUnique({ where: { id: linea.articulo_id } });
         if (!art) throw new NotFoundException(`Artículo de línea ${linea.clave} no encontrado`);
 
-        const cantAntes = Number(art.existencia_1 ?? 0);
+        const cantAntes = getExistencia(art, SLOT_CARGA);
         const cantDespues = cantAntes - item.cantidad_cargada;
 
         await tx.movimientoInventario.create({
@@ -55,7 +59,7 @@ export class CargasNotaService {
             ubicacion_id: ubicacionId,
             articulo_id: linea.articulo_id,
             tipo: 'SALIDA',
-            existencia_num: 1,
+            existencia_num: SLOT_CARGA,
             cantidad: item.cantidad_cargada,
             cantidad_antes: cantAntes,
             cantidad_despues: cantDespues,
@@ -67,7 +71,7 @@ export class CargasNotaService {
 
         await tx.articulo.update({
           where: { id: linea.articulo_id },
-          data: { existencia_1: cantDespues },
+          data: buildExistenciaUpdate(SLOT_CARGA, cantDespues),
         });
       }
 

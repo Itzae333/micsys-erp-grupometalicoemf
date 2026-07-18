@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { emfDb } from '@/lib/db/emf-db';
+import { VentaRapidaDialog } from './VentaRapidaDialog';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/toast';
 import { cn, formatPrecio } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
@@ -35,6 +39,7 @@ const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid
   PAGADA:     { label: 'Pagada',     variant: 'paid' },
   CREDITO:    { label: 'Crédito',    variant: 'credit' },
   CANCELADA:  { label: 'Cancelada',  variant: 'cancelled' },
+  PENDIENTE_SYNC: { label: 'Pendiente de sincronizar', variant: 'incomplete' },
 };
 
 // ── Schema nueva nota ────────────────────────────────────────
@@ -62,8 +67,23 @@ const METODO_LABEL: Record<string, string> = {
 
 export default function VentasPage() {
   const router = useRouter();
+  const toast = useToast();
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
+
+  // Ventas creadas offline, pendientes de sincronizar — se muestran al
+  // principio de la lista con una insignia hasta que se sincronizan solas.
+  const ventasPendientes = useLiveQuery(
+    async () => {
+      if (!empresa?.id || !ubicacion?.id) return [];
+      const rows = await emfDb.ventasPendientes
+        .where({ empresaId: empresa.id, ubicacionId: ubicacion.id })
+        .toArray();
+      return rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    },
+    [empresa?.id, ubicacion?.id],
+    [],
+  );
 
   const [notas, setNotas] = useState<NotaVenta[]>([]);
   const [total, setTotal] = useState(0);
@@ -76,6 +96,7 @@ export default function VentasPage() {
 
   // Dialog nueva nota
   const [dlgNota, setDlgNota] = useState(false);
+  const [dlgVentaRapida, setDlgVentaRapida] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [creatingNota, setCreatingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
@@ -101,6 +122,7 @@ export default function VentasPage() {
   // Inline editing del carrito
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
+  const [convirtiendo, setConvirtiendo] = useState(false);
   // Ticket preview
   const [showTicket, setShowTicket] = useState(false);
   const [showTicketCobrar, setShowTicketCobrar] = useState(false);
@@ -199,6 +221,19 @@ export default function VentasPage() {
       const d = await api.get<NotaVenta>(`/ventas/${detalleNota.id}`);
       setDetalleNota(d);
     } catch {}
+  }
+
+  // Actualiza la nota en la lista y en el detalle con la respuesta que ya
+  // regresó el propio POST/PATCH — evita un refetch completo de la lista
+  // paginada y de la nota individual en cada cobro/abono/conversión.
+  function patchNota(actualizada: NotaVenta) {
+    setNotas((prev) => {
+      const existe = prev.some((n) => n.id === actualizada.id);
+      return existe
+        ? prev.map((n) => (n.id === actualizada.id ? actualizada : n))
+        : [actualizada, ...prev];
+    });
+    setDetalleNota((prev) => (prev?.id === actualizada.id ? actualizada : prev));
   }
 
   // ── Split-view: funciones catálogo ───────────────────────
@@ -533,11 +568,15 @@ export default function VentasPage() {
   }
 
   async function eliminarLinea(lineaId: string) {
-    if (!notaActiva) return;
+    if (!notaActiva || savingLinea === lineaId) return;
+    setSavingLinea(lineaId);
     try {
       const updated = await api.delete<NotaVenta>(`/ventas/${notaActiva.id}/lineas/${lineaId}`);
       setNotaActiva(updated);
-    } catch {}
+    } catch {
+    } finally {
+      setSavingLinea(null);
+    }
   }
 
   // ── Descartar cotización / cancelar nota abierta (conserva folio) ──
@@ -597,11 +636,15 @@ export default function VentasPage() {
 
   // ── Convertir cotización a venta ──────────────────────────
   async function convertirAVenta(nota: NotaVenta) {
+    if (convirtiendo) return;
+    setConvirtiendo(true);
     try {
-      await api.patch(`/ventas/${nota.id}/convertir`, {});
-      loadNotas();
+      const notaActualizada = await api.patch<NotaVenta>(`/ventas/${nota.id}/convertir`, {});
+      patchNota(notaActualizada);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al convertir');
+      toast(err instanceof Error ? err.message : 'Error al convertir', 'error');
+    } finally {
+      setConvirtiendo(false);
     }
   }
 
@@ -624,7 +667,7 @@ export default function VentasPage() {
     pagosList: { metodo: string; monto: number; referencia: string }[],
     cambioFinal: number,
     copias = 1,
-    opts?: { soloAbono?: boolean; saldoAnterior?: number },
+    opts?: { soloAbono?: boolean; saldoAnterior?: number; folioOverride?: string },
   ): Promise<boolean> {
     const totalPagadoNota = (nota.pagos ?? []).reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoNota).toFixed(2));
@@ -643,7 +686,7 @@ export default function VentasPage() {
         ...buildTicketUbicacionFiscal(ubicacion),
       },
       nota: {
-        folio: String(nota.folio).padStart(4, '0'),
+        folio: opts?.folioOverride ?? String(nota.folio).padStart(4, '0'),
         fecha: new Date(nota.created_at).toLocaleDateString('es-MX', {
           day: '2-digit', month: 'short', year: 'numeric',
         }),
@@ -748,8 +791,7 @@ export default function VentasPage() {
         })),
       });
       setDlgAbonar(null);
-      void loadNotas();
-      void refreshDetalleNota();
+      patchNota(notaActualizada);
       // Siempre ofrecer imprimir/enviar comprobante del abono
       setPostCobro({
         nota: notaActualizada,
@@ -793,24 +835,21 @@ export default function VentasPage() {
       : 'PAGADA';
 
     try {
-      if (checkNotaPorPagar) {
-        await api.patch(`/ventas/${notaSnap.id}/pendiente`, {});
-      } else {
-        await api.post(`/ventas/${notaSnap.id}/cerrar`, {
-          pagos: checkCredito
-            ? []
-            : pagosSnap.filter((p) => p.monto > 0).map((p) => ({
-                metodo: p.metodo,
-                monto: p.monto,
-                referencia: p.referencia || undefined,
-              })),
-        });
-      }
+      const notaActualizada = checkNotaPorPagar
+        ? await api.patch<NotaVenta>(`/ventas/${notaSnap.id}/pendiente`, {})
+        : await api.post<NotaVenta>(`/ventas/${notaSnap.id}/cerrar`, {
+            pagos: checkCredito
+              ? []
+              : pagosSnap.filter((p) => p.monto > 0).map((p) => ({
+                  metodo: p.metodo,
+                  monto: p.monto,
+                  referencia: p.referencia || undefined,
+                })),
+          });
 
       setDlgCobrar(false);
       setNotaActiva(null);
-      void loadNotas();
-      void refreshDetalleNota();
+      patchNota(notaActualizada);
       // Auto-imprimir según copias configuradas en Configuración > Ticketera
       const copiasAuto = (() => {
         try {
@@ -954,7 +993,9 @@ export default function VentasPage() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
+                    disabled={convirtiendo}
+                    loading={convirtiendo}
+                    onClick={() => void convertirAVenta(notaActiva).then(() => setDlgLinea(false))}
                   >
                     Convertir a venta
                   </Button>
@@ -1056,6 +1097,7 @@ export default function VentasPage() {
                   size="sm"
                   disabled={artsPagPage <= 1}
                   onClick={() => void cargarArticulosPag(artsPagPage - 1, artsPagQ)}
+                  aria-label="Página anterior"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
@@ -1065,6 +1107,7 @@ export default function VentasPage() {
                   size="sm"
                   disabled={artsPagPage >= artsPagPages}
                   onClick={() => void cargarArticulosPag(artsPagPage + 1, artsPagQ)}
+                  aria-label="Página siguiente"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
@@ -1152,7 +1195,8 @@ export default function VentasPage() {
                             <td className="px-2 py-2.5">
                               <button
                                 onClick={() => void eliminarLinea(l.id)}
-                                className="text-steel-300 hover:text-brand-600 transition-colors"
+                                disabled={savingLinea === l.id}
+                                className="text-steel-300 hover:text-brand-600 transition-colors disabled:opacity-40"
                               >✕</button>
                             </td>
                           </tr>
@@ -1202,7 +1246,9 @@ export default function VentasPage() {
                     </Button>
                     <Button
                       className="flex-1"
-                      onClick={() => void convertirAVenta(notaActiva).then(() => { setDlgLinea(false); loadNotas(); })}
+                      disabled={convirtiendo}
+                      loading={convirtiendo}
+                      onClick={() => void convertirAVenta(notaActiva).then(() => setDlgLinea(false))}
                     >
                       Convertir
                     </Button>
@@ -1244,6 +1290,10 @@ export default function VentasPage() {
                 <Button variant="secondary" onClick={() => openDlgNota('cotizacion')}>
                   <FileText className="h-4 w-4 mr-1.5" />
                   Cotización
+                </Button>
+                <Button variant="secondary" onClick={() => setDlgVentaRapida(true)}>
+                  <Zap className="h-4 w-4 mr-1.5" />
+                  Venta rápida
                 </Button>
                 <Button onClick={() => openDlgNota('venta')}>
                   <Plus className="h-4 w-4 mr-1.5" />
@@ -1309,6 +1359,26 @@ export default function VentasPage() {
                 ))}
               </div>
             </div>
+
+            {/* Ventas offline pendientes de sincronizar */}
+            {(ventasPendientes?.length ?? 0) > 0 && (
+              <div className="border-b border-steel-100 divide-y divide-steel-100">
+                {ventasPendientes!.map((vp) => (
+                  <div key={vp.clientRef} className="flex items-center gap-3 px-4 py-2.5 bg-amber-50/50">
+                    <span className="font-bold text-steel-900 w-24 flex-shrink-0">OFFLINE-{vp.folioLocal}</span>
+                    <span className="flex-1 min-w-0 truncate text-steel-700">
+                      {vp.clienteNombre ?? 'Mostrador'}
+                    </span>
+                    <Badge variant={vp.syncStatus === 'failed' ? 'cancelled' : 'incomplete'}>
+                      {vp.syncStatus === 'failed' ? 'Sincronización fallida' : 'Pendiente de sincronizar'}
+                    </Badge>
+                    <span className="font-semibold text-steel-900 text-right w-24 flex-shrink-0">
+                      {formatPrecio(vp.total)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Tabla */}
             <div className="flex-1 overflow-y-auto bg-white">
@@ -1393,6 +1463,7 @@ export default function VentasPage() {
                   onClick={() => { setPage((p) => Math.max(1, p - 1)); setSelectedNotaIdx(-1); setDetalleNota(null); }}
                   disabled={page === 1}
                   className="h-7 w-7 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
+                  aria-label="Página anterior"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
@@ -1400,6 +1471,7 @@ export default function VentasPage() {
                   onClick={() => { setPage((p) => Math.min(pages, p + 1)); setSelectedNotaIdx(-1); setDetalleNota(null); }}
                   disabled={page === pages}
                   className="h-7 w-7 flex items-center justify-center rounded-lg border border-steel-200 text-steel-600 hover:bg-steel-50 disabled:opacity-40 disabled:pointer-events-none"
+                  aria-label="Página siguiente"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
@@ -1520,7 +1592,7 @@ export default function VentasPage() {
                       >
                         WhatsApp
                       </Button>
-                      <Button size="sm" onClick={() => void convertirAVenta(detalleNota).then(async () => { await loadNotas(); void refreshDetalleNota(); })}>
+                      <Button size="sm" disabled={convirtiendo} loading={convirtiendo} onClick={() => void convertirAVenta(detalleNota)}>
                         Convertir a venta
                       </Button>
                     </>
@@ -1564,6 +1636,14 @@ export default function VentasPage() {
         </div>
       </div>
       )}
+
+      {/* ── Dialog: venta rápida (offline) ────────────────────── */}
+      <VentaRapidaDialog
+        open={dlgVentaRapida}
+        onClose={() => setDlgVentaRapida(false)}
+        onCreated={patchNota}
+        printTicket={printTicket}
+      />
 
       {/* ── Dialog: crear nota / cotización ─────────────────── */}
       <Dialog

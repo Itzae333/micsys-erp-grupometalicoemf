@@ -18,9 +18,12 @@ export class ClientesService {
       ];
     }
 
+    // Sin búsqueda no hay tope — se limita para no traer todo el catálogo de
+    // clientes de golpe si alguien abre la lista sin filtrar.
     const clientes = await this.prisma.cliente.findMany({
       where,
       orderBy: { nombre: 'asc' },
+      take: q ? undefined : 500,
     });
 
     return clientes.map((c) => this.serialize(c));
@@ -49,7 +52,7 @@ export class ClientesService {
 
   async getCuenta(id: string, ubicacionId: string, page = 1, limit = 30) {
     const cliente = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
-    if (!cliente) throw new Error('Cliente no encontrado');
+    if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
     const skip = (page - 1) * limit;
     const [total, movimientos] = await Promise.all([
@@ -90,22 +93,14 @@ export class ClientesService {
     const cliente = await this.prisma.cliente.findFirst({ where: { id, ubicacion_id: ubicacionId } });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
 
-    const saldoPendiente = Number(cliente.saldo_pendiente);
-    if (dto.monto > saldoPendiente) {
+    // Validación rápida (UX) con el valor ya leído — la autoritativa se repite
+    // dentro de la transacción con datos frescos, para no arrastrar un saldo
+    // desactualizado si hay otra escritura concurrente sobre el mismo cliente.
+    if (dto.monto > Number(cliente.saldo_pendiente)) {
       throw new BadRequestException(
-        `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${saldoPendiente.toFixed(2)})`,
+        `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${Number(cliente.saldo_pendiente).toFixed(2)})`,
       );
     }
-
-    // Notas en crédito ordenadas de más antigua a más nueva. El cliente puede
-    // deber también por conceptos que no son una venta (ajuste manual, deuda
-    // migrada — ver CuentasService.registrarAjuste), así que no todo el saldo
-    // tiene por qué estar respaldado por una nota.
-    const notas = await this.prisma.notaVenta.findMany({
-      where: { cliente_id: id, ubicacion_id: ubicacionId, estatus: 'CREDITO' },
-      orderBy: { created_at: 'asc' },
-      include: { pagos: { select: { monto: true } } },
-    });
 
     let saldoDisponible = dto.monto;
     const notasPagadas: Array<{
@@ -117,7 +112,25 @@ export class ClientesService {
     }> = [];
 
     const clienteActualizado = await this.prisma.$transaction(async (tx) => {
-      let saldoClienteActual = Number(cliente.saldo_pendiente);
+      const clienteFresco = await tx.cliente.findUniqueOrThrow({ where: { id } });
+      let saldoClienteActual = Number(clienteFresco.saldo_pendiente);
+
+      if (dto.monto > saldoClienteActual) {
+        throw new BadRequestException(
+          `El abono ($${dto.monto.toFixed(2)}) supera el saldo pendiente ($${saldoClienteActual.toFixed(2)})`,
+        );
+      }
+
+      // Notas en crédito ordenadas de más antigua a más nueva, leídas dentro de
+      // la transacción — el cliente puede deber también por conceptos que no
+      // son una venta (ajuste manual, deuda migrada — ver
+      // CuentasService.registrarAjuste), así que no todo el saldo tiene por qué
+      // estar respaldado por una nota.
+      const notas = await tx.notaVenta.findMany({
+        where: { cliente_id: id, ubicacion_id: ubicacionId, estatus: 'CREDITO' },
+        orderBy: { created_at: 'asc' },
+        include: { pagos: { select: { monto: true } } },
+      });
 
       for (const nota of notas) {
         if (saldoDisponible <= 0) break;

@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, History } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { LoadingBlock } from '@/components/ui/spinner';
 import { formatFechaCorta, formatPrecio } from '@/lib/utils';
 
 interface LineaLegacy {
@@ -49,7 +51,7 @@ export default function DetalleVentaLegacyPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="p-8 text-body-sm text-steel-400">Cargando...</div>;
+    return <LoadingBlock className="p-8" />;
   }
   if (!venta) {
     return <div className="p-8 text-body-sm text-red-500">Venta no encontrada.</div>;
@@ -130,32 +132,47 @@ export default function DetalleVentaLegacyPage() {
           Artículos ({venta.lineas.length})
         </h2>
         <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
-          <table className="w-full text-body-sm">
-            <thead className="bg-steel-50 border-b border-steel-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-steel-600">Descripción</th>
-                <th className="text-right px-4 py-3 font-medium text-steel-600">Cantidad</th>
-                <th className="text-right px-4 py-3 font-medium text-steel-600">Precio</th>
-                <th className="text-right px-4 py-3 font-medium text-steel-600">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-steel-100">
-              {venta.lineas.map((l) => (
-                <tr key={l.id}>
-                  <td className="px-4 py-3 text-steel-900">{descripcion(l) || '—'}</td>
-                  <td className="px-4 py-3 text-right text-steel-700">{l.cantidad}</td>
-                  <td className="px-4 py-3 text-right text-steel-700">{formatPrecio(l.precio_neto)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-steel-900">{formatPrecio(l.total)}</td>
+          <DataTable<LineaLegacy>
+            columns={[
+              {
+                key: 'descripcion',
+                header: 'Descripción',
+                className: 'px-4 py-3 text-steel-900',
+                render: (l) => descripcion(l) || '—',
+              },
+              {
+                key: 'cantidad',
+                header: 'Cantidad',
+                align: 'right',
+                className: 'px-4 py-3 text-steel-700',
+                render: (l) => l.cantidad,
+              },
+              {
+                key: 'precio',
+                header: 'Precio',
+                align: 'right',
+                className: 'px-4 py-3 text-steel-700',
+                render: (l) => formatPrecio(l.precio_neto),
+              },
+              {
+                key: 'sub',
+                header: 'Subtotal',
+                align: 'right',
+                className: 'px-4 py-3 font-medium text-steel-900',
+                render: (l) => formatPrecio(l.total),
+              },
+            ]}
+            rows={venta.lineas}
+            rowKey={(l) => l.id}
+            footer={
+              <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                <tr>
+                  <td colSpan={3} className="px-4 py-3 text-right font-semibold text-steel-900">Total</td>
+                  <td className="px-4 py-3 text-right font-bold text-steel-900">{formatPrecio(venta.total)}</td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="border-t-2 border-steel-200 bg-steel-50">
-              <tr>
-                <td colSpan={3} className="px-4 py-3 text-right font-semibold text-steel-900">Total</td>
-                <td className="px-4 py-3 text-right font-bold text-steel-900">{formatPrecio(venta.total)}</td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            }
+          />
         </div>
       </div>
     </div>

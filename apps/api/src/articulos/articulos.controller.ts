@@ -2,6 +2,8 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Headers } fro
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { ArticulosService } from './articulos.service';
 import { CreateArticuloDto } from './dto/create-articulo.dto';
+import { UpdatePreciosDto } from './dto/update-precios.dto';
+import { UpdateExistenciasDto } from './dto/update-existencias.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Artículos')
@@ -71,7 +73,7 @@ export class ArticulosController {
   updatePrecios(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
-    @Body() body: Record<string, number>,
+    @Body() body: UpdatePreciosDto,
   ) {
     return this.articulos.updatePrecios(id, body, ubicacionId);
   }
@@ -82,7 +84,7 @@ export class ArticulosController {
   updateExistencias(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Param('id') id: string,
-    @Body() body: Record<string, number>,
+    @Body() body: UpdateExistenciasDto,
   ) {
     return this.articulos.updateExistencias(id, body, ubicacionId);
   }
