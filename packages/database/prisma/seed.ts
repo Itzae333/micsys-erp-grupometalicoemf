@@ -54,10 +54,10 @@ async function main() {
   });
 
   const metalicosLyeva = await prisma.empresa.upsert({
-    where: { id: 'metalicos-lyeva-id' },
+    where: { id: 'metalicos-leyva-id' },
     update: {},
     create: {
-      id: 'metalicos-lyeva-id',
+      id: 'metalicos-leyva-id',
       nombre: 'Metálicos Lyeva',
       razon_social: 'Metálicos Lyeva S.A. de C.V.',
       rfc: 'MLY000101DEF',
@@ -89,11 +89,11 @@ async function main() {
     },
   });
 
-  const lyevaMatriz = await prisma.ubicacion.upsert({
-    where: { id: 'lyeva-matriz-id' },
+  const leyvaMatriz = await prisma.ubicacion.upsert({
+    where: { id: 'leyva-matriz-id' },
     update: {},
     create: {
-      id: 'lyeva-matriz-id',
+      id: 'leyva-matriz-id',
       empresa_id: metalicosLyeva.id,
       nombre: 'Matriz Metálicos Lyeva',
       tipo: TipoUbicacion.MATRIZ,
@@ -118,12 +118,12 @@ async function main() {
   // ── ConfigColumnas por Matriz ─────────────────────────────
   // Cada empresa tiene: Nombre, Tipo (descripciones) + Existencias + Publico, Mayoreo (precios)
   await seedColumnas(emfimifar.id,       emfMatriz.id,    'emf-col');
-  await seedColumnas(metalicosLyeva.id,  lyevaMatriz.id,  'lyeva-col');
+  await seedColumnas(metalicosLyeva.id,  leyvaMatriz.id,  'leyva-col');
   await seedColumnas(laminasMonterrey.id, laminasMatriz.id, 'laminas-col');
 
   // ── Cliente Mostrador (precio_num=1 → Publico, crédito=0) ─
   await seedMostrador(emfMatriz.id,    'mostrador-emf-id');
-  await seedMostrador(lyevaMatriz.id,  'mostrador-lyeva-id');
+  await seedMostrador(leyvaMatriz.id,  'mostrador-leyva-id');
   await seedMostrador(laminasMatriz.id, 'mostrador-laminas-id');
 
   // ── Super Usuario ─────────────────────────────────────────
@@ -158,13 +158,13 @@ async function main() {
 
   const adminLyevaHash = await argon2.hash('AdminLyeva2026!');
   const adminLyeva = await prisma.usuario.upsert({
-    where: { email: 'admin@metalicoslyeva.com' },
+    where: { email: 'admin@metalicosleyva.com' },
     update: {},
     create: {
       empresa_id: metalicosLyeva.id,
       nombre: 'Admin',
       apellidos: 'Metálicos Lyeva',
-      email: 'admin@metalicoslyeva.com',
+      email: 'admin@metalicosleyva.com',
       password_hash: adminLyevaHash,
       rol: RolUsuario.ADMIN,
     },
@@ -231,7 +231,7 @@ async function main() {
   const asignaciones = [
     { usuario_id: superUsuario.id, ubicacion_id: emfMatriz.id },
     { usuario_id: adminEmf.id,     ubicacion_id: emfMatriz.id },
-    { usuario_id: adminLyeva.id,   ubicacion_id: lyevaMatriz.id },
+    { usuario_id: adminLyeva.id,   ubicacion_id: leyvaMatriz.id },
     { usuario_id: adminLaminas.id, ubicacion_id: laminasMatriz.id },
     { usuario_id: encargado.id,    ubicacion_id: emfMatriz.id },
     { usuario_id: vendedor.id,     ubicacion_id: emfMatriz.id },
@@ -249,7 +249,7 @@ async function main() {
   // ── Áreas de trabajo por empresa ─────────────────────────
   const areasBase = [
     { sufijo: 'emf',     empresaId: emfimifar.id },
-    { sufijo: 'lyeva',   empresaId: metalicosLyeva.id },
+    { sufijo: 'leyva',   empresaId: metalicosLyeva.id },
     { sufijo: 'laminas', empresaId: laminasMonterrey.id },
   ];
 
@@ -345,7 +345,7 @@ async function main() {
   console.log('');
   console.log('Clientes Mostrador creados (precio_num=1 → Publico, crédito=0):');
   console.log('  EMFIMIFAR        → mostrador-emf-id');
-  console.log('  Metálicos Lyeva  → mostrador-lyeva-id');
+  console.log('  Metálicos Lyeva  → mostrador-leyva-id');
   console.log('  Láminas Monterrey → mostrador-laminas-id');
   console.log('');
   console.log('Credenciales:');
