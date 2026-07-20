@@ -80,7 +80,22 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
 
 type RefreshResult = { ok: true } | { ok: false; reason: 'network' | 'rejected' };
 
-async function refreshAccessToken(): Promise<RefreshResult> {
+// El refresh token rota en cada uso (se revoca el anterior) — si dos requests en
+// paralelo reciben 401 al mismo tiempo, solo la primera renovación debe pegarle al
+// servidor; el resto debe esperar ese mismo resultado en vez de reintentar con la
+// cookie ya revocada, o el servidor rechaza la segunda y se cierra la sesión sin motivo real.
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+function refreshAccessToken(): Promise<RefreshResult> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function doRefresh(): Promise<RefreshResult> {
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}/auth/refresh`, {
