@@ -70,6 +70,8 @@ export class MigracionService {
   constructor(private prisma: PrismaService) {}
 
   async importarInventario(buffer: Buffer, ubicacionId: string): Promise<ImportResult> {
+    const BATCH_SIZE = 200;
+
     const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
@@ -78,11 +80,13 @@ export class MigracionService {
 
     const result: ImportResult = { insertados: 0, actualizados: 0, omitidos: 0, errores: [] };
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+    type Pendiente = { fila: number; clave: string; data: Prisma.ArticuloUncheckedCreateInput };
+    const pendientes: Pendiente[] = rows.map((row, i) => {
       const clave = buildClave(row);
-      try {
-        const data = {
+      return {
+        fila: i + 2,
+        clave,
+        data: {
           clave,
           ubicacion_id: ubicacionId,
           descripcion_1: cleanStr(row['descripcion1']),
@@ -100,22 +104,48 @@ export class MigracionService {
           precio_3: toNum(row['precio3']),
           precio_4: toNum(row['precio4']),
           precio_5: toNum(row['precio5']),
-        };
+        },
+      };
+    });
 
-        const existing = await this.prisma.articulo.findUnique({
-          where: { ubicacion_id_clave: { ubicacion_id: ubicacionId, clave } },
-          select: { id: true },
-        });
+    // Una sola consulta para saber qué claves ya existen, en vez de una por fila
+    const existentes = await this.prisma.articulo.findMany({
+      where: { ubicacion_id: ubicacionId, clave: { in: pendientes.map((p) => p.clave) } },
+      select: { id: true, clave: true },
+    });
+    const idPorClave = new Map(existentes.map((a) => [a.clave, a.id]));
 
-        if (existing) {
-          await this.prisma.articulo.update({ where: { id: existing.id }, data });
-          result.actualizados++;
-        } else {
-          await this.prisma.articulo.create({ data });
-          result.insertados++;
+    for (let i = 0; i < pendientes.length; i += BATCH_SIZE) {
+      const lote = pendientes.slice(i, i + BATCH_SIZE);
+      try {
+        await this.prisma.$transaction(
+          lote.map((p) => {
+            const existingId = idPorClave.get(p.clave);
+            return existingId
+              ? this.prisma.articulo.update({ where: { id: existingId }, data: p.data })
+              : this.prisma.articulo.create({ data: p.data });
+          }),
+        );
+        for (const p of lote) {
+          if (idPorClave.has(p.clave)) result.actualizados++;
+          else result.insertados++;
         }
-      } catch (err) {
-        result.errores.push({ fila: i + 2, motivo: String((err as Error).message).slice(0, 120) });
+      } catch {
+        // Si falla el lote completo, reintenta uno por uno para aislar el error
+        for (const p of lote) {
+          try {
+            const existingId = idPorClave.get(p.clave);
+            if (existingId) {
+              await this.prisma.articulo.update({ where: { id: existingId }, data: p.data });
+              result.actualizados++;
+            } else {
+              await this.prisma.articulo.create({ data: p.data });
+              result.insertados++;
+            }
+          } catch (err) {
+            result.errores.push({ fila: p.fila, motivo: String((err as Error).message).slice(0, 120) });
+          }
+        }
       }
     }
 
@@ -123,6 +153,8 @@ export class MigracionService {
   }
 
   async importarClientes(buffer: Buffer, ubicacionId: string): Promise<ImportResult> {
+    const BATCH_SIZE = 200;
+
     const rows = parse(buffer, {
       columns: true,
       skip_empty_lines: true,
@@ -130,6 +162,10 @@ export class MigracionService {
     }) as Record<string, string>[];
 
     const result: ImportResult = { insertados: 0, actualizados: 0, omitidos: 0, errores: [] };
+
+    type Pendiente = { fila: number; data: Prisma.ClienteUncheckedCreateInput };
+    const pendientes: Pendiente[] = [];
+    const nombresVistos = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -144,38 +180,63 @@ export class MigracionService {
         continue;
       }
 
+      // Duplicado dentro del propio archivo (antes se detectaba al re-consultar la BD fila por fila)
+      if (nombresVistos.has(nombreCompleto)) {
+        result.omitidos++;
+        continue;
+      }
+      nombresVistos.add(nombreCompleto);
+
+      const saldo     = toNum(row['saldo']);
+      const email     = cleanStr(row['correo']);
+      const precioRaw = parseInt(row['precio_num'] ?? '', 10);
+      const precio_num = !isNaN(precioRaw) && precioRaw >= 1 && precioRaw <= 5
+        ? precioRaw
+        : null;
+
+      pendientes.push({
+        fila: i + 2,
+        data: {
+          ubicacion_id: ubicacionId,
+          nombre: nombreCompleto,
+          telefono: cleanStr(row['telefono']),
+          email,
+          saldo_pendiente: saldo,
+          ...(precio_num !== null ? { precio_num } : {}),
+        },
+      });
+    }
+
+    // Una sola consulta para saber qué nombres ya existen, en vez de una por fila
+    const existentes = await this.prisma.cliente.findMany({
+      where: { ubicacion_id: ubicacionId, nombre: { in: pendientes.map((p) => p.data.nombre) } },
+      select: { nombre: true },
+    });
+    const nombresExistentes = new Set(existentes.map((c) => c.nombre));
+
+    const aInsertar = pendientes.filter((p) => {
+      if (nombresExistentes.has(p.data.nombre)) {
+        result.omitidos++;
+        return false;
+      }
+      return true;
+    });
+
+    for (let i = 0; i < aInsertar.length; i += BATCH_SIZE) {
+      const lote = aInsertar.slice(i, i + BATCH_SIZE);
       try {
-        const saldo     = toNum(row['saldo']);
-        const email     = cleanStr(row['correo']);
-        const precioRaw = parseInt(row['precio_num'] ?? '', 10);
-        const precio_num = !isNaN(precioRaw) && precioRaw >= 1 && precioRaw <= 5
-          ? precioRaw
-          : null;
-
-        // Busca duplicado por nombre dentro de la ubicación
-        const existing = await this.prisma.cliente.findFirst({
-          where: { ubicacion_id: ubicacionId, nombre: nombreCompleto },
-          select: { id: true },
-        });
-
-        if (existing) {
-          result.omitidos++;
-          continue;
+        await this.prisma.$transaction(lote.map((p) => this.prisma.cliente.create({ data: p.data })));
+        result.insertados += lote.length;
+      } catch {
+        // Si falla el lote completo, reintenta uno por uno para aislar el error
+        for (const p of lote) {
+          try {
+            await this.prisma.cliente.create({ data: p.data });
+            result.insertados++;
+          } catch (err) {
+            result.errores.push({ fila: p.fila, motivo: String((err as Error).message).slice(0, 120) });
+          }
         }
-
-        await this.prisma.cliente.create({
-          data: {
-            ubicacion_id: ubicacionId,
-            nombre: nombreCompleto,
-            telefono: cleanStr(row['telefono']),
-            email,
-            saldo_pendiente: saldo,
-            ...(precio_num !== null ? { precio_num } : {}),
-          },
-        });
-        result.insertados++;
-      } catch (err) {
-        result.errores.push({ fila: i + 2, motivo: String((err as Error).message).slice(0, 120) });
       }
     }
 
