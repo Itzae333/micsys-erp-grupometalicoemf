@@ -97,7 +97,7 @@ export default function VentasPage() {
   // Dialog nueva nota
   const [dlgNota, setDlgNota] = useState(false);
   const [dlgVentaRapida, setDlgVentaRapida] = useState(false);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clienteResultados, setClienteResultados] = useState<Cliente[]>([]);
   const [creatingNota, setCreatingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
   const [modoCreacion, setModoCreacion] = useState<'venta' | 'cotizacion'>('venta');
@@ -193,6 +193,7 @@ export default function VentasPage() {
   const [selectedCartIdx, setSelectedCartIdx] = useState(-1);
   const cartItemRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clienteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Split-view: seleccionar nota de la lista ─────────────
   async function seleccionarNotaIdx(idx: number) {
@@ -390,6 +391,24 @@ export default function VentasPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artsPagQ, dlgLinea]);
 
+  // Debounce: búsqueda de cliente contra el backend (no filtrar en el cliente
+  // sobre una lista local — con catálogos grandes el cliente buscado puede no
+  // estar en la lista sin filtro, que el backend limita a 500 registros).
+  useEffect(() => {
+    if (!dlgNota || clienteSeleccionado || clienteQ.trim().length === 0) {
+      setClienteResultados([]);
+      return;
+    }
+    if (clienteDebounceRef.current) clearTimeout(clienteDebounceRef.current);
+    clienteDebounceRef.current = setTimeout(() => {
+      api.get<Cliente[]>(`/clientes?q=${encodeURIComponent(clienteQ)}`)
+        .then(setClienteResultados)
+        .catch(() => setClienteResultados([]));
+    }, 300);
+    return () => { if (clienteDebounceRef.current) clearTimeout(clienteDebounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteQ, dlgNota, clienteSeleccionado]);
+
   // Navegación por teclado en el carrito (↑↓ incluso desde inputs de búsqueda)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -435,22 +454,27 @@ export default function VentasPage() {
     setModoCreacion(modo);
     setNotaError(null);
     notaForm.reset({ es_cotizacion: modo === 'cotizacion' });
-    try {
-      const data = await api.get<Cliente[]>('/clientes');
-      setClientes(data);
-      if (preClienteId) {
-        notaForm.setValue('cliente_id', preClienteId);
-        const c = data.find((cl) => cl.id === preClienteId) ?? null;
-        setClienteSeleccionado(c);
-        setClienteQ(c ? (c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()) : '');
-      } else {
-        setClienteSeleccionado(null);
-        setClienteQ('');
-      }
-    } catch {
-      setClientes([]);
+    setClienteResultados([]);
+    if (preClienteId) {
+      notaForm.setValue('cliente_id', preClienteId);
+      const c = await fetchCliente(preClienteId);
+      setClienteSeleccionado(c);
+      setClienteQ(c ? (c.razon_social ?? `${c.nombre} ${c.apellidos ?? ''}`.trim()) : '');
+    } else {
+      setClienteSeleccionado(null);
+      setClienteQ('');
     }
     setDlgNota(true);
+  }
+
+  // Busca un cliente por id directo contra el backend — no depende de la
+  // lista general (que se limita a 500 registros cuando no hay búsqueda).
+  async function fetchCliente(id: string): Promise<Cliente | null> {
+    try {
+      return await api.get<Cliente>(`/clientes/${id}`);
+    } catch {
+      return null;
+    }
   }
 
   async function onCrearNota(data: NuevaNotaForm) {
@@ -464,9 +488,7 @@ export default function VentasPage() {
         es_cotizacion: modoCreacion === 'cotizacion',
         lineas: [],
       });
-      // Guardar cliente seleccionado para autocompletar precio
-      const c = clientes.find((cl) => cl.id === clienteId) ?? null;
-      setClienteSeleccionado(c);
+      // clienteSeleccionado ya viene del cliente elegido en el buscador del diálogo
       setDlgNota(false);
       setNotaActiva(nota);
       setDlgLinea(true);
@@ -622,7 +644,7 @@ export default function VentasPage() {
     setLineaError(null);
     try {
       const full = await api.get<NotaVenta>(`/ventas/${nota.id}`);
-      const c = full.cliente_id ? clientes.find((cl) => cl.id === full.cliente_id) ?? null : null;
+      const c = full.cliente_id ? await fetchCliente(full.cliente_id) : null;
       setClienteSeleccionado(c);
       setNotaActiva(full);
       lineaForm.reset({ busqueda: '', cantidad: 1, precio_unitario: 0, descuento: 0 });
@@ -1678,11 +1700,7 @@ export default function VentasPage() {
             />
             {clienteQ.length > 0 && !clienteSeleccionado && (
               <div className="mt-1 border border-steel-200 rounded-lg max-h-40 overflow-y-auto">
-                {clientes
-                  .filter((c) => {
-                    const n = `${c.nombre} ${c.apellidos ?? ''} ${c.razon_social ?? ''}`.toLowerCase();
-                    return n.includes(clienteQ.toLowerCase());
-                  })
+                {clienteResultados
                   .slice(0, 8)
                   .map((c) => (
                     <button
