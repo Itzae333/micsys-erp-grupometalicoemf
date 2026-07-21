@@ -22,20 +22,38 @@ function dec(v: unknown): number {
   return Number(v);
 }
 
+// Todas las ubicaciones operan en Zona Centro de México (Monterrey, CDMX…),
+// que desde el decreto de 2022 no tiene horario de verano — offset fijo -06:00.
+// Los `setHours()` de Date operan en la zona horaria del proceso, no la del
+// negocio: si el servidor corre en UTC (como casi todo hosting en la nube),
+// "hoy" quedaba calculado de 6pm de ayer a 6pm de hoy en hora de México.
+const TZ_OFFSET_MEXICO = '-06:00';
+
+function ymdEnMexico(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
+}
+
 function startOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  return r;
+  return new Date(`${ymdEnMexico(d)}T00:00:00${TZ_OFFSET_MEXICO}`);
 }
 
 function endOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(23, 59, 59, 999);
-  return r;
+  return new Date(`${ymdEnMexico(d)}T23:59:59.999${TZ_OFFSET_MEXICO}`);
 }
 
 function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+  const [year, month] = ymdEnMexico(d).split('-');
+  return new Date(`${year}-${month}-01T00:00:00${TZ_OFFSET_MEXICO}`);
+}
+
+// Los filtros `desde`/`hasta` del front llegan como fecha simple (YYYY-MM-DD,
+// de un <input type="date">) sin hora ni zona — se interpretan como el día
+// en México, no como medianoche UTC (que sería 6pm del día anterior aquí).
+function parseFechaMexico(s: string): Date {
+  return new Date(`${s}T12:00:00${TZ_OFFSET_MEXICO}`);
 }
 
 type DiaVenta = { dia: string; total: number; count: number };
@@ -79,6 +97,7 @@ export class ReportesService {
     const iniHoy = startOfDay(hoy);
     const finHoy = endOfDay(hoy);
     const iniMes = startOfMonth(hoy);
+    const sieteDiasAtras = startOfDay(new Date(hoy.getTime() - 6 * 24 * 60 * 60 * 1000));
 
     // Get empresa_id from ubicacion for structural queries
     const ubicacion = await this.prisma.ubicacion.findUnique({
@@ -150,14 +169,14 @@ export class ReportesService {
       }),
       this.prisma.$queryRaw<Array<{ dia: string; total: string; count: bigint }>>`
         SELECT
-          TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') AS dia,
+          TO_CHAR(DATE_TRUNC('day', created_at - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
           CAST(SUM(total) AS FLOAT8)                          AS total,
           CAST(COUNT(*) AS INT4)                              AS count
         FROM notas_venta
         WHERE ubicacion_id = ${ubicacionId}
           AND estatus IN ('PAGADA', 'CREDITO')
-          AND created_at >= NOW() - INTERVAL '7 days'
-        GROUP BY DATE_TRUNC('day', created_at)
+          AND created_at >= ${sieteDiasAtras}
+        GROUP BY DATE_TRUNC('day', created_at - INTERVAL '6 hours')
         ORDER BY dia
       `,
     ]);
@@ -542,8 +561,8 @@ export class ReportesService {
     ubicacionId: string,
     opts: { desde?: string; hasta?: string },
   ) {
-    const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
-    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
 
     const baseWhere: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,
@@ -589,7 +608,7 @@ export class ReportesService {
         }),
         this.prisma.$queryRaw<Array<{ dia: string; total: string; count: bigint }>>`
           SELECT
-            TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') AS dia,
+            TO_CHAR(DATE_TRUNC('day', created_at - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
             CAST(SUM(total) AS FLOAT8)                          AS total,
             CAST(COUNT(*) AS INT4)                              AS count
           FROM notas_venta
@@ -597,7 +616,7 @@ export class ReportesService {
             AND estatus IN ('PAGADA', 'CREDITO')
             AND created_at >= ${desde}
             AND created_at <= ${hasta}
-          GROUP BY DATE_TRUNC('day', created_at)
+          GROUP BY DATE_TRUNC('day', created_at - INTERVAL '6 hours')
           ORDER BY dia
         `,
       ]);
@@ -753,8 +772,8 @@ export class ReportesService {
     ubicacionId: string,
     opts: { desde?: string; hasta?: string },
   ) {
-    const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
-    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
     const rango = { gte: desde, lte: hasta };
 
     // Get empresa for proveedor queries (structural data)
@@ -838,8 +857,8 @@ export class ReportesService {
     empresaId: string,
     opts: { desde?: string; hasta?: string },
   ) {
-    const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
-    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
     const rango = { gte: desde, lte: hasta };
 
     const [resumen, porEstatus, topArticulosRaw] = await Promise.all([
@@ -906,8 +925,8 @@ export class ReportesService {
     ubicacionId: string,
     opts: { desde?: string; hasta?: string },
   ) {
-    const desde = opts.desde ? new Date(opts.desde) : startOfDay(new Date());
-    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfDay(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
 
     const baseWhere = {
       ubicacion_id: ubicacionId,
@@ -1033,8 +1052,8 @@ export class ReportesService {
     empresaId: string,
     opts: { desde?: string; hasta?: string },
   ) {
-    const desde = opts.desde ? new Date(opts.desde) : startOfMonth(new Date());
-    const hasta = opts.hasta ? endOfDay(new Date(opts.hasta)) : endOfDay(new Date());
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
     const rango = { gte: desde, lte: hasta };
 
     const [totalEmpleados, porEstatus, topAusenciasRaw] = await Promise.all([
