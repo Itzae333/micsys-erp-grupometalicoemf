@@ -15,7 +15,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { cn, formatPrecio } from '@/lib/utils';
+import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
@@ -186,8 +186,7 @@ export default function NotaDetallePage() {
     const descArt = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
       .filter(Boolean).join(' · ');
     setArtBusqueda(`${art.clave}${descArt ? ` — ${descArt}` : ''}`);
-    const precioDefault = schema?.precios.find((p) => p.activa);
-    const campo = precioDefault ? `precio_${precioDefault.numero}` as keyof Articulo : 'precio_1';
+    const campo = `precio_${precioMostradorNumero(schema)}` as keyof Articulo;
     setLineaPrecio((art[campo] as number) ?? 0);
   }
 

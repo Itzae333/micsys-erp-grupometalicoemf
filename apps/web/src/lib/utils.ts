@@ -1,8 +1,22 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { ConfigColumnasSchema } from './types/api';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * Precio a usar cuando la venta no tiene cliente asignado (mostrador):
+ * siempre precio_1 ("Público") si está activo. El orden de `schema.precios`
+ * es el orden de despliegue configurable por el admin (columna en Inventario),
+ * no una prioridad de negocio — tomar "el primer activo" de ese arreglo hacía
+ * que reordenar columnas para verlas más cómodo cambiara el precio con el que
+ * se vendía en mostrador.
+ */
+export function precioMostradorNumero(schema: ConfigColumnasSchema | null | undefined): number {
+  if (schema?.precios.some((p) => p.numero === 1 && p.activa)) return 1;
+  return schema?.precios.find((p) => p.activa)?.numero ?? 1;
 }
 
 export function formatPrecio(monto: number | string): string {

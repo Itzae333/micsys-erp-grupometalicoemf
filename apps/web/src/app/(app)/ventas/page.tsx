@@ -23,7 +23,7 @@ import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
-import { cn, formatPrecio } from '@/lib/utils';
+import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
@@ -268,9 +268,7 @@ export default function VentasPage() {
         setHighlightedLineaId(existente.id);
         setTimeout(() => setHighlightedLineaId(null), 2000);
       } else {
-        const precioNum = clienteSeleccionado?.precio_num
-          ?? schema?.precios.find((p) => p.activa)?.numero
-          ?? 1;
+        const precioNum = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
         const campo = `precio_${precioNum}` as keyof Articulo;
         const precio = (art[campo] as number | null) ?? 0;
         const updated = await api.post<NotaVenta>(`/ventas/${notaActiva.id}/lineas`, {
@@ -518,10 +516,8 @@ export default function VentasPage() {
     const artDescs = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean).join(' · ');
     lineaForm.setValue('busqueda', `${art.clave}${artDescs ? ` — ${artDescs}` : ''}`);
 
-    // Precio: usa el tipo del cliente si tiene uno, si no el primer precio activo
-    const precioNum = clienteSeleccionado?.precio_num
-      ?? schema?.precios.find((p) => p.activa)?.numero
-      ?? 1;
+    // Precio: usa el tipo del cliente si tiene uno, si no el de mostrador (Público)
+    const precioNum = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
     const campo = `precio_${precioNum}` as keyof Articulo;
     lineaForm.setValue('precio_unitario', (art[campo] as number | null) ?? 0);
   }
@@ -1073,7 +1069,7 @@ export default function VentasPage() {
                     <tbody className="divide-y divide-steel-100">
                       {artsPag.map((art) => {
                         const descs = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean);
-                        const pNum = clienteSeleccionado?.precio_num ?? schema?.precios.find((p) => p.activa)?.numero ?? 1;
+                        const pNum = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
                         const pCampo = `precio_${pNum}` as keyof Articulo;
                         const precio = (art[pCampo] as number | null) ?? 0;
                         const enCarrito = notaActiva.lineas.find((l) => l.articulo?.id === art.id);

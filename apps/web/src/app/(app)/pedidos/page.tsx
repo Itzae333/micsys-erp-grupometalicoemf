@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
-import { cn, formatPrecio } from '@/lib/utils';
+import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 
@@ -176,9 +176,8 @@ export default function PedidosPage() {
 
   // ── Seleccionar precio del artículo ────────────────────────
   function precioDeArticulo(art: Articulo): number {
-    if (!schema || !schema.precios || schema.precios.length === 0) return 0;
-    const col = schema.precios[0];
-    const key = `precio_${col.numero}` as keyof Articulo;
+    const numero = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
+    const key = `precio_${numero}` as keyof Articulo;
     return Number(art[key] ?? 0);
   }
 
