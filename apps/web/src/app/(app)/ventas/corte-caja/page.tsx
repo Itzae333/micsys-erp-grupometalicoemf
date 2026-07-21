@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Calculator, Printer, RefreshCw, AlertTriangle,
-  Banknote, CreditCard, Building2, Package,
+  Banknote, CreditCard, Building2, Package, CalendarCheck,
 } from 'lucide-react';
 
 // ── tipos ────────────────────────────────────────────────────
@@ -67,7 +67,14 @@ interface CorteCajaData {
 
 // ── helpers ──────────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// Fecha del día en hora de México — toISOString() da UTC y en horario de México
+// (UTC-6) ya rueda al día siguiente desde las 6pm hora local, aunque localmente
+// siga siendo el mismo día hasta medianoche.
+function hoyMx(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+}
+
+const TODAY = hoyMx();
 
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
@@ -109,12 +116,15 @@ export default function CorteCajaPage() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (desdeOverride?: string, hastaOverride?: string) => {
     if (!empresa) return;
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({ desde, hasta });
+      const params = new URLSearchParams({
+        desde: desdeOverride ?? desde,
+        hasta: hastaOverride ?? hasta,
+      });
       if (ubicacion?.id) params.set('ubicacionId', ubicacion.id);
       const res = await api.get<CorteCajaData>(`/ventas/corte-caja?${params}`);
       setData(res);
@@ -124,6 +134,16 @@ export default function CorteCajaPage() {
       setLoading(false);
     }
   }, [empresa, ubicacion, desde, hasta]);
+
+  // Botón "Corte del Día": fija ambas fechas a hoy (hora de México) y dispara la
+  // carga con esos valores directo, sin esperar al próximo render (setDesde/setHasta
+  // son async y `load` seguiría usando los valores viejos si se llamara sin overrides).
+  const corteDelDia = () => {
+    const hoy = hoyMx();
+    setDesde(hoy);
+    setHasta(hoy);
+    load(hoy, hoy);
+  };
 
   const agruparPorUsuario = empresa?.id === EMPRESA_METALICOS_LYEVA_ID && (data?.por_usuario?.length ?? 0) > 0;
 
@@ -287,9 +307,13 @@ export default function CorteCajaPage() {
           <label className="text-xs font-medium text-steel-500 uppercase tracking-wide">Hasta</label>
           <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="w-40" />
         </div>
-        <Button onClick={load} disabled={loading} className="gap-2">
+        <Button onClick={() => load()} disabled={loading} className="gap-2">
           {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Generar corte
+        </Button>
+        <Button onClick={corteDelDia} disabled={loading} variant="outline" className="gap-2">
+          <CalendarCheck className="h-4 w-4" />
+          Corte del Día
         </Button>
         {data && (
           <Button variant="outline" onClick={print} className="gap-2 ml-auto">
