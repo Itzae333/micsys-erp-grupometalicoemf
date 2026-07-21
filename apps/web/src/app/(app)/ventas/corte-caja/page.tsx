@@ -42,6 +42,15 @@ interface PagosCreditoResumen {
   detalle: PagoCreditoDetalle[];
   por_usuario?: PagoCreditoPorUsuario[];
 }
+interface AnticipoDetalle {
+  pedido_folio: number; cliente: string; metodo: string; monto: number;
+  referencia: string | null; fecha: string;
+}
+interface AnticiposPedidoResumen {
+  total: number; count: number;
+  por_metodo: Record<string, MetodoResumen>;
+  detalle: AnticipoDetalle[];
+}
 interface PorUsuarioResumen {
   usuario_id: string;
   nombre: string;
@@ -60,6 +69,7 @@ interface CorteCajaData {
   por_metodo: Record<string, MetodoResumen>;
   por_estatus: Record<string, EstatusResumen>;
   pagos_credito: PagosCreditoResumen;
+  anticipos_pedido?: AnticiposPedidoResumen;
   notas: NotaCorte[];
   gastos: GastoCorte[];
   por_usuario?: PorUsuarioResumen[];
@@ -187,6 +197,7 @@ export default function CorteCajaPage() {
             ...(data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] }),
             por_usuario: agruparPorUsuario ? data.pagos_credito?.por_usuario : undefined,
           },
+          anticipos_pedido: data.anticipos_pedido ?? { total: 0, count: 0, por_metodo: {}, detalle: [] },
           notas: data.notas,
           gastos: data.gastos,
           por_usuario: agruparPorUsuario ? data.por_usuario : undefined,
@@ -328,6 +339,7 @@ export default function CorteCajaPage() {
 
       {data && (() => {
         const pagosCredito = data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
+        const anticipos = data.anticipos_pedido ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
         const totalVentas = data.total_ventas ?? data.total_cobrado;
         const totalEntregarEfectivo = data.total_entregar_efectivo ?? (data.por_metodo?.['EFECTIVO']?.total ?? 0);
         return (
@@ -473,6 +485,43 @@ export default function CorteCajaPage() {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Anticipos de pedidos (dinero recibido hoy que no es una nota de venta) */}
+          {anticipos.count > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
+                Anticipos de pedidos
+              </h2>
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-50 border-b border-steel-200">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Pedido</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cliente</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anticipos.detalle.map((a, i) => (
+                      <tr key={`${a.pedido_folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(a.pedido_folio).padStart(4, '0')}</td>
+                        <td className="px-4 py-2.5 text-steel-700 max-w-[160px] truncate">{a.cliente}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[a.metodo] ?? a.metodo}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(a.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-steel-900">
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL ANTICIPOS</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(anticipos.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
 
