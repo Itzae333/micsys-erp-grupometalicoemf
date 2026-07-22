@@ -388,6 +388,9 @@ export class PedidosService {
             metodo: ant.metodo,
             monto: ant.monto,
             referencia: ant.referencia ?? null,
+            // Ya se contó en el corte de caja del día en que se cobró el anticipo
+            // (tabla AnticiposPedido) — se excluye del corte de hoy para no duplicarlo.
+            origen_anticipo_pedido: true,
           },
         });
       }

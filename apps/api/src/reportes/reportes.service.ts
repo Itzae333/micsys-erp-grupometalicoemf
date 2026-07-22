@@ -938,13 +938,16 @@ export class ReportesService {
         where: { ...baseWhere, estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] } },
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
-          pagos:   { select: { metodo: true, monto: true } },
+          pagos:   { where: { origen_anticipo_pedido: false }, select: { metodo: true, monto: true } },
         },
         orderBy: { created_at: 'asc' },
       }),
       this.prisma.pago.groupBy({
         by: ['metodo'],
         where: {
+          // Excluye los Pago que solo replican un anticipo de Pedido ya cobrado
+          // (ver PedidosService.liquidar) — ese dinero ya se contó el día del anticipo.
+          origen_anticipo_pedido: false,
           nota: {
             ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] },

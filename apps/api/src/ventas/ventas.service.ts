@@ -1121,8 +1121,18 @@ export class VentasService {
       const notaTotal = Number(nota.total);
       totalVentas = +(totalVentas + notaTotal).toFixed(2);
 
+      // Los pagos que solo replican un anticipo de pedido (ver PedidosService.liquidar)
+      // ya se contaron en el corte de caja del día en que se cobró ese anticipo — se
+      // excluyen aquí para no duplicarlos, y se resta su monto del total base de hoy
+      // para que "efectivo real" (base de hoy − no-efectivo) siga siendo correcto.
+      const pagosHoy = nota.pagos.filter((p) => !p.origen_anticipo_pedido);
+      const montoAnticipoReplicado = nota.pagos
+        .filter((p) => p.origen_anticipo_pedido)
+        .reduce((s, p) => s + Number(p.monto), 0);
+      const baseHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+
       let nonCashSum = 0;
-      for (const pago of nota.pagos) {
+      for (const pago of pagosHoy) {
         if (pago.metodo === 'EFECTIVO') continue;
         const m = pago.metodo as string;
         const monto = Number(pago.monto);
@@ -1132,8 +1142,8 @@ export class VentasService {
         nonCashSum = +(nonCashSum + monto).toFixed(2);
       }
 
-      const hasEfectivo = nota.pagos.some((p) => p.metodo === 'EFECTIVO');
-      const efectivoReal = hasEfectivo ? Math.max(0, +(notaTotal - nonCashSum).toFixed(2)) : 0;
+      const hasEfectivo = pagosHoy.some((p) => p.metodo === 'EFECTIVO');
+      const efectivoReal = hasEfectivo ? Math.max(0, +(baseHoy - nonCashSum).toFixed(2)) : 0;
 
       if (hasEfectivo) {
         metodos['EFECTIVO'].count++;
@@ -1204,20 +1214,31 @@ export class VentasService {
     }
     const pagosCreditoPorUsuario = Array.from(pagosCreditoPorUsuarioMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
 
+    // El efectivo de anticipos de pedido es dinero real que hay que entregar hoy,
+    // aunque no venga de una nota — se suma igual que el efectivo de pagos de crédito.
     const totalEntregarEfectivo = +(
       metodos['EFECTIVO'].total +
-      metodoPagosCredito['EFECTIVO'].total -
+      metodoPagosCredito['EFECTIVO'].total +
+      metodoAnticipos['EFECTIVO'].total -
       totalGastosEfectivo
     ).toFixed(2);
 
     const notasMapeadas = notas.map((n) => {
       const notaTotal = Number(n.total);
-      const nonCash = n.pagos
+      // Igual que arriba: los pagos que solo replican un anticipo de pedido ya se
+      // reportaron en el corte del día del anticipo — no se listan hoy de nuevo.
+      const pagosHoy = n.pagos.filter((p) => !p.origen_anticipo_pedido);
+      const montoAnticipoReplicado = n.pagos
+        .filter((p) => p.origen_anticipo_pedido)
+        .reduce((s, p) => s + Number(p.monto), 0);
+      const baseHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+
+      const nonCash = pagosHoy
         .filter((p) => p.metodo !== 'EFECTIVO')
         .reduce((s, p) => s + Number(p.monto), 0);
-      const sumTodos = n.pagos.reduce((s, p) => s + Number(p.monto), 0);
-      const cambio = Math.max(0, +(sumTodos - notaTotal).toFixed(2));
-      const efectivoReal = Math.max(0, +(notaTotal - nonCash).toFixed(2));
+      const sumTodos = pagosHoy.reduce((s, p) => s + Number(p.monto), 0);
+      const cambio = Math.max(0, +(sumTodos - baseHoy).toFixed(2));
+      const efectivoReal = Math.max(0, +(baseHoy - nonCash).toFixed(2));
 
       return {
         id: n.id,
@@ -1229,7 +1250,7 @@ export class VentasService {
         cliente: n.cliente
           ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
           : { nombre: 'MOSTRADOR' },
-        pagos: n.pagos.map((p) => ({
+        pagos: pagosHoy.map((p) => ({
           metodo: p.metodo,
           monto: p.metodo === 'EFECTIVO' ? efectivoReal : Number(p.monto),
         })),

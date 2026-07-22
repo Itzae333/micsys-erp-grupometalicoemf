@@ -418,6 +418,13 @@ model Pago {
   referencia String?
   created_at DateTime   @default(now())
 
+  // true cuando este Pago solo replica un anticipo de Pedido ya cobrado y
+  // reportado en el corte de caja de otro día (ver PedidosService.liquidar).
+  // El corte de caja lo excluye de "cobrado hoy" para no contar ese dinero dos
+  // veces; el resto del sistema (cuentas, crédito) lo sigue viendo para que la
+  // nota resultante quede marcada como pagada en su totalidad.
+  origen_anticipo_pedido Boolean @default(false)
+
   nota NotaVenta @relation(fields: [nota_id], references: [id])
 
   @@map("pagos")

@@ -506,6 +506,12 @@ function buildEscPosBuffer(ticket) {
     push(CMD.NORMAL, CMD.BOLD_OFF);
     push(sep('-'));
 
+    const ventasCredito = ticket.por_estatus?.CREDITO;
+    if (ventasCredito && Number(ventasCredito.total ?? 0) > 0) {
+      push(dotRow('VENTAS A CREDITO (' + ventasCredito.count + ')', '$' + formatMoney(Number(ventasCredito.total))));
+      push(sep('-'));
+    }
+
     for (const m of METODOS) {
       const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
       push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
