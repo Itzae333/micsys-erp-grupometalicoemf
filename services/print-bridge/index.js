@@ -349,15 +349,17 @@ function buildEscPosBuffer(ticket) {
     return Buffer.concat(parts);
   }
 
-  // ── Comprobante de abono a cuenta ──────────────────────
+  // ── Comprobante de abono / cargo a cuenta ──────────────
   // tipo === 'abono_cuenta' cubre dos casos, distinguidos por lo que trae el
-  // payload: abono a ventas a crédito (con notas_pagadas + metodo) y abono a
-  // otra deuda / concepto sin nota (sin notas_pagadas, con concepto en vez de
-  // metodo). ticket.titulo permite personalizar el encabezado en cada caso.
+  // payload: abono a ventas a crédito (con notas_pagadas + metodo) y abono o
+  // cargo manual a otra deuda (sin notas_pagadas, con concepto). Un cargo
+  // (movimiento_tipo === 'CARGO') aumenta el saldo — no es un pago, así que no
+  // se imprime "¡Gracias por su pago!" ni se rotula como "TOTAL ABONADO".
   if (ticket.tipo === 'abono_cuenta') {
+    const esCargo = ticket.movimiento_tipo === 'CARGO';
     pushHeader(ticket, push);
     push(CMD.ALIGN_LEFT, sep());
-    push(CMD.BOLD_ON, center(ticket.titulo ?? 'COMPROBANTE DE ABONO'), CMD.BOLD_OFF);
+    push(CMD.BOLD_ON, center(ticket.titulo ?? (esCargo ? 'COMPROBANTE DE CARGO' : 'COMPROBANTE DE ABONO')), CMD.BOLD_OFF);
     push(row('Fecha', norm(ticket.fecha ?? '')));
     push(sep());
     push(ln('Cliente: ' + norm(ticket.cliente?.nombre ?? 'N/A')));
@@ -373,7 +375,7 @@ function buildEscPosBuffer(ticket) {
       push(sep('='));
     }
     push(CMD.BOLD_ON);
-    push(row('TOTAL ABONADO', '$' + formatMoney(Number(ticket.total_aplicado ?? 0))));
+    push(row(esCargo ? 'TOTAL CARGADO' : 'TOTAL ABONADO', '$' + formatMoney(Number(ticket.total_aplicado ?? 0))));
     const saldoRest = Number(ticket.saldo_restante ?? 0);
     if (saldoRest > 0) {
       push(row('SALDO PENDIENTE', '$' + formatMoney(saldoRest)));
@@ -387,7 +389,7 @@ function buildEscPosBuffer(ticket) {
     } else if (ticket.concepto) {
       push(ln('Concepto: ' + norm(ticket.concepto)));
     }
-    push(ln('!Gracias por su pago!'));
+    push(ln(esCargo ? 'Cargo aplicado a su cuenta' : '!Gracias por su pago!'));
     push(CMD.ALIGN_LEFT);
     push(CMD.FEED(config.cutFeedLines ?? 5));
     push(CMD.CUT(0));

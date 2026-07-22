@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import type { CuentaClienteDetalle, MovimientoCuenta, AbonarCuentaResult } from '@/lib/types/api';
+import type { CuentaClienteDetalle, MovimientoCuenta } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
@@ -18,11 +18,6 @@ import { Badge } from '@/components/ui/badge';
 import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateEstadoCuentaPDF } from '@/lib/utils/estado-cuenta-pdf';
-
-const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
-const METODO_LABEL: Record<string, string> = {
-  EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
-};
 
 const AjusteSchema = z.object({
   tipo: z.enum(['CARGO', 'ABONO']),
@@ -51,12 +46,9 @@ export default function CuentaClientePage() {
   const [abonoConfirmado, setAbonoConfirmado] = useState<{ monto: number; saldoRestante: number } | null>(null);
   const [descargandoEstado, setDescargandoEstado] = useState(false);
 
-  // Abono — el cliente puede deber por ventas a crédito (ligadas a una nota) y/o
-  // por otros conceptos (ajuste manual); si tiene ambos, se elige a cuál aplica.
-  const [abonoDestino, setAbonoDestino] = useState<'VENTAS' | 'OTRAS'>('VENTAS');
+  // Esta pantalla solo abona/ajusta "otras deudas" — las ventas a crédito (ligadas
+  // a una nota) se pagan desde Ventas, donde se elige la nota exacta a liquidar.
   const [abonoMonto, setAbonoMonto] = useState(0);
-  const [abonoMetodo, setAbonoMetodo] = useState<string>('EFECTIVO');
-  const [abonoReferencia, setAbonoReferencia] = useState('');
   const [abonoConcepto, setAbonoConcepto] = useState('');
   const [abonoSubmitting, setAbonoSubmitting] = useState(false);
 
@@ -83,20 +75,22 @@ export default function CuentaClientePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function printAbonoTicket(opts: {
-    titulo: string;
-    totalAplicado: number;
-    saldoRestante: number;
-    notasPagadas?: AbonarCuentaResult['notas_pagadas'];
-    metodo?: string;
-    concepto?: string;
+  // Un mismo ticket cubre abono (tipo ABONO) y cargo manual (tipo CARGO) sobre
+  // "otras deudas" — el print-bridge ajusta el texto ("abonado"/"cargado") según
+  // movimiento_tipo, para no imprimir "¡Gracias por su pago!" en un cargo.
+  async function printMovimientoTicket(opts: {
+    tipo: 'CARGO' | 'ABONO';
+    monto: number;
+    saldoDespues: number;
+    concepto: string;
   }) {
     if (!cliente) return;
     const logoUrl = getTicketLogoUrl(empresa, ubicacion);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
     const payload = {
       tipo: 'abono_cuenta',
-      titulo: opts.titulo,
+      titulo: opts.tipo === 'CARGO' ? 'CARGO A CUENTA' : 'ABONO A CUENTA',
+      movimiento_tipo: opts.tipo,
       logo_escpos_b64,
       empresa: { nombre: empresa?.nombre ?? '' },
       ubicacion: {
@@ -105,10 +99,8 @@ export default function CuentaClientePage() {
       },
       cliente: { nombre, telefono: cliente.telefono ?? null },
       fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
-      notas_pagadas: opts.notasPagadas ?? [],
-      total_aplicado: opts.totalAplicado,
-      saldo_restante: opts.saldoRestante,
-      metodo: opts.metodo,
+      total_aplicado: opts.monto,
+      saldo_restante: opts.saldoDespues,
       concepto: opts.concepto,
     };
     try {
@@ -131,37 +123,19 @@ export default function CuentaClientePage() {
     setFormError(null);
     setAbonoSubmitting(true);
     try {
-      if (abonoDestino === 'VENTAS') {
-        const result = await api.post<AbonarCuentaResult>(`/clientes/${clienteId}/abonar-cuenta`, {
-          monto: abonoMonto,
-          metodo: abonoMetodo,
-          referencia: abonoReferencia || undefined,
-        });
-        void printAbonoTicket({
-          titulo: 'ABONO A VENTA A CRÉDITO',
-          totalAplicado: result.total_aplicado,
-          saldoRestante: Number(result.cliente.saldo_pendiente),
-          notasPagadas: result.notas_pagadas,
-          metodo: METODO_LABEL[abonoMetodo] ?? abonoMetodo,
-        });
-      } else {
-        const saldoRestante = Math.max(0, (cliente?.saldo_pendiente ?? 0) - abonoMonto);
-        await api.post(`/cuentas/${clienteId}/abonos`, {
-          monto: abonoMonto,
-          concepto: abonoConcepto || undefined,
-        });
-        void printAbonoTicket({
-          titulo: 'ABONO A CUENTA / OTRA DEUDA',
-          totalAplicado: abonoMonto,
-          saldoRestante,
-          concepto: abonoConcepto || 'Abono a cuenta',
-        });
-      }
-      setAbonoOpen(false);
-      setAbonoConfirmado({
+      const saldoRestante = Math.max(0, (cliente?.saldo_pendiente ?? 0) - abonoMonto);
+      await api.post(`/cuentas/${clienteId}/abonos`, {
         monto: abonoMonto,
-        saldoRestante: Math.max(0, (cliente?.saldo_pendiente ?? 0) - abonoMonto),
+        concepto: abonoConcepto || undefined,
       });
+      void printMovimientoTicket({
+        tipo: 'ABONO',
+        monto: abonoMonto,
+        saldoDespues: saldoRestante,
+        concepto: abonoConcepto || 'Abono a cuenta',
+      });
+      setAbonoOpen(false);
+      setAbonoConfirmado({ monto: abonoMonto, saldoRestante });
       load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Error al registrar abono');
@@ -173,7 +147,13 @@ export default function CuentaClientePage() {
   async function onAjuste(data: AjusteForm) {
     setFormError(null);
     try {
-      await api.post(`/cuentas/${clienteId}/ajustes`, data);
+      const mov = await api.post<MovimientoCuenta>(`/cuentas/${clienteId}/ajustes`, data);
+      void printMovimientoTicket({
+        tipo: data.tipo,
+        monto: Number(mov.monto),
+        saldoDespues: Number(mov.saldo_despues),
+        concepto: data.concepto,
+      });
       setAjusteOpen(false);
       resetAjuste({ tipo: 'CARGO' });
       load();
@@ -258,6 +238,9 @@ export default function CuentaClientePage() {
           <div className="rounded-xl p-4 border border-steel-200 bg-white">
             <p className="text-body-sm text-steel-500 mb-1">Ventas a crédito</p>
             <p className="text-display-sm font-bold text-steel-900">{formatPrecio(saldoVentasCredito)}</p>
+            {saldoVentasCredito > 0 && (
+              <p className="text-meta text-steel-400 mt-1">Se paga desde la nota, en Ventas</p>
+            )}
           </div>
           <div className="rounded-xl p-4 border border-steel-200 bg-white">
             <p className="text-body-sm text-steel-500 mb-1">Otras deudas / otros conceptos</p>
@@ -295,17 +278,14 @@ export default function CuentaClientePage() {
         </div>
       )}
 
-      {/* Acciones */}
-      {cliente && cliente.saldo_pendiente > 0 && (
+      {/* Acciones — solo "otras deudas": las ventas a crédito se abonan desde Ventas */}
+      {cliente && (
         <div className="flex gap-2 mb-6">
-          {canAbono && (
+          {canAbono && saldoOtrasDeudas > 0 && (
             <Button
               onClick={() => {
                 setFormError(null);
-                setAbonoDestino(saldoVentasCredito > 0 ? 'VENTAS' : 'OTRAS');
                 setAbonoMonto(0);
-                setAbonoMetodo('EFECTIVO');
-                setAbonoReferencia('');
                 setAbonoConcepto('');
                 setAbonoOpen(true);
               }}
@@ -315,21 +295,6 @@ export default function CuentaClientePage() {
               Registrar abono
             </Button>
           )}
-          {canAjuste && (
-            <Button
-              variant="secondary"
-              onClick={() => { setFormError(null); resetAjuste({ tipo: 'CARGO' }); setAjusteOpen(true); }}
-              className="flex items-center gap-1.5"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Ajuste manual
-            </Button>
-          )}
-        </div>
-      )}
-
-      {cliente && cliente.saldo_pendiente === 0 && canAbono && (
-        <div className="flex gap-2 mb-6">
           {canAjuste && (
             <Button
               variant="secondary"
@@ -456,36 +421,6 @@ export default function CuentaClientePage() {
         size="sm"
       >
         <div className="space-y-4">
-          {saldoVentasCredito > 0 && saldoOtrasDeudas > 0 && (
-            <div>
-              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Aplicar a</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAbonoDestino('VENTAS')}
-                  className={`flex-1 rounded-md border px-3 py-2 text-body-sm font-medium transition-colors ${
-                    abonoDestino === 'VENTAS'
-                      ? 'border-brand-600 bg-brand-50 text-brand-700'
-                      : 'border-steel-300 text-steel-600 hover:bg-steel-50'
-                  }`}
-                >
-                  Ventas a crédito
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAbonoDestino('OTRAS')}
-                  className={`flex-1 rounded-md border px-3 py-2 text-body-sm font-medium transition-colors ${
-                    abonoDestino === 'OTRAS'
-                      ? 'border-brand-600 bg-brand-50 text-brand-700'
-                      : 'border-steel-300 text-steel-600 hover:bg-steel-50'
-                  }`}
-                >
-                  Otras deudas
-                </button>
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
               Monto <span className="text-brand-600">*</span>
@@ -499,43 +434,18 @@ export default function CuentaClientePage() {
               onChange={(e) => setAbonoMonto(parseFloat(e.target.value) || 0)}
             />
             <p className="text-meta text-steel-400 mt-1">
-              Saldo en {abonoDestino === 'VENTAS' ? 'ventas a crédito' : 'otras deudas'}: {formatPrecio(abonoDestino === 'VENTAS' ? saldoVentasCredito : saldoOtrasDeudas)}
+              Saldo en otras deudas: {formatPrecio(saldoOtrasDeudas)}
             </p>
           </div>
 
-          {abonoDestino === 'VENTAS' ? (
-            <>
-              <div>
-                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Método</label>
-                <select
-                  className="h-9 w-full rounded-md border border-steel-300 bg-white px-3 text-body text-steel-900 focus:outline-none focus:ring-2 focus:ring-brand-600"
-                  value={abonoMetodo}
-                  onChange={(e) => setAbonoMetodo(e.target.value)}
-                >
-                  {METODOS_PAGO.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
-                </select>
-              </div>
-              {abonoMetodo !== 'EFECTIVO' && (
-                <div>
-                  <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Referencia</label>
-                  <Input
-                    placeholder="Últimos 4 / folio…"
-                    value={abonoReferencia}
-                    onChange={(e) => setAbonoReferencia(e.target.value)}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <div>
-              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
-              <Input
-                placeholder="Pago en efectivo, transferencia…"
-                value={abonoConcepto}
-                onChange={(e) => setAbonoConcepto(e.target.value)}
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Concepto</label>
+            <Input
+              placeholder="Pago en efectivo, transferencia…"
+              value={abonoConcepto}
+              onChange={(e) => setAbonoConcepto(e.target.value)}
+            />
+          </div>
 
           {formError && (
             <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
