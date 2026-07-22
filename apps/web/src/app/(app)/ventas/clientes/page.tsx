@@ -69,6 +69,9 @@ export default function ClientesVentasPage() {
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canEdit = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canVender = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
+  // Ajuste manual de saldo (agregar deuda a mano) — mismo rol que /credito/[clienteId],
+  // no ENCARGADO: los abonos a notas en crédito sí son de ENCARGADO, esto no.
+  const canAjusteManual = ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? '');
 
   const {
     register, handleSubmit, reset, formState: { errors, isSubmitting },
@@ -321,7 +324,7 @@ export default function ClientesVentasPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {(c.saldo_pendiente > 0 || c.limite_credito > 0) && (
+                {(c.saldo_pendiente > 0 || c.limite_credito > 0) ? (
                   <button
                     onClick={() => void openCuenta(c)}
                     className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors"
@@ -329,6 +332,17 @@ export default function ClientesVentasPage() {
                   >
                     <BookOpen className="h-3.5 w-3.5" />
                     Cuenta
+                  </button>
+                ) : canAjusteManual && (
+                  // Sin saldo/límite todavía no hay nada que "ver", pero un admin puede
+                  // necesitar registrar la primera deuda manual (ajuste) de este cliente.
+                  <button
+                    onClick={() => router.push(`/credito/${c.id}`)}
+                    className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors"
+                    title="Agregar ajuste manual de saldo"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Ajuste
                   </button>
                 )}
                 {canVender && (
