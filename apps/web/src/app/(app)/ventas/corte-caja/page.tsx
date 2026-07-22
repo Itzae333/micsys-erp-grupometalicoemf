@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '@/lib/api/client';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import { EMPRESA_METALICOS_LYEVA_ID } from '@/lib/empresas';
+import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { getPendingCount } from '@/lib/db/sync-queue';
 import { Button } from '@/components/ui/button';
@@ -191,6 +191,9 @@ export default function CorteCajaPage() {
           total_gastos_efectivo: data.total_gastos_efectivo ?? data.total_gastos,
           total_neto: data.total_neto,
           total_entregar_efectivo: data.total_entregar_efectivo ?? data.por_metodo?.['EFECTIVO']?.total ?? 0,
+          // EMFIMIFAR pidió que el ticket resalte el efectivo arriba en vez de "Total
+          // de ventas" — personalización puntual de esa empresa, ver EMPRESA_EMFIMIFAR_ID.
+          resaltar_efectivo: empresa.id === EMPRESA_EMFIMIFAR_ID,
           por_metodo: data.por_metodo,
           por_estatus: data.por_estatus,
           pagos_credito: {

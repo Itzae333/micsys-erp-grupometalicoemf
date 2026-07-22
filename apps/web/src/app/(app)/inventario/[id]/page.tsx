@@ -202,7 +202,10 @@ export default function ArticuloDetailPage() {
 
   if (!articulo) return null;
 
-  const activePrices = schema?.precios.filter((p) => p.activa) ?? [];
+  // Orden de precio_1..10, no el orden de despliegue configurable (ese es para
+  // la pantalla de Configuración → Precios, aquí siempre va por número).
+  const activePrices = (schema?.precios.filter((p) => p.activa) ?? [])
+    .sort((a, b) => a.numero - b.numero);
   const activeExistencias = schema?.existencias.filter((e) => e.activa) ?? [];
 
   return (

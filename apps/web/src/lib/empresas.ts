@@ -4,3 +4,8 @@
 // configuración por empresa en el proyecto; se resuelve así por ser casos de
 // una sola empresa.
 export const EMPRESA_METALICOS_LYEVA_ID = 'metalicos-leyva-id';
+
+// EMFIMIFAR pidió que el ticket de Corte de Caja resalte el total en efectivo
+// (lo que les importa para el arqueo físico) en vez de "Total de ventas" —
+// mismo criterio de personalización puntual por empresa que Metálicos Lyeva.
+export const EMPRESA_EMFIMIFAR_ID = 'emfimifar-id';

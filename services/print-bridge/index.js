@@ -501,30 +501,64 @@ function buildEscPosBuffer(ticket) {
 
     // ── Totales ──────────────────────────────────────────
     push(sep('='));
-    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(Number(ticket.total_ventas ?? 0))));
-    push(CMD.NORMAL, CMD.BOLD_OFF);
-    push(sep('-'));
 
-    const ventasCredito = ticket.por_estatus?.CREDITO;
-    if (ventasCredito && Number(ventasCredito.total ?? 0) > 0) {
-      push(dotRow('VENTAS A CREDITO (' + ventasCredito.count + ')', '$' + formatMoney(Number(ventasCredito.total))));
+    if (ticket.resaltar_efectivo) {
+      // EMFIMIFAR: lo que a las cajeras les importa para el arqueo físico es el
+      // efectivo, no "total de ventas" — se resalta arriba y el resto baja.
+      const efvo = ticket.por_metodo?.EFECTIVO ?? { count: 0, total: 0 };
+      push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+      push(dotRow('TOTAL EN EFECTIVO', '$' + formatMoney(Number(efvo.total))));
+      push(CMD.NORMAL, CMD.BOLD_OFF);
       push(sep('-'));
-    }
 
-    for (const m of METODOS) {
-      const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
-      push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
-    }
+      push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(Number(ticket.total_ventas ?? 0))));
 
-    if (ticket.pagos_credito && Number(ticket.pagos_credito.total ?? 0) > 0) {
+      const ventasCreditoEmf = ticket.por_estatus?.CREDITO;
+      if (ventasCreditoEmf && Number(ventasCreditoEmf.total ?? 0) > 0) {
+        push(dotRow('VENTAS A CREDITO (' + ventasCreditoEmf.count + ')', '$' + formatMoney(Number(ventasCreditoEmf.total))));
+      }
+
+      for (const m of METODOS) {
+        if (m === 'EFECTIVO') continue; // ya se mostró arriba en grande
+        const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
+        push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
+      }
+
+      if (ticket.pagos_credito && Number(ticket.pagos_credito.total ?? 0) > 0) {
+        push(sep('-'));
+        push(dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total))));
+      }
+
+      if (Number(ticket.total_gastos ?? 0) > 0) {
+        push(sep('-'));
+        push(dotRow('TOTAL GASTOS', '-$' + formatMoney(Number(ticket.total_gastos))));
+      }
+    } else {
+      push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+      push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(Number(ticket.total_ventas ?? 0))));
+      push(CMD.NORMAL, CMD.BOLD_OFF);
       push(sep('-'));
-      push(dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total))));
-    }
 
-    if (Number(ticket.total_gastos ?? 0) > 0) {
-      push(sep('-'));
-      push(dotRow('TOTAL GASTOS', '-$' + formatMoney(Number(ticket.total_gastos))));
+      const ventasCredito = ticket.por_estatus?.CREDITO;
+      if (ventasCredito && Number(ventasCredito.total ?? 0) > 0) {
+        push(dotRow('VENTAS A CREDITO (' + ventasCredito.count + ')', '$' + formatMoney(Number(ventasCredito.total))));
+        push(sep('-'));
+      }
+
+      for (const m of METODOS) {
+        const res = ticket.por_metodo?.[m] ?? { count: 0, total: 0 };
+        push(dotRow('TOTAL EN ' + norm((METODO_LABELS[m] ?? m).toUpperCase()), '$' + formatMoney(Number(res.total))));
+      }
+
+      if (ticket.pagos_credito && Number(ticket.pagos_credito.total ?? 0) > 0) {
+        push(sep('-'));
+        push(dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total))));
+      }
+
+      if (Number(ticket.total_gastos ?? 0) > 0) {
+        push(sep('-'));
+        push(dotRow('TOTAL GASTOS', '-$' + formatMoney(Number(ticket.total_gastos))));
+      }
     }
 
     push(sep('='));
