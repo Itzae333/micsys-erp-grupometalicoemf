@@ -356,7 +356,7 @@ export default function ClientesVentasPage() {
             {/* Límite de crédito */}
             <div>
               <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Límite de crédito ($)</label>
-              <Input type="number" min="0" step="100" placeholder="0.00" {...register('limite_credito', { valueAsNumber: true })} />
+              <Input type="number" min="0" step="100" placeholder="0.00" {...register('limite_credito')} />
               <p className="text-meta text-steel-400 mt-1">
                 Deja en 0 si el cliente no tiene crédito asignado.
               </p>

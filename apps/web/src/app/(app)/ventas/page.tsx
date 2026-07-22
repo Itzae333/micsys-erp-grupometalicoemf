@@ -91,6 +91,11 @@ export default function VentasPage() {
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  // Debounced: q se actualiza en cada tecla (para que el input responda al instante),
+  // qServer solo 300ms después de dejar de escribir — evita un fetch por cada tecla
+  // y es lo que realmente busca en el backend contra TODAS las notas, no solo la
+  // página actual (antes q solo filtraba las 20 notas ya cargadas en pantalla).
+  const [qServer, setQServer] = useState('');
   const [estatusFiltro, setEstatusFiltro] = useState('');
   const [fechaFiltro, setFechaFiltro] = useState<'' | 'hoy' | 'semana' | 'mes' | 'año'>('hoy');
 
@@ -308,6 +313,7 @@ export default function VentasPage() {
       if (estatusFiltro) params.set('estatus', estatusFiltro);
       const desde = getFechaDesde(fechaFiltro);
       if (desde) params.set('desde', desde);
+      if (qServer) params.set('q', qServer);
       const res = await api.get<NotasVentaPage>(`/ventas?${params}`);
       setNotas(res.data);
       setTotal(res.total);
@@ -317,9 +323,17 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, estatusFiltro, fechaFiltro]);
+  }, [page, estatusFiltro, fechaFiltro, qServer]);
 
   useEffect(() => { loadNotas(); }, [loadNotas]);
+
+  // Debounce de 300ms antes de mandar la búsqueda al backend.
+  useEffect(() => {
+    const t = setTimeout(() => setQServer(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => { setPage(1); }, [qServer]);
 
   // ── Sync drafts de carrito cuando cambia la nota activa ──
   useEffect(() => {
@@ -1210,7 +1224,18 @@ export default function VentasPage() {
                               />
                             </td>
                             <td className="px-4 py-2.5 text-right font-semibold text-steel-900 whitespace-nowrap">
-                              {formatPrecio(l.subtotal)}
+                              {(() => {
+                                // Recalcula en vivo con lo que se está escribiendo (draft), sin
+                                // esperar al blur que dispara el guardado real contra el backend.
+                                const cantDraft = lineaDraft[l.id]?.cantidad;
+                                const precioDraft = lineaDraft[l.id]?.precio;
+                                const cant = cantDraft !== undefined ? parseFloat(cantDraft) : l.cantidad;
+                                const precio = precioDraft !== undefined ? parseFloat(precioDraft) : l.precio_unitario;
+                                const subtotalPreview = Number.isFinite(cant) && Number.isFinite(precio)
+                                  ? cant * precio * (1 - (l.descuento ?? 0) / 100)
+                                  : l.subtotal;
+                                return formatPrecio(subtotalPreview);
+                              })()}
                             </td>
                             <td className="px-2 py-2.5">
                               <button

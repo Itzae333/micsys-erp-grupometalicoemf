@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto } from './dto/ventas.dto';
 import type { Prisma } from '@grupometalicoemf/database';
-import { inicioDiaMx, finDiaMx } from '../common/utils/fecha-mx';
+import { inicioDiaMx, finDiaMx, rangoCierreNota, antesDeCierreNota } from '../common/utils/fecha-mx';
 
 const NOTA_INCLUDE = {
   cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true } },
@@ -1004,10 +1004,13 @@ export class VentasService {
       estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'INCOMPLETA', 'FINALIZADA'] as any[] },
     };
     if (desde || hasta) {
-      where.created_at = {
+      // Por cerrada_at (cuándo se cobró), no created_at (cuándo se creó el
+      // registro) — una cotización convertida a venta días después debe
+      // aparecer en el corte del día en que se cobró, no en el de la cotización.
+      Object.assign(where, rangoCierreNota({
         ...(desde ? { gte: inicioDiaMx(desde) } : {}),
         ...(hasta ? { lte: finDiaMx(hasta) } : {}),
-      };
+      }));
     }
 
     const whereAnticipos: Prisma.AnticiposPedidoWhereInput = { ubicacion_id: ubicacionId };
@@ -1026,12 +1029,16 @@ export class VentasService {
       };
     }
 
-    // Pagos de crédito: abonos cobrados en el rango sobre notas creadas ANTES del rango
-    // (ver ClientesService.abonarCuenta, que crea estos Pago sobre la nota original).
+    // Pagos de crédito: abonos cobrados en el rango sobre notas que YA eran
+    // venta antes del rango (ver ClientesService.abonarCuenta, que crea estos
+    // Pago sobre la nota original). Se compara contra el cierre efectivo
+    // (cerrada_at) y no created_at — si no, una cotización convertida y
+    // cobrada hoy (created_at viejo) se confundiría con un abono a una deuda
+    // vieja, en vez de contarse como la venta nueva que es.
     const wherePagosCredito: Prisma.PagoWhereInput = {
       nota: {
         ubicacion_id: ubicacionId,
-        ...(desde ? { created_at: { lt: inicioDiaMx(desde) } } : {}),
+        ...(desde ? antesDeCierreNota(inicioDiaMx(desde)) : {}),
       },
     };
     if (desde || hasta) {
@@ -1049,7 +1056,7 @@ export class VentasService {
       tipo: 'ABONO',
       nota: {
         ubicacion_id: ubicacionId,
-        ...(desde ? { created_at: { lt: inicioDiaMx(desde) } } : {}),
+        ...(desde ? antesDeCierreNota(inicioDiaMx(desde)) : {}),
       },
     };
     if (desde || hasta) {
@@ -1062,7 +1069,8 @@ export class VentasService {
     const [notas, anticiposPedido, gastos, pagosCredito, movimientosAbono] = await Promise.all([
       this.prisma.notaVenta.findMany({
         where,
-        orderBy: { created_at: 'asc' },
+        // Ordenado en memoria más abajo por fecha de cierre efectiva (cerrada_at
+        // ?? created_at) — Prisma no soporta ordenar por un COALESCE de columnas.
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
           usuario: { select: { id: true, nombre: true, apellidos: true } },
@@ -1100,6 +1108,12 @@ export class VentasService {
         },
       }),
     ]);
+
+    // Una cotización convertida y cobrada hoy conserva su created_at original
+    // (el día en que se cotizó) — ordenar por ahí la haría aparecer fuera de
+    // lugar entre las notas de hoy (folio viejo, mezclado con folios de hoy).
+    // Se ordena por cuándo se cobró de verdad.
+    notas.sort((a, b) => (a.cerrada_at ?? a.created_at).getTime() - (b.cerrada_at ?? b.created_at).getTime());
 
     const metodos: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
@@ -1246,7 +1260,9 @@ export class VentasService {
         estatus: n.estatus,
         total: notaTotal,
         cambio,
-        created_at: n.created_at,
+        // La hora que se muestra en el corte es cuándo se cobró, no cuándo se
+        // creó el registro (una cotización convertida hoy trae created_at viejo).
+        created_at: n.cerrada_at ?? n.created_at,
         cliente: n.cliente
           ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
           : { nombre: 'MOSTRADOR' },
