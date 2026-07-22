@@ -513,7 +513,10 @@ function buildEscPosBuffer(ticket) {
       push(CMD.NORMAL, CMD.BOLD_OFF);
       push(sep('-'));
 
-      push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(Number(ticket.total_ventas ?? 0))));
+      // A petición de EMFIMIFAR: "Total de ventas" engloba los anticipos de
+      // pedidos del período (se suman), no solo las notas cerradas.
+      const totalVentasConAnticipos = Number(ticket.total_ventas ?? 0) + Number(ticket.anticipos_pedido?.total ?? 0);
+      push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(totalVentasConAnticipos)));
 
       const ventasCreditoEmf = ticket.por_estatus?.CREDITO;
       if (ventasCreditoEmf && Number(ventasCreditoEmf.total ?? 0) > 0) {
