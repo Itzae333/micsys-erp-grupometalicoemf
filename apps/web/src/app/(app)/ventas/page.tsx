@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import { EMPRESA_METALICOS_LYEVA_ID } from '@/lib/empresas';
+import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import type { NotasVentaPage, NotaVenta, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
@@ -722,7 +722,9 @@ export default function VentasPage() {
         clave: l.clave,
         descripcion: [
           l.articulo?.descripcion_1, l.articulo?.descripcion_2,
-          l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5,
+          l.articulo?.descripcion_3, l.articulo?.descripcion_4,
+          // EMFIMIFAR pidió quitar descripción 5 del ticket impreso (no de la nota).
+          empresa?.id === EMPRESA_EMFIMIFAR_ID ? null : l.articulo?.descripcion_5,
         ].filter((d): d is string => !!d).join(' · ') || null,
         cantidad: l.cantidad,
         precio: l.precio_unitario,
