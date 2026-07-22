@@ -415,6 +415,22 @@ export default function CorteCajaPage() {
               <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
                 Pagos de crédito
               </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                {metodos.map((m) => {
+                  const res = pagosCredito.por_metodo[m] ?? { count: 0, total: 0 };
+                  if (res.count === 0) return null;
+                  return (
+                    <div key={m} className="bg-white rounded-xl border border-steel-200 p-3 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        {METODO_ICON[m]}
+                        <span className="text-xs font-medium text-steel-600">{METODO_LABEL[m]}</span>
+                      </div>
+                      <p className="text-lg font-bold text-steel-900">{fmt(res.total)}</p>
+                      <p className="text-xs text-steel-400">{res.count} pago{res.count !== 1 ? 's' : ''}</p>
+                    </div>
+                  );
+                })}
+              </div>
               {agruparPorUsuario && (pagosCredito.por_usuario?.length ?? 0) > 0 ? (
                 <div className="space-y-4">
                   {pagosCredito.por_usuario!.map((grupo) => (
@@ -494,6 +510,22 @@ export default function CorteCajaPage() {
               <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
                 Anticipos de pedidos
               </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                {metodos.map((m) => {
+                  const res = anticipos.por_metodo[m] ?? { count: 0, total: 0 };
+                  if (res.count === 0) return null;
+                  return (
+                    <div key={m} className="bg-white rounded-xl border border-steel-200 p-3 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        {METODO_ICON[m]}
+                        <span className="text-xs font-medium text-steel-600">{METODO_LABEL[m]}</span>
+                      </div>
+                      <p className="text-lg font-bold text-steel-900">{fmt(res.total)}</p>
+                      <p className="text-xs text-steel-400">{res.count} anticipo{res.count !== 1 ? 's' : ''}</p>
+                    </div>
+                  );
+                })}
+              </div>
               <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
