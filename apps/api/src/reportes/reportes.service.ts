@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
-import { rangoCierreNota } from '../common/utils/fecha-mx';
 
 function serializeDecimal(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -122,7 +121,7 @@ export class ReportesService {
         where: {
           ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
-          ...rangoCierreNota({ gte: iniHoy, lte: finHoy }),
+          created_at: { gte: iniHoy, lte: finHoy },
         },
         _sum: { total: true },
         _count: true,
@@ -131,7 +130,7 @@ export class ReportesService {
         where: {
           ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
-          ...rangoCierreNota({ gte: iniMes }),
+          created_at: { gte: iniMes },
         },
         _sum: { total: true },
         _count: true,
@@ -161,7 +160,7 @@ export class ReportesService {
           nota: {
             ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO'] },
-            ...rangoCierreNota({ gte: iniMes }),
+            created_at: { gte: iniMes },
           },
         },
         _sum: { subtotal: true, cantidad: true },
@@ -170,14 +169,14 @@ export class ReportesService {
       }),
       this.prisma.$queryRaw<Array<{ dia: string; total: string; count: bigint }>>`
         SELECT
-          TO_CHAR(DATE_TRUNC('day', COALESCE(cerrada_at, created_at) - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
+          TO_CHAR(DATE_TRUNC('day', created_at - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
           CAST(SUM(total) AS FLOAT8)                          AS total,
           CAST(COUNT(*) AS INT4)                              AS count
         FROM notas_venta
         WHERE ubicacion_id = ${ubicacionId}
           AND estatus IN ('PAGADA', 'CREDITO')
-          AND COALESCE(cerrada_at, created_at) >= ${sieteDiasAtras}
-        GROUP BY DATE_TRUNC('day', COALESCE(cerrada_at, created_at) - INTERVAL '6 hours')
+          AND created_at >= ${sieteDiasAtras}
+        GROUP BY DATE_TRUNC('day', created_at - INTERVAL '6 hours')
         ORDER BY dia
       `,
     ]);
@@ -237,7 +236,7 @@ export class ReportesService {
         where: {
           ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
-          ...rangoCierreNota({ gte: iniHoy, lte: finHoy }),
+          created_at: { gte: iniHoy, lte: finHoy },
         },
         _sum: { total: true },
         _count: true,
@@ -248,7 +247,7 @@ export class ReportesService {
           ubicacion_id: ubicacionId,
           cliente_id: { not: null },
           estatus: { in: ['PAGADA', 'CREDITO'] },
-          ...rangoCierreNota({ gte: sieteDiasAtras }),
+          created_at: { gte: sieteDiasAtras },
         },
         _count: { _all: true },
         orderBy: { _count: { cliente_id: 'desc' } },
@@ -286,7 +285,7 @@ export class ReportesService {
         nota: {
           ubicacion_id: ubicacionId,
           estatus: { in: ['PAGADA', 'CREDITO'] },
-          ...rangoCierreNota({ gte: sieteDiasAtras }),
+          created_at: { gte: sieteDiasAtras },
         },
       },
       _sum: { cantidad: true },
@@ -494,11 +493,11 @@ export class ReportesService {
       ubicaciones.map(async (ub) => {
         const [hoyAgg, mesAgg, creditos] = await Promise.all([
           this.prisma.notaVenta.aggregate({
-            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, ...rangoCierreNota({ gte: iniHoy, lte: finHoy }) },
+            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniHoy, lte: finHoy } },
             _sum: { total: true }, _count: true,
           }),
           this.prisma.notaVenta.aggregate({
-            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, ...rangoCierreNota({ gte: iniMes }) },
+            where: { ubicacion_id: ub.id, estatus: { in: ['PAGADA', 'CREDITO'] }, created_at: { gte: iniMes } },
             _sum: { total: true }, _count: true,
           }),
           this.prisma.cliente.count({ where: { ubicacion_id: ub.id, saldo_pendiente: { gt: 0 } } }),
@@ -567,7 +566,7 @@ export class ReportesService {
 
     const baseWhere: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,
-      ...rangoCierreNota({ gte: desde, lte: hasta }),
+      created_at: { gte: desde, lte: hasta },
     };
     const cerradasWhere: Prisma.NotaVentaWhereInput = {
       ...baseWhere,
@@ -593,7 +592,7 @@ export class ReportesService {
             nota: {
               ubicacion_id: ubicacionId,
               estatus: { in: ['PAGADA', 'CREDITO'] },
-              ...rangoCierreNota({ gte: desde, lte: hasta }),
+              created_at: { gte: desde, lte: hasta },
             },
           },
           _sum: { monto: true },
@@ -609,15 +608,15 @@ export class ReportesService {
         }),
         this.prisma.$queryRaw<Array<{ dia: string; total: string; count: bigint }>>`
           SELECT
-            TO_CHAR(DATE_TRUNC('day', COALESCE(cerrada_at, created_at) - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
+            TO_CHAR(DATE_TRUNC('day', created_at - INTERVAL '6 hours'), 'YYYY-MM-DD') AS dia,
             CAST(SUM(total) AS FLOAT8)                          AS total,
             CAST(COUNT(*) AS INT4)                              AS count
           FROM notas_venta
           WHERE ubicacion_id = ${ubicacionId}
             AND estatus IN ('PAGADA', 'CREDITO')
-            AND COALESCE(cerrada_at, created_at) >= ${desde}
-            AND COALESCE(cerrada_at, created_at) <= ${hasta}
-          GROUP BY DATE_TRUNC('day', COALESCE(cerrada_at, created_at) - INTERVAL '6 hours')
+            AND created_at >= ${desde}
+            AND created_at <= ${hasta}
+          GROUP BY DATE_TRUNC('day', created_at - INTERVAL '6 hours')
           ORDER BY dia
         `,
       ]);
@@ -933,23 +932,15 @@ export class ReportesService {
       ubicacion_id: ubicacionId,
       created_at: { gte: desde, lte: hasta },
     };
-    // Las notas usan cerrada_at (cuándo se cobraron de verdad) — una cotización
-    // convertida a venta días después debe aparecer en el corte del día en que
-    // se cobró, no en el de la cotización. Gastos no tienen ese concepto, así
-    // que siguen por created_at (baseWhere, sin cambios).
-    const whereNotas = {
-      ubicacion_id: ubicacionId,
-      ...rangoCierreNota({ gte: desde, lte: hasta }),
-    };
 
     const [notas, pagosGrouped, abonosAgg, gastos] = await Promise.all([
       this.prisma.notaVenta.findMany({
-        where: { ...whereNotas, estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] } },
+        where: { ...baseWhere, estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] } },
+        orderBy: { created_at: 'asc' },
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
           pagos:   { where: { origen_anticipo_pedido: false }, select: { metodo: true, monto: true } },
         },
-        // Ordenado en memoria más abajo por fecha de cierre efectiva.
       }),
       this.prisma.pago.groupBy({
         by: ['metodo'],
@@ -960,7 +951,7 @@ export class ReportesService {
           nota: {
             ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] },
-            ...rangoCierreNota({ gte: desde, lte: hasta }),
+            created_at: { gte: desde, lte: hasta },
           },
         },
         _sum: { monto: true },
@@ -981,10 +972,6 @@ export class ReportesService {
         include: { usuario: { select: { nombre: true, apellidos: true } } },
       }),
     ]);
-
-    // Igual que en ventas.service.ts: una cotización convertida hoy conserva su
-    // created_at original — se ordena por cuándo se cobró de verdad.
-    notas.sort((a, b) => (a.cerrada_at ?? a.created_at).getTime() - (b.cerrada_at ?? b.created_at).getTime());
 
     const porMetodo: Record<string, { count: number; total: number }> = {};
     for (const p of pagosGrouped) {
