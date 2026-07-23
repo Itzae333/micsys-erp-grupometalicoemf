@@ -139,13 +139,6 @@ export class VentasController {
     return this.ventas.marcarPendiente(id, ubicacionId);
   }
 
-  @Patch(':id/convertir')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
-  @ApiOperation({ summary: 'Convertir cotización a nota de venta activa' })
-  convertir(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
-    return this.ventas.convertirAVenta(id, ubicacionId);
-  }
-
   @Patch(':id/cancelar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Cancelar nota de venta (solo si no está pagada, requiere motivo)' })
@@ -184,7 +177,7 @@ export class VentasController {
 
   @Post(':id/send-email')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
-  @ApiOperation({ summary: 'Enviar cotización o comprobante por correo electrónico' })
+  @ApiOperation({ summary: 'Enviar comprobante de venta por correo electrónico' })
   sendEmail(
     @Headers('x-empresa-id') empresaId: string,
     @Param('id') id: string,

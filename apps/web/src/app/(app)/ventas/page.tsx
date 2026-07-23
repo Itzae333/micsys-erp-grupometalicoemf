@@ -26,13 +26,11 @@ import { useToast } from '@/components/ui/toast';
 import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
-import { generateCotizacionPDF } from '@/lib/utils/cotizacion-pdf';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
-import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
-  COTIZACION: { label: 'Cotización', variant: 'cargada' },
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
   PENDIENTE:  { label: 'Pendiente',  variant: 'pending' },
   REABIERTA:  { label: 'En edición', variant: 'incomplete' },
@@ -46,7 +44,6 @@ const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid
 const NuevaNotaSchema = z.object({
   cliente_id: z.string().optional(),
   observaciones: z.string().optional(),
-  es_cotizacion: z.boolean().optional(),
 });
 type NuevaNotaForm = z.infer<typeof NuevaNotaSchema>;
 
@@ -105,9 +102,8 @@ export default function VentasPage() {
   const [clienteResultados, setClienteResultados] = useState<Cliente[]>([]);
   const [creatingNota, setCreatingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
-  const [modoCreacion, setModoCreacion] = useState<'venta' | 'cotizacion'>('venta');
 
-  // Dialog descartar cotización
+  // Dialog cancelar nota
   const [dlgDescartar, setDlgDescartar] = useState(false);
   const [descartando, setDescartando] = useState(false);
   const [motivoDescarte, setMotivoDescarte] = useState('');
@@ -127,7 +123,6 @@ export default function VentasPage() {
   // Inline editing del carrito
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
-  const [convirtiendo, setConvirtiendo] = useState(false);
   // Ticket preview
   const [showTicket, setShowTicket] = useState(false);
   const [showTicketCobrar, setShowTicketCobrar] = useState(false);
@@ -143,7 +138,7 @@ export default function VentasPage() {
   const [checkNotaPorPagar, setCheckNotaPorPagar] = useState(false);
 
   // Email / PDF
-  const [dlgEmail, setDlgEmail] = useState<'cotizacion' | 'ticket' | null>(null);
+  const [dlgEmail, setDlgEmail] = useState<'ticket' | null>(null);
   const [emailDest, setEmailDest] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -295,12 +290,10 @@ export default function VentasPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const clienteIdParam = params.get('cliente_id');
-    const cotizacionParam = params.get('cotizacion') === '1';
     if (clienteIdParam) {
-      const modo = cotizacionParam ? 'cotizacion' : 'venta';
       // Limpiar URL sin recargar
       window.history.replaceState({}, '', window.location.pathname);
-      openDlgNota(modo, clienteIdParam);
+      openDlgNota(clienteIdParam);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -462,10 +455,9 @@ export default function VentasPage() {
   // ── Form nueva nota ───────────────────────────────────────
   const notaForm = useForm<NuevaNotaForm>({ resolver: zodResolver(NuevaNotaSchema) });
 
-  async function openDlgNota(modo: 'venta' | 'cotizacion' = 'venta', preClienteId?: string) {
-    setModoCreacion(modo);
+  async function openDlgNota(preClienteId?: string) {
     setNotaError(null);
-    notaForm.reset({ es_cotizacion: modo === 'cotizacion' });
+    notaForm.reset({});
     setClienteResultados([]);
     if (preClienteId) {
       notaForm.setValue('cliente_id', preClienteId);
@@ -497,7 +489,6 @@ export default function VentasPage() {
       const nota = await api.post<NotaVenta>('/ventas', {
         cliente_id: clienteId,
         observaciones: data.observaciones || undefined,
-        es_cotizacion: modoCreacion === 'cotizacion',
         lineas: [],
       });
       // clienteSeleccionado ya viene del cliente elegido en el buscador del diálogo
@@ -611,8 +602,8 @@ export default function VentasPage() {
     }
   }
 
-  // ── Descartar cotización / cancelar nota abierta (conserva folio) ──
-  function openDescartarCotizacion(nota: NotaVenta) {
+  // ── Cancelar nota abierta (conserva folio) ──
+  function openCancelarNota(nota: NotaVenta) {
     setNotaActiva(nota);
     setMotivoDescarte('');
     setComentarioDescarte('');
@@ -620,7 +611,7 @@ export default function VentasPage() {
     setDlgDescartar(true);
   }
 
-  async function onDescartarCotizacion() {
+  async function onCancelarNota() {
     if (!notaActiva) return;
     if (!motivoDescarte) {
       setDescartarError('Selecciona un motivo');
@@ -649,7 +640,7 @@ export default function VentasPage() {
     }
   }
 
-  // ── Abrir nota/cotización para editar ─────────────────────
+  // ── Abrir nota para editar ─────────────────────────────────
   async function openEditarNota(nota: NotaVenta) {
     setLineaError(null);
     try {
@@ -664,32 +655,6 @@ export default function VentasPage() {
     } catch {
       router.push(`/ventas/${nota.id}`);
     }
-  }
-
-  // ── Convertir cotización a venta ──────────────────────────
-  async function convertirAVenta(nota: NotaVenta) {
-    if (convirtiendo) return;
-    setConvirtiendo(true);
-    try {
-      const notaActualizada = await api.patch<NotaVenta>(`/ventas/${nota.id}/convertir`, {});
-      patchNota(notaActualizada);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Error al convertir', 'error');
-    } finally {
-      setConvirtiendo(false);
-    }
-  }
-
-  // ── Enviar cotización por WhatsApp ─────────────────────────
-  function enviarCotizacionWhatsApp(nota: NotaVenta) {
-    const nombreCliente = nota.cliente
-      ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
-      : '';
-    const mensaje = `Hola ${nombreCliente}, aquí tu cotización #${String(nota.folio).padStart(4, '0')}`;
-    const link = buildWhatsAppClientLink(nota.cliente?.telefono, mensaje);
-    if (!link) return;
-    void generateCotizacionPDF(nota, empresa, ubicacion);
-    window.open(link, '_blank');
   }
 
   // ── Enviar ticket al print bridge ─────────────────────────
@@ -781,7 +746,6 @@ export default function VentasPage() {
   // ── Enviar email ──────────────────────────────────────────
   async function sendEmailNota(
     nota: NotaVenta,
-    tipo: 'cotizacion' | 'ticket',
     emailTo: string,
     extra?: { pagos?: { metodo: string; monto: number }[]; cambio?: number; tipo_cierre?: string },
   ) {
@@ -789,7 +753,7 @@ export default function VentasPage() {
     setEmailError(null);
     setEmailOk(false);
     try {
-      await api.post(`/ventas/${nota.id}/send-email`, { to: emailTo, tipo, extra });
+      await api.post(`/ventas/${nota.id}/send-email`, { to: emailTo, extra });
       setEmailOk(true);
       setTimeout(() => { setDlgEmail(null); setEmailOk(false); setPostCobro(null); }, 1800);
     } catch (err) {
@@ -949,8 +913,6 @@ export default function VentasPage() {
       .filter(Boolean).join(' ').toLowerCase().includes(qLow);
   });
 
-  const esCotizacionActiva = notaActiva?.estatus === 'COTIZACION';
-
   function getFechaDesde(filtro: string): string | undefined {
     const now = new Date();
     switch (filtro) {
@@ -979,7 +941,7 @@ export default function VentasPage() {
 
   return (
     <div>
-      {/* ── Split-view: editar nota / cotización ─────────── */}
+      {/* ── Split-view: editar nota de venta ─────────────── */}
       {dlgLinea && notaActiva && (
         <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden bg-white">
 
@@ -996,7 +958,7 @@ export default function VentasPage() {
               <div className="h-4 w-px bg-steel-200 flex-shrink-0" />
               <div className="min-w-0">
                 <span className="text-body font-semibold text-steel-900">
-                  {esCotizacionActiva ? 'Cotización' : 'Nota'} #{String(notaActiva.folio).padStart(4, '0')}
+                  Nota #{String(notaActiva.folio).padStart(4, '0')}
                 </span>
                 {notaActiva.cliente && (
                   <span className="ml-2 text-body-sm text-steel-400 truncate">
@@ -1006,42 +968,7 @@ export default function VentasPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {esCotizacionActiva && notaActiva.lineas.length > 0 && (
-                <>
-                  <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>PDF</Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!notaActiva.cliente?.telefono}
-                    title={!notaActiva.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
-                    onClick={() => enviarCotizacionWhatsApp(notaActiva)}
-                  >
-                    WhatsApp
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => { setEmailDest(notaActiva.cliente?.email ?? ''); setEmailError(null); setEmailOk(false); setDlgEmail('cotizacion'); }}
-                  >
-                    Enviar
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={convirtiendo}
-                    loading={convirtiendo}
-                    onClick={() => void convertirAVenta(notaActiva).then(() => setDlgLinea(false))}
-                  >
-                    Convertir a venta
-                  </Button>
-                </>
-              )}
-              {esCotizacionActiva && canWrite && (
-                <Button variant="ghost" size="sm" onClick={() => openDescartarCotizacion(notaActiva)}>
-                  <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
-                  Descartar
-                </Button>
-              )}
-              {!esCotizacionActiva && notaActiva.lineas.length > 0 && (
+              {notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
                   Cobrar — {formatPrecio(notaActiva.total)}
                 </Button>
@@ -1264,49 +1191,15 @@ export default function VentasPage() {
                     {formatPrecio(notaActiva.total)}
                   </span>
                 </div>
-                {!esCotizacionActiva && (
-                  <div className="px-4 pb-4">
-                    <Button
-                      className="w-full"
-                      disabled={notaActiva.lineas.length === 0}
-                      onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
-                    >
-                      Cobrar {formatPrecio(notaActiva.total)}
-                    </Button>
-                  </div>
-                )}
-                {esCotizacionActiva && notaActiva.lineas.length > 0 && (
-                  <div className="px-4 pb-2 flex gap-2">
-                    <Button variant="secondary" className="flex-1" onClick={() => generateCotizacionPDF(notaActiva, empresa, ubicacion)}>
-                      PDF
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="flex-1"
-                      disabled={!notaActiva.cliente?.telefono}
-                      title={!notaActiva.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
-                      onClick={() => enviarCotizacionWhatsApp(notaActiva)}
-                    >
-                      WhatsApp
-                    </Button>
-                    <Button
-                      className="flex-1"
-                      disabled={convirtiendo}
-                      loading={convirtiendo}
-                      onClick={() => void convertirAVenta(notaActiva).then(() => setDlgLinea(false))}
-                    >
-                      Convertir
-                    </Button>
-                  </div>
-                )}
-                {esCotizacionActiva && canWrite && (
-                  <div className="px-4 pb-4">
-                    <Button variant="ghost" className="w-full" onClick={() => openDescartarCotizacion(notaActiva)}>
-                      <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
-                      Descartar cotización
-                    </Button>
-                  </div>
-                )}
+                <div className="px-4 pb-4">
+                  <Button
+                    className="w-full"
+                    disabled={notaActiva.lineas.length === 0}
+                    onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
+                  >
+                    Cobrar {formatPrecio(notaActiva.total)}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -1332,7 +1225,7 @@ export default function VentasPage() {
             )}
             {canWrite && (
               <>
-                <Button variant="secondary" onClick={() => openDlgNota('cotizacion')}>
+                <Button variant="secondary" onClick={() => router.push('/ventas/cotizaciones')}>
                   <FileText className="h-4 w-4 mr-1.5" />
                   Cotización
                 </Button>
@@ -1340,7 +1233,7 @@ export default function VentasPage() {
                   <Zap className="h-4 w-4 mr-1.5" />
                   Venta rápida
                 </Button>
-                <Button onClick={() => openDlgNota('venta')}>
+                <Button onClick={() => openDlgNota()}>
                   <Plus className="h-4 w-4 mr-1.5" />
                   Nueva venta
                 </Button>
@@ -1369,7 +1262,7 @@ export default function VentasPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-wrap">
-                {(['', 'COTIZACION', 'ABIERTA', 'PENDIENTE', 'PAGADA', 'CREDITO', 'CANCELADA'] as const).map((est) => (
+                {(['', 'ABIERTA', 'PENDIENTE', 'PAGADA', 'CREDITO', 'CANCELADA'] as const).map((est) => (
                   <button
                     key={est}
                     onClick={() => { setEstatusFiltro(est); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
@@ -1461,7 +1354,7 @@ export default function VentasPage() {
                           ref={(el) => { rowRefs.current[i] = el; }}
                           onClick={() => void seleccionarNotaIdx(i)}
                           onDoubleClick={() => {
-                            if (nota.estatus === 'ABIERTA' || nota.estatus === 'COTIZACION') void openEditarNota(nota);
+                            if (nota.estatus === 'ABIERTA') void openEditarNota(nota);
                             else router.push(`/ventas/${nota.id}`);
                           }}
                           className={cn(
@@ -1548,7 +1441,7 @@ export default function VentasPage() {
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
                       <p className="text-body font-bold text-steel-900">
-                        {detalleNota.estatus === 'COTIZACION' ? 'Cotización' : 'Nota'} #{String(detalleNota.folio).padStart(4, '0')}
+                        Nota #{String(detalleNota.folio).padStart(4, '0')}
                       </p>
                       <p className="text-body-sm text-steel-500">
                         {new Date(detalleNota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -1618,29 +1511,10 @@ export default function VentasPage() {
 
                 {/* Acciones */}
                 <div className="flex flex-wrap gap-2">
-                  {(detalleNota.estatus === 'ABIERTA' || detalleNota.estatus === 'COTIZACION') && canWrite && (
+                  {detalleNota.estatus === 'ABIERTA' && canWrite && (
                     <Button variant="secondary" size="sm" onClick={() => void openEditarNota(detalleNota)}>
                       Agregar artículos
                     </Button>
-                  )}
-                  {detalleNota.estatus === 'COTIZACION' && detalleNota.lineas.length > 0 && (
-                    <>
-                      <Button variant="secondary" size="sm" onClick={() => generateCotizacionPDF(detalleNota, empresa, ubicacion)}>
-                        PDF
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={!detalleNota.cliente?.telefono}
-                        title={!detalleNota.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
-                        onClick={() => enviarCotizacionWhatsApp(detalleNota)}
-                      >
-                        WhatsApp
-                      </Button>
-                      <Button size="sm" disabled={convirtiendo} loading={convirtiendo} onClick={() => void convertirAVenta(detalleNota)}>
-                        Convertir a venta
-                      </Button>
-                    </>
                   )}
                   {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canWrite && (
                     <Button size="sm" onClick={() => openCobrar(detalleNota)}>
@@ -1653,7 +1527,7 @@ export default function VentasPage() {
                     </Button>
                   )}
                   {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canWrite && (
-                    <Button variant="ghost" size="sm" onClick={() => openDescartarCotizacion(detalleNota)}>
+                    <Button variant="ghost" size="sm" onClick={() => openCancelarNota(detalleNota)}>
                       <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
                       Cancelar
                     </Button>
@@ -1690,28 +1564,20 @@ export default function VentasPage() {
         printTicket={printTicket}
       />
 
-      {/* ── Dialog: crear nota / cotización ─────────────────── */}
+      {/* ── Dialog: crear nota de venta ─────────────────────── */}
       <Dialog
         open={dlgNota}
         onClose={() => setDlgNota(false)}
-        title={modoCreacion === 'cotizacion' ? 'Nueva cotización' : 'Nueva nota de venta'}
+        title="Nueva nota de venta"
         size="sm"
       >
         <form onSubmit={notaForm.handleSubmit(onCrearNota)} className="space-y-4">
-          {modoCreacion === 'cotizacion' && (
-            <div className="bg-steel-50 rounded-lg px-3 py-2.5 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-steel-500 flex-shrink-0" />
-              <p className="text-body-sm text-steel-600">
-                La cotización puede ser editada y convertida a venta cuando el cliente confirme.
-              </p>
-            </div>
-          )}
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
               Cliente <span className="text-steel-400 font-normal">(opcional)</span>
             </label>
             <Input
-              placeholder={modoCreacion === 'venta' ? 'Venta de mostrador (sin cliente)' : 'Sin cliente asignado'}
+              placeholder="Venta de mostrador (sin cliente)"
               value={clienteQ}
               onChange={(e) => {
                 setClienteQ(e.target.value);
@@ -1775,21 +1641,21 @@ export default function VentasPage() {
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setDlgNota(false)}>Cancelar</Button>
             <Button type="submit" loading={creatingNota}>
-              {modoCreacion === 'cotizacion' ? 'Crear cotización' : 'Crear nota'}
+              Crear nota
             </Button>
           </DialogFooter>
         </form>
       </Dialog>
 
-      {/* ── Dialog: descartar cotización ─────────────────── */}
+      {/* ── Dialog: cancelar nota ──────────────────────────── */}
       <Dialog
         open={dlgDescartar}
         onClose={() => setDlgDescartar(false)}
-        title={notaActiva?.estatus === 'COTIZACION' ? '¿Descartar cotización?' : '¿Cancelar nota?'}
+        title="¿Cancelar nota?"
         size="sm"
       >
         <p className="text-body text-steel-600 mb-4">
-          {notaActiva && `La ${notaActiva.estatus === 'COTIZACION' ? 'cotización' : 'nota'} #${String(notaActiva.folio).padStart(4, '0')} `}
+          {notaActiva && `La nota #${String(notaActiva.folio).padStart(4, '0')} `}
           quedará marcada como cancelada — el folio se conserva, no se borra el registro.
         </p>
         <div className="mb-3">
@@ -1817,8 +1683,8 @@ export default function VentasPage() {
         {descartarError && <p className="text-body-sm text-brand-600 mb-3">{descartarError}</p>}
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setDlgDescartar(false)}>No, mantener</Button>
-          <Button type="button" variant="destructive" loading={descartando} onClick={onDescartarCotizacion}>
-            {notaActiva?.estatus === 'COTIZACION' ? 'Sí, descartar' : 'Sí, cancelar'}
+          <Button type="button" variant="destructive" loading={descartando} onClick={onCancelarNota}>
+            Sí, cancelar
           </Button>
         </DialogFooter>
       </Dialog>
@@ -2554,7 +2420,7 @@ export default function VentasPage() {
       <Dialog
         open={!!dlgEmail}
         onClose={() => { setDlgEmail(null); setEmailOk(false); setEmailError(null); }}
-        title={dlgEmail === 'cotizacion' ? 'Enviar cotización por correo' : 'Enviar comprobante por correo'}
+        title="Enviar comprobante por correo"
         size="sm"
       >
         <div className="space-y-4">
@@ -2586,7 +2452,7 @@ export default function VentasPage() {
                   onClick={() => {
                     const nota = postCobro?.nota ?? notaActiva;
                     if (!nota || !dlgEmail) return;
-                    void sendEmailNota(nota, dlgEmail, emailDest, postCobro ? {
+                    void sendEmailNota(nota, emailDest, postCobro ? {
                       pagos: postCobro.pagos.filter((p) => p.monto > 0).map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
                       cambio: postCobro.cambio,
                       tipo_cierre: postCobro.tipoCierre,

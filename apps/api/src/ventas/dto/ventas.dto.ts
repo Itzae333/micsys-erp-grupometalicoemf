@@ -15,7 +15,6 @@ export class LineaVentaDto {
 export class CreateNotaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() cliente_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() observaciones?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() es_cotizacion?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => LineaVentaDto) lineas?: LineaVentaDto[];
 }
 
@@ -125,10 +124,6 @@ export class SendEmailDto {
   @ApiProperty({ description: 'Correo destino' })
   @IsEmail()
   to: string;
-
-  @ApiProperty({ enum: ['cotizacion', 'ticket'] })
-  @IsEnum(['cotizacion', 'ticket'])
-  tipo: 'cotizacion' | 'ticket';
 
   /** Datos adicionales para el comprobante de cobro (pagos, cambio, tipo_cierre) */
   @ApiPropertyOptional()

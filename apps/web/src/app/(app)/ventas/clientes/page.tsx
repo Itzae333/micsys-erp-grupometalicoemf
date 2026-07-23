@@ -226,7 +226,7 @@ export default function ClientesVentasPage() {
                 {canVender && (
                   <>
                     <button
-                      onClick={() => router.push(`/ventas?cliente_id=${c.id}&cotizacion=1`)}
+                      onClick={() => router.push(`/ventas/cotizaciones?cliente_id=${c.id}`)}
                       className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 px-2.5 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors"
                       title="Nueva cotización"
                     >

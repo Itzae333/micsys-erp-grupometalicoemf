@@ -1,7 +1,7 @@
 import { getTicketLogoUrl } from './ticket-logo';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { downloadHtmlAsPdf, sanitizeFilename } from './pdf-from-html';
-import type { NotaVenta } from '@/lib/types/api';
+import type { NotaCotizacion } from '@/lib/types/api';
 
 interface EmpresaPDF {
   nombre: string;
@@ -30,12 +30,15 @@ function fmt(n: number): string {
 }
 
 export async function generateCotizacionPDF(
-  nota: NotaVenta,
+  nota: NotaCotizacion,
   empresa: EmpresaPDF | null,
   ubicacion: UbicacionPDF | null,
 ): Promise<void> {
   const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
   const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  });
+  const vigenciaStr = new Date(nota.vigencia_hasta).toLocaleDateString('es-MX', {
     day: '2-digit', month: 'long', year: 'numeric',
   });
 
@@ -158,7 +161,7 @@ export async function generateCotizacionPDF(
       <div class="folio">${folioStr}</div>
       <div class="folio-meta">
         Fecha:&nbsp;<strong>${fechaStr}</strong><br>
-        <span class="folio-valida">Válida por 30 días</span>
+        <span class="folio-valida">Válida hasta el ${vigenciaStr}</span>
       </div>
     </div>
   </div>
@@ -207,7 +210,7 @@ export async function generateCotizacionPDF(
   ${nota.observaciones ? `<div class="obs"><strong>Observaciones:</strong>&nbsp;${nota.observaciones}</div>` : ''}
 
   <div class="footer">
-    <p>Esta cotización es válida por 30 días a partir de su fecha de emisión.</p>
+    <p>Esta cotización es válida hasta el ${vigenciaStr}.</p>
     <p>Precios sujetos a cambio sin previo aviso &nbsp;·&nbsp; ¡Gracias por su preferencia!</p>
   </div>
 

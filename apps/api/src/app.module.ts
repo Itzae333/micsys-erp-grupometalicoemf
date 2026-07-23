@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -29,10 +30,12 @@ import { CargasNotaModule } from './cargas-nota/cargas-nota.module';
 import { SolicitudesEdicionModule } from './solicitudes-edicion/solicitudes-edicion.module';
 import { MailModule } from './mail/mail.module';
 import { GastosModule } from './gastos/gastos.module';
+import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     PrismaModule,
     AuthModule,
@@ -59,6 +62,7 @@ import { GastosModule } from './gastos/gastos.module';
     MailModule,
     SolicitudesEdicionModule,
     GastosModule,
+    CotizacionesModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },

@@ -145,7 +145,7 @@ export interface Cliente {
   updated_at: string;
 }
 
-export type EstatusNota = 'COTIZACION' | 'ABIERTA' | 'PENDIENTE' | 'PAGADA' | 'CREDITO' | 'CANCELADA' | 'REABIERTA' | 'INCOMPLETA' | 'FINALIZADA';
+export type EstatusNota = 'ABIERTA' | 'PENDIENTE' | 'PAGADA' | 'CREDITO' | 'CANCELADA' | 'REABIERTA' | 'INCOMPLETA' | 'FINALIZADA';
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO';
 
 export interface NotaVentaLinea {
@@ -218,6 +218,60 @@ export interface NotaVenta {
   created_at: string;
   updated_at: string;
   cerrada_at: string | null;
+}
+
+// ─── Cotizaciones — tablas y folio propios, independientes de NotaVenta ───
+
+export type EstatusCotizacion = 'ACTIVA' | 'CONVERTIDA' | 'CANCELADA' | 'VENCIDA';
+
+export interface NotaCotizacionLinea {
+  id: string;
+  nota_cotizacion_id: string;
+  articulo_id: string;
+  articulo: {
+    id: string; clave: string;
+    descripcion_1: string | null; descripcion_2: string | null;
+    descripcion_3: string | null; descripcion_4: string | null; descripcion_5: string | null;
+  } | null;
+  clave: string;
+  cantidad: number;
+  precio_unitario: number;
+  descuento: number;
+  subtotal: number;
+  created_at: string;
+}
+
+export interface NotaCotizacion {
+  id: string;
+  folio: number;
+  ubicacion_id: string;
+  usuario_id: string;
+  cliente_id: string | null;
+  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null } | null;
+  usuario: { id: string; nombre: string; apellidos: string } | null;
+  estatus: EstatusCotizacion;
+  subtotal: number;
+  descuento: number;
+  total: number;
+  observaciones: string | null;
+  vigencia_hasta: string;
+  motivo_cancelacion: string | null;
+  motivo_cancelacion_comentario: string | null;
+  cancelado_por_id: string | null;
+  cancelado_at: string | null;
+  venta_id: string | null;
+  convertida_at: string | null;
+  lineas: NotaCotizacionLinea[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotasCotizacionPage {
+  data: NotaCotizacion[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
 }
 
 export const MOTIVOS_CANCELACION: { value: string; label: string }[] = [

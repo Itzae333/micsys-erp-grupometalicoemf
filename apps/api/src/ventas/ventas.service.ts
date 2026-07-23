@@ -120,7 +120,7 @@ export class VentasService {
           usuario_id: usuarioId,
           cliente_id: dto.cliente_id ?? null,
           observaciones: dto.observaciones ?? null,
-          estatus: dto.es_cotizacion ? 'COTIZACION' : 'ABIERTA',
+          estatus: 'ABIERTA',
           subtotal: 0,
           total: 0,
         },
@@ -159,8 +159,8 @@ export class VentasService {
 
   async addLinea(notaId: string, dto: AddLineaDto, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
-      throw new ForbiddenException('Solo se pueden agregar líneas a notas ABIERTA, COTIZACION o REABIERTA');
+    if (!['ABIERTA', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden agregar líneas a notas ABIERTA o REABIERTA');
     }
 
     const art = await this.prisma.articulo.findFirst({
@@ -191,8 +191,8 @@ export class VentasService {
 
   async updateLinea(notaId: string, lineaId: string, dto: UpdateLineaDto, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
-      throw new ForbiddenException('Solo se pueden editar líneas de notas ABIERTA, COTIZACION o REABIERTA');
+    if (!['ABIERTA', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden editar líneas de notas ABIERTA o REABIERTA');
     }
 
     const linea = await this.prisma.notaVentaLinea.findFirst({
@@ -218,8 +218,8 @@ export class VentasService {
 
   async removeLinea(notaId: string, lineaId: string, ubicacionId: string) {
     const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (!['ABIERTA', 'COTIZACION', 'REABIERTA'].includes(nota.estatus)) {
-      throw new ForbiddenException('Solo se pueden eliminar líneas de notas ABIERTA, COTIZACION o REABIERTA');
+    if (!['ABIERTA', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se pueden eliminar líneas de notas ABIERTA o REABIERTA');
     }
 
     const linea = await this.prisma.notaVentaLinea.findFirst({
@@ -387,21 +387,6 @@ export class VentasService {
     return this.serializeNota(result);
   }
 
-  // ─── Convertir cotización a nota abierta ──────────────────────
-
-  async convertirAVenta(notaId: string, ubicacionId: string) {
-    const nota = await this.findOneRaw(notaId, ubicacionId);
-    if (nota.estatus !== 'COTIZACION') {
-      throw new BadRequestException('Solo se pueden convertir cotizaciones a notas de venta');
-    }
-    const result = await this.prisma.notaVenta.update({
-      where: { id: notaId },
-      data: { estatus: 'ABIERTA' },
-      include: NOTA_INCLUDE,
-    });
-    return this.serializeNota(result);
-  }
-
   // ─── Cancelar ─────────────────────────────────────────────────
 
   async cancelar(notaId: string, dto: CancelarNotaDto, ubicacionId: string, usuarioId: string) {
@@ -534,6 +519,49 @@ export class VentasService {
       SELECT folio FROM notas_venta WHERE ubicacion_id = ${ubicacionId} ORDER BY folio DESC LIMIT 1 FOR UPDATE
     `;
     return (rows[0]?.folio ?? 0) + 1;
+  }
+
+  // ─── Crear venta a partir de una conversión de cotización ─────
+  // Llamado por CotizacionesService dentro de su propia transacción: crea una
+  // NotaVenta nueva (folio propio, created_at = ahora) con las líneas
+  // copiadas de la cotización. El folio de ventas nunca se toca al crear
+  // cotizaciones — solo se consume aquí, en el momento real de la conversión.
+  async crearDesdeConversion(
+    tx: Prisma.TransactionClient,
+    params: {
+      ubicacionId: string;
+      usuarioId: string;
+      clienteId: string | null;
+      observaciones: string | null;
+      subtotal: number;
+      descuento: number;
+      total: number;
+      lineas: {
+        articulo_id: string;
+        clave: string;
+        cantidad: number;
+        precio_unitario: number;
+        descuento: number;
+        subtotal: number;
+      }[];
+    },
+  ): Promise<{ id: string; folio: number }> {
+    const folio = await this.nextFolioLocked(tx, params.ubicacionId);
+    return tx.notaVenta.create({
+      data: {
+        folio,
+        ubicacion_id: params.ubicacionId,
+        usuario_id: params.usuarioId,
+        cliente_id: params.clienteId,
+        observaciones: params.observaciones,
+        estatus: 'ABIERTA',
+        subtotal: params.subtotal,
+        descuento: params.descuento,
+        total: params.total,
+        lineas: { create: params.lineas },
+      },
+      select: { id: true, folio: true },
+    });
   }
 
   // ─── Venta rápida (crea + cierra en una sola operación atómica) ────────
@@ -822,9 +850,7 @@ export class VentasService {
     });
 
     const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
-    const subject = dto.tipo === 'cotizacion'
-      ? `Cotización ${folioStr} — ${empresa?.nombre ?? ''}`
-      : `Comprobante de venta ${folioStr} — ${empresa?.nombre ?? ''}`;
+    const subject = `Comprobante de venta ${folioStr} — ${empresa?.nombre ?? ''}`;
 
     const html = this.buildEmailHtml(nota, empresa as any, ubicacion as any, dto);
 
@@ -839,7 +865,6 @@ export class VentasService {
   }
 
   private buildEmailHtml(nota: NotaRaw, empresa: any, ubicacion: any, dto: SendEmailDto): string {
-    const esCotizacion = dto.tipo === 'cotizacion';
     const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
     const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
     const fmt = (n: number) => n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -867,8 +892,8 @@ export class VentasService {
     ].filter(Boolean);
     const direccion = addrParts.join(', ');
 
-    const accentColor = esCotizacion ? '#2563eb' : '#16a34a';
-    const badgeLabel = esCotizacion ? 'COTIZACIÓN' : 'COMPROBANTE DE VENTA';
+    const accentColor = '#16a34a';
+    const badgeLabel = 'COMPROBANTE DE VENTA';
 
     const lineasHtml = nota.lineas.map((l, idx) => {
       const descs = [l.articulo?.descripcion_1, l.articulo?.descripcion_2,
@@ -891,7 +916,7 @@ export class VentasService {
       : '';
 
     let pagoHtml = '';
-    if (!esCotizacion && dto.extra) {
+    if (dto.extra) {
       if (dto.extra.tipo_cierre === 'CREDITO') {
         pagoHtml = `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else if (dto.extra.tipo_cierre === 'PENDIENTE') {
@@ -945,10 +970,6 @@ export class VentasService {
           <p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#0f172a;">${clienteNombre}</p>
           ${nota.cliente.email ? `<p style="margin:2px 0 0;font-size:11px;color:#64748b;">${nota.cliente.email}</p>` : ''}
         </td>
-        ${esCotizacion ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;">
-          <p style="margin:0;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#94a3b8;">Válida hasta</p>
-          <p style="margin:4px 0 0;font-size:12px;font-weight:600;color:${accentColor};">30 días</p>
-        </td>` : ''}
       </tr>
     </table>
   </td></tr>` : ''}
@@ -979,8 +1000,6 @@ export class VentasService {
 
   <!-- Footer -->
   <tr><td style="padding:20px 36px 26px;text-align:center;border-top:1px solid #e2e8f0;margin-top:16px;">
-    ${esCotizacion ? `<p style="margin:0 0 5px;font-size:11px;color:#64748b;">Esta cotización es válida por 30 días a partir de su fecha de emisión.</p>
-    <p style="margin:0 0 5px;font-size:11px;color:#94a3b8;">Precios sujetos a cambio sin previo aviso.</p>` : ''}
     <p style="margin:0;font-size:11px;color:#94a3b8;">¡Gracias por su preferencia!</p>
   </td></tr>
 

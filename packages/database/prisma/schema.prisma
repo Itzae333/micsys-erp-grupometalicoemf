@@ -81,6 +81,7 @@ model Ubicacion {
   articulos              Articulo[]
   clientes               Cliente[]
   notas_venta            NotaVenta[]
+  notas_cotizacion       NotaCotizacion[]
   movimientos_cuenta     MovimientoCuenta[]
   movimientos_inventario MovimientoInventario[]
   ordenes_compra         OrdenCompra[]
@@ -118,29 +119,31 @@ model Usuario {
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
 
-  empresa                Empresa                     @relation(fields: [empresa_id], references: [id])
-  ubicaciones            UsuarioUbicacion[]
-  refresh_tokens         RefreshToken[]
-  notas_venta            NotaVenta[]
-  movimientos_cuenta     MovimientoCuenta[]
-  movimientos_inventario MovimientoInventario[]
-  ordenes_compra         OrdenCompra[]
-  movimientos_proveedor  MovimientoCuentaProveedor[]
-  registros_asistencia   RegistroAsistencia[]
-  ordenes_produccion     OrdenProduccion[]
-  solicitudes_enviadas   SolicitudEdicionNota[]      @relation("SolicitudSolicitante")
-  solicitudes_aprobadas  SolicitudEdicionNota[]      @relation("SolicitudAprobador")
-  evidencias_subidas     EvidenciaNota[]
-  pedidos_creados        Pedido[]
-  anticipos_pedido       AnticiposPedido[]
-  evidencias_pedido      EvidenciaPedido[]
-  empleado               Empleado?
-  remisiones_creadas     Remision[]                  @relation("RemisionCreador")
-  remisiones_enviadas    Remision[]                  @relation("RemisionEnviador")
-  remisiones_recibidas   Remision[]                  @relation("RemisionReceptor")
-  cargas_nota            CargaNota[]
-  gastos                 Gasto[]
-  notas_canceladas       NotaVenta[]                 @relation("NotaCanceladaPor")
+  empresa                 Empresa                     @relation(fields: [empresa_id], references: [id])
+  ubicaciones             UsuarioUbicacion[]
+  refresh_tokens          RefreshToken[]
+  notas_venta             NotaVenta[]
+  notas_cotizacion        NotaCotizacion[]
+  movimientos_cuenta      MovimientoCuenta[]
+  movimientos_inventario  MovimientoInventario[]
+  ordenes_compra          OrdenCompra[]
+  movimientos_proveedor   MovimientoCuentaProveedor[]
+  registros_asistencia    RegistroAsistencia[]
+  ordenes_produccion      OrdenProduccion[]
+  solicitudes_enviadas    SolicitudEdicionNota[]      @relation("SolicitudSolicitante")
+  solicitudes_aprobadas   SolicitudEdicionNota[]      @relation("SolicitudAprobador")
+  evidencias_subidas      EvidenciaNota[]
+  pedidos_creados         Pedido[]
+  anticipos_pedido        AnticiposPedido[]
+  evidencias_pedido       EvidenciaPedido[]
+  empleado                Empleado?
+  remisiones_creadas      Remision[]                  @relation("RemisionCreador")
+  remisiones_enviadas     Remision[]                  @relation("RemisionEnviador")
+  remisiones_recibidas    Remision[]                  @relation("RemisionReceptor")
+  cargas_nota             CargaNota[]
+  gastos                  Gasto[]
+  notas_canceladas        NotaVenta[]                 @relation("NotaCanceladaPor")
+  cotizaciones_canceladas NotaCotizacion[]            @relation("CotizacionCanceladaPor")
 
   @@map("usuarios")
 }
@@ -284,6 +287,7 @@ model Articulo {
   ubicacion              Ubicacion              @relation(fields: [ubicacion_id], references: [id])
   proveedor              Proveedor?             @relation(fields: [proveedor_id], references: [id])
   lineas_venta           NotaVentaLinea[]
+  lineas_cotizacion      NotaCotizacionLinea[]
   lineas_pedido          PedidoLinea[]
   movimientos_inventario MovimientoInventario[]
   lineas_compra          OrdenCompraLinea[]
@@ -317,16 +321,16 @@ model Cliente {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  ubicacion   Ubicacion          @relation(fields: [ubicacion_id], references: [id])
-  notas       NotaVenta[]
-  pedidos     Pedido[]
-  movimientos MovimientoCuenta[]
+  ubicacion    Ubicacion          @relation(fields: [ubicacion_id], references: [id])
+  notas        NotaVenta[]
+  cotizaciones NotaCotizacion[]
+  pedidos      Pedido[]
+  movimientos  MovimientoCuenta[]
 
   @@map("clientes")
 }
 
 enum EstatusNota {
-  COTIZACION
   ABIERTA
   PENDIENTE
   PAGADA
@@ -364,10 +368,10 @@ model NotaVenta {
   // Idempotencia para ventas creadas offline: mismo client_ref nunca crea dos notas.
   origen_offline_ref String? @unique
 
-  motivo_cancelacion           String?
+  motivo_cancelacion            String?
   motivo_cancelacion_comentario String?
-  cancelado_por_id             String?
-  cancelado_at                 DateTime?
+  cancelado_por_id              String?
+  cancelado_at                  DateTime?
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -385,6 +389,7 @@ model NotaVenta {
   evidencias          EvidenciaNota[]
   pedido_origen       Pedido?
   cargas              CargaNota[]
+  cotizacion_origen   NotaCotizacion?        @relation("CotizacionConvertida")
 
   @@unique([ubicacion_id, folio])
   @@map("notas_venta")
@@ -408,6 +413,77 @@ model NotaVentaLinea {
   carga_lineas CargaNotaLinea[]
 
   @@map("nota_venta_lineas")
+}
+
+// ─────────────────────────────────────────────────────────────
+// COTIZACIONES — nivel UBICACIÓN, tablas y folio independientes
+// de NotaVenta. Al convertir, se crea una NotaVenta nueva (folio
+// propio, created_at = momento de la conversión) y esta fila
+// pasa a CONVERTIDA enlazada a esa venta. Nunca toca pagos/crédito.
+// ─────────────────────────────────────────────────────────────
+
+enum EstatusCotizacion {
+  ACTIVA
+  CONVERTIDA
+  CANCELADA
+  VENCIDA
+}
+
+model NotaCotizacion {
+  id           String  @id @default(cuid())
+  folio        Int
+  ubicacion_id String
+  usuario_id   String
+  cliente_id   String?
+
+  estatus   EstatusCotizacion @default(ACTIVA)
+  subtotal  Decimal           @db.Decimal(12, 2)
+  descuento Decimal           @default(0) @db.Decimal(12, 2)
+  total     Decimal           @db.Decimal(12, 2)
+
+  observaciones  String?
+  vigencia_hasta DateTime
+
+  motivo_cancelacion            String?
+  motivo_cancelacion_comentario String?
+  cancelado_por_id              String?
+  cancelado_at                  DateTime?
+
+  venta_id      String?   @unique
+  convertida_at DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  ubicacion     Ubicacion  @relation(fields: [ubicacion_id], references: [id])
+  usuario       Usuario    @relation(fields: [usuario_id], references: [id])
+  cliente       Cliente?   @relation(fields: [cliente_id], references: [id])
+  cancelado_por Usuario?   @relation("CotizacionCanceladaPor", fields: [cancelado_por_id], references: [id])
+  venta         NotaVenta? @relation("CotizacionConvertida", fields: [venta_id], references: [id])
+
+  lineas NotaCotizacionLinea[]
+
+  @@unique([ubicacion_id, folio])
+  @@map("notas_cotizacion")
+}
+
+model NotaCotizacionLinea {
+  id                 String @id @default(cuid())
+  nota_cotizacion_id String
+  articulo_id        String
+  clave              String
+
+  cantidad        Decimal @db.Decimal(12, 3)
+  precio_unitario Decimal @db.Decimal(12, 2)
+  descuento       Decimal @default(0) @db.Decimal(5, 2)
+  subtotal        Decimal @db.Decimal(12, 2)
+
+  created_at DateTime @default(now())
+
+  nota     NotaCotizacion @relation(fields: [nota_cotizacion_id], references: [id], onDelete: Cascade)
+  articulo Articulo       @relation(fields: [articulo_id], references: [id])
+
+  @@map("nota_cotizacion_lineas")
 }
 
 model Pago {

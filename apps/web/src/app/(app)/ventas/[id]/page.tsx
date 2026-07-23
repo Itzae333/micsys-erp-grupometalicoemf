@@ -715,8 +715,7 @@ export default function NotaDetallePage() {
               Solicitar edición
             </Button>
           )}
-          {((['ABIERTA', 'PENDIENTE', 'REABIERTA'].includes(nota.estatus) && canCancel)
-            || (nota.estatus === 'COTIZACION' && canWrite)) && (
+          {['ABIERTA', 'PENDIENTE', 'REABIERTA'].includes(nota.estatus) && canCancel && (
             <Button variant="ghost" onClick={openCancelar}>
               <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
               Cancelar

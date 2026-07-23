@@ -30,10 +30,10 @@ export class NotificacionesService {
       }),
 
       // Cotizaciones sin convertir con más de 7 días
-      this.prisma.notaVenta.findMany({
+      this.prisma.notaCotizacion.findMany({
         where: {
           ubicacion_id: ubicacionId,
-          estatus:    'COTIZACION',
+          estatus:    'ACTIVA',
           created_at: { lt: hace7dias },
         },
         select: {
@@ -88,12 +88,12 @@ export class NotificacionesService {
         tipo:   'cotizacion_vieja',
         titulo: 'Cotizaciones sin convertir (+7 días)',
         count:  cotizacionesViejas.length,
-        href:   '/ventas',
+        href:   '/ventas/cotizaciones',
         items:  cotizacionesViejas.map((n) => ({
           id:    n.id,
           label: (n.cliente?.razon_social ?? `${n.cliente?.nombre ?? ''} ${n.cliente?.apellidos ?? ''}`.trim()) || 'Público general',
           sub:   `Folio ${n.folio ?? '—'} · $${Number(n.total).toFixed(2)}`,
-          href:  `/ventas/${n.id}`,
+          href:  '/ventas/cotizaciones',
           dias:  Math.floor((ahora.getTime() - n.created_at.getTime()) / (1000 * 60 * 60 * 24)),
         })),
       });
