@@ -71,8 +71,11 @@ export default function CotizacionesPage() {
   const [notaActiva, setNotaActiva] = useState<NotaCotizacion | null>(null);
   const [dlgLinea, setDlgLinea] = useState(false);
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
-  const [artQ, setArtQ] = useState('');
-  const [artResultados, setArtResultados] = useState<Articulo[]>([]);
+  const [artsPag, setArtsPag] = useState<Articulo[]>([]);
+  const [artsPagPage, setArtsPagPage] = useState(1);
+  const [artsPagPages, setArtsPagPages] = useState(1);
+  const [artsPagQ, setArtsPagQ] = useState('');
+  const [artsPagLoading, setArtsPagLoading] = useState(false);
   const [addingArt, setAddingArt] = useState<string | null>(null);
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export default function CotizacionesPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailOk, setEmailOk] = useState(false);
 
-  const artDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const artsPagDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clienteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Leer cliente_id de la URL al montar (llegada desde Clientes) ──
@@ -148,18 +151,36 @@ export default function CotizacionesPage() {
       .catch(() => {});
   }, [empresa?.id, ubicacion?.id]);
 
-  // Debounce búsqueda de artículos dentro del carrito
+  // ── Catálogo de artículos dentro del carrito (igual que en Ventas:
+  // carga el inventario completo, paginado, aunque no se escriba nada) ──
+  async function cargarArticulosPag(p: number, searchQ: string) {
+    setArtsPagLoading(true);
+    try {
+      const qp = new URLSearchParams({ page: String(p), limit: '15' });
+      if (searchQ) qp.set('q', searchQ);
+      const res = await api.get<ArticulosPage>(`/articulos?${qp}`);
+      setArtsPag(res.data);
+      setArtsPagPages(res.pages);
+      setArtsPagPage(p);
+    } finally {
+      setArtsPagLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (dlgLinea) setArtsPagQ('');
+  }, [dlgLinea]);
+
+  // Debounce: dispara la búsqueda 350ms después de dejar de escribir — y
+  // también al abrir el carrito, para mostrar el catálogo completo de una vez.
   useEffect(() => {
     if (!dlgLinea) return;
-    if (artDebounceRef.current) clearTimeout(artDebounceRef.current);
-    if (!artQ.trim()) { setArtResultados([]); return; }
-    artDebounceRef.current = setTimeout(() => {
-      api.get<ArticulosPage>(`/articulos?q=${encodeURIComponent(artQ)}&limit=15`)
-        .then((r) => setArtResultados(r.data))
-        .catch(() => setArtResultados([]));
+    if (artsPagDebounceRef.current) clearTimeout(artsPagDebounceRef.current);
+    artsPagDebounceRef.current = setTimeout(() => {
+      void cargarArticulosPag(1, artsPagQ);
     }, 350);
-    return () => { if (artDebounceRef.current) clearTimeout(artDebounceRef.current); };
-  }, [artQ, dlgLinea]);
+    return () => { if (artsPagDebounceRef.current) clearTimeout(artsPagDebounceRef.current); };
+  }, [artsPagQ, dlgLinea]);
 
   // Debounce búsqueda de cliente (contra backend, no lista local limitada)
   useEffect(() => {
@@ -230,8 +251,6 @@ export default function CotizacionesPage() {
       });
       setDlgNota(false);
       setNotaActiva(nota);
-      setArtQ('');
-      setArtResultados([]);
       setDlgLinea(true);
       loadNotas();
     } catch (err) {
@@ -247,8 +266,6 @@ export default function CotizacionesPage() {
       const c = full.cliente_id ? await fetchCliente(full.cliente_id) : null;
       setClienteSeleccionado(c);
       setNotaActiva(full);
-      setArtQ('');
-      setArtResultados([]);
       setDlgLinea(true);
     } catch {
       toast('Error al abrir la cotización', 'error');
@@ -279,8 +296,6 @@ export default function CotizacionesPage() {
         });
         setNotaActiva(updated);
       }
-      setArtQ('');
-      setArtResultados([]);
     } catch {
       // silent
     } finally {
@@ -486,42 +501,98 @@ export default function CotizacionesPage() {
 
           <div className="flex flex-col md:flex-row flex-1 min-h-0">
             {notaActiva.estatus === 'ACTIVA' && (
-              <div className="md:w-[40%] border-b md:border-b-0 md:border-r border-steel-200 flex flex-col min-h-0">
-                <div className="p-3 border-b border-steel-100 flex-shrink-0">
+              <div className="h-[48%] md:h-auto md:w-[58%] flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-steel-200">
+                {/* Buscador */}
+                <div className="px-4 py-3 bg-steel-50 border-b border-steel-100 flex-shrink-0">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-steel-400" />
                     <input
-                      autoFocus
-                      className="h-9 w-full rounded-md border border-steel-300 bg-white pl-8 pr-3 text-body-sm text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
-                      placeholder="Buscar artículo por clave o descripción…"
-                      value={artQ}
-                      onChange={(e) => setArtQ(e.target.value)}
+                      className="h-9 w-full rounded-md border border-steel-300 bg-white pl-9 pr-3 text-body text-steel-900 placeholder:text-steel-400 focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+                      placeholder="Buscar producto…"
+                      value={artsPagQ}
+                      onChange={(e) => setArtsPagQ(e.target.value)}
                     />
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-steel-100">
-                  {artResultados.map((art) => {
-                    const desc = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
-                      .filter(Boolean).join(' · ');
-                    return (
-                      <button
-                        key={art.id}
-                        type="button"
-                        disabled={addingArt === art.id}
-                        onClick={() => void agregarArticulo(art)}
-                        className="w-full text-left px-3 py-2.5 hover:bg-steel-50 flex items-center justify-between gap-2 disabled:opacity-50"
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-body-sm font-medium text-steel-900 truncate">{desc || art.clave}</span>
-                          <span className="block text-meta text-steel-400">{art.clave}</span>
-                        </span>
-                        <Plus className="h-4 w-4 text-steel-400 flex-shrink-0" />
-                      </button>
-                    );
-                  })}
-                  {artQ.trim() && artResultados.length === 0 && (
-                    <p className="text-body-sm text-steel-400 text-center py-6">Sin resultados</p>
+
+                {/* Tabla artículos */}
+                <div className="flex-1 overflow-y-auto">
+                  {artsPagLoading ? (
+                    <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Cargando...</div>
+                  ) : artsPag.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-body-sm text-steel-400">Sin resultados</div>
+                  ) : (
+                    <table className="w-full text-body-sm">
+                      <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                          <th className="text-right px-3 py-2.5 font-medium text-steel-600">Exist.</th>
+                          <th className="text-right px-4 py-2.5 font-medium text-steel-600">Precio</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-steel-100">
+                        {artsPag.map((art) => {
+                          const descs = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5].filter(Boolean);
+                          const pNum = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
+                          const pCampo = `precio_${pNum}` as keyof Articulo;
+                          const precio = (art[pCampo] as number | null) ?? 0;
+                          const enCarrito = notaActiva.lineas.find((l) => l.articulo?.id === art.id);
+                          return (
+                            <tr
+                              key={art.id}
+                              onClick={() => void agregarArticulo(art)}
+                              className={cn(
+                                'cursor-pointer transition-colors',
+                                addingArt === art.id ? 'opacity-50 pointer-events-none' : 'hover:bg-brand-50',
+                                enCarrito ? 'bg-green-50' : '',
+                              )}
+                            >
+                              <td className="px-4 py-2.5 min-w-0">
+                                <p className="font-semibold text-steel-900 leading-tight break-words">
+                                  {descs.length > 0 ? descs.join(' · ') : art.clave}
+                                </p>
+                                <p className="text-meta text-steel-400">{art.clave}</p>
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
+                                {art.existencia_1 ?? 0}
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                <span className="font-semibold text-steel-900">{formatPrecio(precio)}</span>
+                                {enCarrito && (
+                                  <span className="ml-2 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                                    x{enCarrito.cantidad}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   )}
+                </div>
+
+                {/* Paginación catálogo */}
+                <div className="flex items-center justify-between px-4 py-2 bg-white border-t border-steel-100 flex-shrink-0">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={artsPagPage <= 1}
+                    onClick={() => void cargarArticulosPag(artsPagPage - 1, artsPagQ)}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <span className="text-body-sm text-steel-500">Pág {artsPagPage}/{artsPagPages}</span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={artsPagPage >= artsPagPages}
+                    onClick={() => void cargarArticulosPag(artsPagPage + 1, artsPagQ)}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             )}
