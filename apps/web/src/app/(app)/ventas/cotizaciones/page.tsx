@@ -801,7 +801,9 @@ export default function CotizacionesPage() {
                               <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <span className="font-semibold text-steel-900">{formatPrecio(nota.total)}</span>
+                              <span className="font-semibold text-steel-900">
+                                {formatPrecio(['CANCELADA', 'VENCIDA'].includes(nota.estatus) ? 0 : nota.total)}
+                              </span>
                             </td>
                           </tr>
                         );
@@ -868,7 +870,7 @@ export default function CotizacionesPage() {
                     </div>
                   )}
 
-                  {detalleNota.lineas.length > 0 && (
+                  {detalleNota.lineas.length > 0 && !['CANCELADA', 'VENCIDA'].includes(detalleNota.estatus) && (
                     <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
                       <table className="w-full text-body-sm">
                         <thead className="bg-steel-50 border-b border-steel-200">
