@@ -895,6 +895,11 @@ export default function CotizacionesPage() {
                 </button>
               </p>
             )}
+            {clienteSeleccionado?.precio_num && schema && (
+              <p className="text-meta text-brand-600 mt-1">
+                Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Observaciones</label>
