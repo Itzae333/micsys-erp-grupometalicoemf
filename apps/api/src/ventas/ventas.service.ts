@@ -1149,7 +1149,12 @@ export class VentasService {
       const montoAnticipoReplicado = nota.pagos
         .filter((p) => p.origen_anticipo_pedido)
         .reduce((s, p) => s + Number(p.monto), 0);
-      const baseHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+      const totalEsperadoHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+      // Si la nota quedó a crédito (pago parcial), lo que corresponde a hoy es
+      // lo realmente cobrado, no el total de la nota — el saldo restante es
+      // crédito pendiente, no dinero que faltó entregar hoy en efectivo.
+      const sumPagosHoy = pagosHoy.reduce((s, p) => s + Number(p.monto), 0);
+      const baseHoy = Math.min(totalEsperadoHoy, sumPagosHoy);
 
       let nonCashSum = 0;
       for (const pago of pagosHoy) {
@@ -1251,12 +1256,16 @@ export class VentasService {
       const montoAnticipoReplicado = n.pagos
         .filter((p) => p.origen_anticipo_pedido)
         .reduce((s, p) => s + Number(p.monto), 0);
-      const baseHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+      const totalEsperadoHoy = Math.max(0, +(notaTotal - montoAnticipoReplicado).toFixed(2));
+      const sumTodos = pagosHoy.reduce((s, p) => s + Number(p.monto), 0);
+      // Igual que arriba: si quedó a crédito, lo de hoy es lo cobrado, no el
+      // total de la nota — si no, una nota a crédito con pago parcial en
+      // efectivo se mostraría como si se hubiera cobrado el total completo.
+      const baseHoy = Math.min(totalEsperadoHoy, sumTodos);
 
       const nonCash = pagosHoy
         .filter((p) => p.metodo !== 'EFECTIVO')
         .reduce((s, p) => s + Number(p.monto), 0);
-      const sumTodos = pagosHoy.reduce((s, p) => s + Number(p.monto), 0);
       const cambio = Math.max(0, +(sumTodos - baseHoy).toFixed(2));
       const efectivoReal = Math.max(0, +(baseHoy - nonCash).toFixed(2));
 
