@@ -59,8 +59,10 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
       throw new ApiError(0, 'Sin conexión — no se pudo renovar la sesión');
     }
     // El servidor respondió que el refresh token es inválido/expirado — sesión realmente terminada.
+    console.warn('[auth] sesión cerrada: el servidor rechazó el refresh token', { path, at: new Date().toISOString() });
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
     useAuthStore.getState().clearAuth();
-    window.location.href = '/login';
+    window.location.href = '/login?motivo=sesion_expirada';
     throw new ApiError(401, 'Sesión expirada');
   }
 
@@ -113,6 +115,87 @@ async function doRefresh(): Promise<RefreshResult> {
   const data = await response.json() as { access_token: string };
   useAuthStore.getState().setAccessToken(data.access_token);
   return { ok: true };
+}
+
+// ── Refresh proactivo ───────────────────────────────────────
+// El access token dura poco (JWT_EXPIRES_IN) y el refresh de arriba es
+// reactivo (solo corre cuando una petición ya regresó 401, es decir, cuando
+// el token YA expiró). En uso activo eso puede sentirse como que "se cierra
+// solo": dos peticiones casi simultáneas justo al expirar, un refresh que
+// tarda, un timer de fondo suspendido en una tablet, etc. Para que sea
+// invisible, se renueva solo un poco ANTES de expirar, y el 401 de arriba
+// queda solo como respaldo si este timer llegara a fallar/perderse.
+const SAFETY_MARGIN_MS = 2 * 60 * 1000; // renovar 2 min antes de expirar
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Decodifica el `exp` real del JWT (segundo segmento, base64url) en vez de
+// asumir una duración fija — sigue funcionando aunque JWT_EXPIRES_IN cambie.
+function getTokenExpiryMs(token: string): number | null {
+  try {
+    const payloadB64 = token.split('.')[1];
+    if (!payloadB64) return null;
+    const base64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+        .join(''),
+    );
+    const payload = JSON.parse(json) as { exp?: number };
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function scheduleProactiveRefresh(token: string) {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+  const expiryMs = getTokenExpiryMs(token);
+  if (expiryMs === null) return; // sin exp decodificable, se depende solo del respaldo reactivo
+  const delay = Math.max(expiryMs - Date.now() - SAFETY_MARGIN_MS, 0);
+  refreshTimer = setTimeout(() => { void triggerProactiveRefresh(); }, delay);
+}
+
+async function triggerProactiveRefresh() {
+  const result = await refreshAccessToken();
+  // Si sale bien, setAccessToken ya disparó (vía el subscribe de abajo) una
+  // reprogramación del timer con la nueva expiración — no hay que hacer nada más.
+  // Si falla por red, se reintenta pronto (no hay una petición del usuario que lo reintente sola).
+  if (!result.ok && result.reason === 'network') {
+    refreshTimer = setTimeout(() => { void triggerProactiveRefresh(); }, 30_000);
+  }
+  // Si fue rechazado de verdad, no se hace nada aquí — la siguiente petición
+  // real del usuario pegará el 401 y seguirá el flujo de cierre de sesión ya existente.
+}
+
+if (typeof window !== 'undefined') {
+  const initialToken = useAuthStore.getState().accessToken;
+  if (initialToken) scheduleProactiveRefresh(initialToken);
+
+  useAuthStore.subscribe((state, prevState) => {
+    if (state.accessToken === prevState.accessToken) return;
+    if (state.accessToken) {
+      scheduleProactiveRefresh(state.accessToken);
+    } else if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+  });
+
+  // Las tablets/navegadores pueden suspender setTimeout en segundo plano —
+  // al regresar a la pestaña, se corrige de inmediato en vez de esperar un
+  // timer que pudo haberse perdido.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    const expiryMs = getTokenExpiryMs(token);
+    if (expiryMs === null || expiryMs - Date.now() <= SAFETY_MARGIN_MS) {
+      void triggerProactiveRefresh();
+    } else {
+      scheduleProactiveRefresh(token);
+    }
+  });
 }
 
 export class ApiError extends Error {

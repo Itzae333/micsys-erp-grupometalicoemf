@@ -449,6 +449,16 @@ function buildEscPosBuffer(ticket) {
       push(sep('-'));
     }
 
+    // ── Ventas por método de pago ────────────────────────
+    if (ticket.por_metodo) {
+      for (const m of METODOS) {
+        const res = ticket.por_metodo[m] ?? { count: 0, total: 0 };
+        if (res.count === 0) continue;
+        push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
+      }
+      push(sep('-'));
+    }
+
     // ── Anticipos de pedidos ────────────────────────────
     if (ticket.anticipos_pedido && ticket.anticipos_pedido.count > 0) {
       push(sep('='));
@@ -467,6 +477,12 @@ function buildEscPosBuffer(ticket) {
     if (ticket.pagos_credito && ticket.pagos_credito.count > 0) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('PAGOS DE CREDITO'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const m of METODOS) {
+        const res = ticket.pagos_credito.por_metodo?.[m] ?? { count: 0, total: 0 };
+        if (res.count === 0) continue;
+        push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
+      }
       push(sep('-'));
       if (ticket.pagos_credito.por_usuario && ticket.pagos_credito.por_usuario.length > 0) {
         // Metálicos Lyeva: agrupado por quién cobró el abono.
