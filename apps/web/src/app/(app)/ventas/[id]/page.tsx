@@ -186,7 +186,8 @@ export default function NotaDetallePage() {
     const descArt = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
       .filter(Boolean).join(' · ');
     setArtBusqueda(`${art.clave}${descArt ? ` — ${descArt}` : ''}`);
-    const campo = `precio_${precioMostradorNumero(schema)}` as keyof Articulo;
+    const precioNum = nota?.cliente?.precio_num ?? precioMostradorNumero(schema);
+    const campo = `precio_${precioNum}` as keyof Articulo;
     setLineaPrecio((art[campo] as number) ?? 0);
   }
 

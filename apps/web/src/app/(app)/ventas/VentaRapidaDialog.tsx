@@ -263,6 +263,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         telefono: clienteSeleccionado.telefono,
         limite_credito: clienteSeleccionado.limite_credito,
         saldo_pendiente: clienteSeleccionado.saldo_pendiente,
+        precio_num: clienteSeleccionado.precio_num,
       } : null,
       usuario: { id: usuario.id, nombre: usuario.nombre, apellidos: usuario.apellidos },
       estatus: dto.tipo_cierre,

@@ -11,7 +11,7 @@ import type { Prisma } from '@grupometalicoemf/database';
 import { inicioDiaMx, finDiaMx } from '../common/utils/fecha-mx';
 
 const NOTA_INCLUDE = {
-  cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true } },
+  cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true, precio_num: true } },
   usuario: { select: { id: true, nombre: true, apellidos: true } },
   lineas: {
     include: {

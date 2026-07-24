@@ -913,6 +913,21 @@ export default function VentasPage() {
       .filter(Boolean).join(' ').toLowerCase().includes(qLow);
   });
 
+  // Recalcula el total en vivo con lo que se está escribiendo en cada línea
+  // (lineaDraft), igual que el "Sub" por línea — así el total del carrito no
+  // se queda atrás esperando el blur que dispara el guardado real.
+  function subtotalPreviewLinea(l: NotaVenta['lineas'][number]): number {
+    const cantDraft = lineaDraft[l.id]?.cantidad;
+    const precioDraft = lineaDraft[l.id]?.precio;
+    const cant = cantDraft !== undefined ? parseFloat(cantDraft) : l.cantidad;
+    const precio = precioDraft !== undefined ? parseFloat(precioDraft) : l.precio_unitario;
+    return Number.isFinite(cant) && Number.isFinite(precio)
+      ? cant * precio * (1 - (l.descuento ?? 0) / 100)
+      : l.subtotal;
+  }
+
+  const totalPreview = (notaActiva?.lineas ?? []).reduce((s, l) => s + subtotalPreviewLinea(l), 0);
+
   function getFechaDesde(filtro: string): string | undefined {
     const now = new Date();
     switch (filtro) {
@@ -970,7 +985,7 @@ export default function VentasPage() {
             <div className="flex items-center gap-2 flex-shrink-0">
               {notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
-                  Cobrar — {formatPrecio(notaActiva.total)}
+                  Cobrar — {formatPrecio(totalPreview)}
                 </Button>
               )}
             </div>
@@ -1151,18 +1166,7 @@ export default function VentasPage() {
                               />
                             </td>
                             <td className="px-4 py-2.5 text-right font-semibold text-steel-900 whitespace-nowrap">
-                              {(() => {
-                                // Recalcula en vivo con lo que se está escribiendo (draft), sin
-                                // esperar al blur que dispara el guardado real contra el backend.
-                                const cantDraft = lineaDraft[l.id]?.cantidad;
-                                const precioDraft = lineaDraft[l.id]?.precio;
-                                const cant = cantDraft !== undefined ? parseFloat(cantDraft) : l.cantidad;
-                                const precio = precioDraft !== undefined ? parseFloat(precioDraft) : l.precio_unitario;
-                                const subtotalPreview = Number.isFinite(cant) && Number.isFinite(precio)
-                                  ? cant * precio * (1 - (l.descuento ?? 0) / 100)
-                                  : l.subtotal;
-                                return formatPrecio(subtotalPreview);
-                              })()}
+                              {formatPrecio(subtotalPreviewLinea(l))}
                             </td>
                             <td className="px-2 py-2.5">
                               <button
@@ -1188,7 +1192,7 @@ export default function VentasPage() {
                       : `${notaActiva.lineas.length} artículo${notaActiva.lineas.length !== 1 ? 's' : ''}`}
                   </span>
                   <span className="text-display-sm font-bold text-steel-900">
-                    {formatPrecio(notaActiva.total)}
+                    {formatPrecio(totalPreview)}
                   </span>
                 </div>
                 <div className="px-4 pb-4">
@@ -1197,7 +1201,7 @@ export default function VentasPage() {
                     disabled={notaActiva.lineas.length === 0}
                     onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
                   >
-                    Cobrar {formatPrecio(notaActiva.total)}
+                    Cobrar {formatPrecio(totalPreview)}
                   </Button>
                 </div>
               </div>

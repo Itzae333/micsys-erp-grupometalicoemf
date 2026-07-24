@@ -351,6 +351,21 @@ export default function PedidosPage() {
 
   const canEdit = pedidoActivo?.estatus === 'ABIERTO' || pedidoActivo?.estatus === 'PARCIAL';
 
+  // Recalcula el total en vivo con lo que se está escribiendo en la línea que
+  // esté en edición (lineaDraft), sin esperar a guardarla — igual que el
+  // subtotal por línea.
+  function subtotalPreviewLinea(l: PedidoLinea): number {
+    const draft = lineaDraft[l.id];
+    if (!draft) return l.subtotal;
+    const cant = parseFloat(draft.cantidad);
+    const precio = parseFloat(draft.precio);
+    return Number.isFinite(cant) && Number.isFinite(precio)
+      ? cant * precio * (1 - (l.descuento ?? 0) / 100)
+      : l.subtotal;
+  }
+
+  const totalPreview = (pedidoActivo?.lineas ?? []).reduce((s, l) => s + subtotalPreviewLinea(l), 0);
+
   // ── Render ──────────────────────────────────────────────────
   return (
     <div className="flex h-full overflow-hidden">
@@ -597,7 +612,7 @@ export default function PedidosPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right font-medium">${formatMoney(l.subtotal)}</td>
+                            <td className="px-3 py-2 text-right font-medium">${formatMoney(subtotalPreviewLinea(l))}</td>
                             {canEdit && (
                               <td className="px-3 py-2">
                                 {draft ? (
@@ -641,7 +656,7 @@ export default function PedidosPage() {
                 <div className="border-t border-steel-200 px-4 py-3 bg-steel-50 space-y-1">
                   <div className="flex justify-between text-body-sm text-steel-600">
                     <span>Total pedido</span>
-                    <span className="font-semibold text-steel-900">${formatMoney(pedidoActivo.total)}</span>
+                    <span className="font-semibold text-steel-900">${formatMoney(totalPreview)}</span>
                   </div>
                   <div className="flex justify-between text-body-sm text-emerald-700">
                     <span>Total anticipos</span>

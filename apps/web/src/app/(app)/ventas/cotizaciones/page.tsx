@@ -421,6 +421,20 @@ export default function CotizacionesPage() {
 
   const vigenciaVencida = (nota: NotaCotizacion) => new Date(nota.vigencia_hasta).getTime() < Date.now();
 
+  // Recalcula el total en vivo con lo que se está escribiendo en cada línea
+  // (lineaDraft), igual que el "Sub" por línea — así el total no se queda
+  // atrás esperando el blur que dispara el guardado real.
+  function subtotalPreviewLinea(l: NotaCotizacion['lineas'][number]): number {
+    const draft = lineaDraft[l.id];
+    const cant = draft ? parseFloat(draft.cantidad) : l.cantidad;
+    const precio = draft ? parseFloat(draft.precio) : l.precio_unitario;
+    return Number.isFinite(cant) && Number.isFinite(precio)
+      ? cant * precio * (1 - (l.descuento ?? 0) / 100)
+      : l.subtotal;
+  }
+
+  const totalPreview = (notaActiva?.lineas ?? []).reduce((s, l) => s + subtotalPreviewLinea(l), 0);
+
   // ── Carrito: acciones de una cotización ACTIVA ────────────
   function AccionesCotizacion({ nota, size = 'sm' }: { nota: NotaCotizacion; size?: 'sm' | 'md' }) {
     if (nota.estatus === 'CONVERTIDA') {
@@ -619,11 +633,7 @@ export default function CotizacionesPage() {
                         const desc = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5]
                           .filter(Boolean).join(' · ');
                         const draft = lineaDraft[l.id] ?? { cantidad: String(l.cantidad), precio: String(l.precio_unitario) };
-                        const cantDraft = parseFloat(draft.cantidad);
-                        const precioDraft = parseFloat(draft.precio);
-                        const subtotalPreview = Number.isFinite(cantDraft) && Number.isFinite(precioDraft)
-                          ? cantDraft * precioDraft * (1 - (l.descuento ?? 0) / 100)
-                          : l.subtotal;
+                        const subtotalPreview = subtotalPreviewLinea(l);
                         return (
                           <tr key={l.id}>
                             <td className="px-4 py-2.5 max-w-[220px]">
@@ -680,7 +690,7 @@ export default function CotizacionesPage() {
                     <span className="ml-2 text-brand-600 font-medium">(vencida)</span>
                   )}
                 </span>
-                <span className="text-display-sm font-bold text-steel-900">{formatPrecio(notaActiva.total)}</span>
+                <span className="text-display-sm font-bold text-steel-900">{formatPrecio(totalPreview)}</span>
               </div>
             </div>
           </div>
