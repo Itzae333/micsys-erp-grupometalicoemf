@@ -790,7 +790,15 @@ export default function VentasPage() {
       });
       setDlgAbonar(null);
       patchNota(notaActualizada);
-      // Siempre ofrecer imprimir/enviar comprobante del abono
+      // Auto-imprimir según copias configuradas en Configuración > Ticketera (igual que al cobrar)
+      const copiasAuto = (() => {
+        try {
+          const cfg = JSON.parse(localStorage.getItem('print_bridge_config') ?? '{}') as { copias?: number };
+          return Math.max(1, Math.min(3, Number(cfg.copias) || 2));
+        } catch {
+          return 2;
+        }
+      })();
       setPostCobro({
         nota: notaActualizada,
         tipoCierre: notaActualizada.estatus, // 'PAGADA' o 'CREDITO'
@@ -798,6 +806,14 @@ export default function VentasPage() {
         cambio: 0,
         esAbono: true,
         saldoAnterior: saldoAntes,
+        printStatus: 'printing',
+        copiasAuto,
+      });
+      void printTicket(notaActualizada, notaActualizada.estatus as 'PAGADA' | 'CREDITO' | 'PENDIENTE', pagosSnap, 0, copiasAuto, {
+        soloAbono: true,
+        saldoAnterior: saldoAntes,
+      }).then((ok) => {
+        setPostCobro((prev) => prev ? { ...prev, printStatus: ok ? 'ok' : 'error' } : prev);
       });
     } catch (err) {
       setAbonandoError(err instanceof Error ? err.message : 'Error al registrar abono');
@@ -857,8 +873,8 @@ export default function VentasPage() {
           return 2;
         }
       })();
-      setPostCobro({ nota: notaSnap, tipoCierre, pagos: pagosSnap, cambio: cambioSnap, printStatus: 'printing', copiasAuto });
-      void printTicket(notaSnap, tipoCierre, pagosSnap, cambioSnap, copiasAuto).then((ok) => {
+      setPostCobro({ nota: notaActualizada, tipoCierre, pagos: pagosSnap, cambio: cambioSnap, printStatus: 'printing', copiasAuto });
+      void printTicket(notaActualizada, tipoCierre, pagosSnap, cambioSnap, copiasAuto).then((ok) => {
         setPostCobro((prev) => prev ? { ...prev, printStatus: ok ? 'ok' : 'error' } : prev);
       });
     } catch (err) {
