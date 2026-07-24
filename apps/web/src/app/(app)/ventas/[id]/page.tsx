@@ -314,6 +314,10 @@ export default function NotaDetallePage() {
     const tipoCierre = nota.estatus === 'CREDITO' ? 'CREDITO' : 'PAGADA';
     const totalPagadoCalc = nota.pagos.reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoCalc).toFixed(2));
+    // Si la nota se editó (p. ej. se quitaron productos) después de cobrarse,
+    // lo pagado puede superar el total actual — esa diferencia es cambio a
+    // favor del cliente, no debe perderse al reimprimir el ticket.
+    const cambioCalc = Math.max(0, +(totalPagadoCalc - nota.total).toFixed(2));
 
     const logoUrl = getTicketLogoUrl(empresa, ubicacion);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
@@ -355,7 +359,7 @@ export default function NotaDetallePage() {
       })),
       totales: { subtotal: nota.subtotal, total: nota.total },
       pagos: nota.pagos.map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
-      cambio: 0,
+      cambio: cambioCalc,
       tipo_cierre: tipoCierre,
       saldo_restante: tipoCierre === 'CREDITO' ? saldoRestante : 0,
     };
