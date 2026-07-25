@@ -480,7 +480,7 @@ export default function CotizacionesPage() {
   }
 
   return (
-    <div>
+    <div className="h-full">
       {/* ── Split-view: editar líneas de la cotización ────── */}
       {dlgLinea && notaActiva && (
         <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden bg-white">

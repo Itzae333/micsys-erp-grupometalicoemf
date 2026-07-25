@@ -971,7 +971,7 @@ export default function VentasPage() {
   ].filter(Boolean).join(', ');
 
   return (
-    <div>
+    <div className="h-full">
       {/* ── Split-view: editar nota de venta ─────────────── */}
       {dlgLinea && notaActiva && (
         <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden bg-white">
