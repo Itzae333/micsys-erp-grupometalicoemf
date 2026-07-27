@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import type { CrearSolicitudDto, AprobarSolicitudDto, RechazarSolicitudDto } from './dto/solicitudes-edicion.dto';
+import type { Prisma } from '@grupometalicoemf/database';
 
 const ESTATUS_CON_EDICION_SOLICITABLE = ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'];
 const TOKEN_VIGENCIA_HORAS = 72;
@@ -161,65 +162,7 @@ export class SolicitudesEdicionService {
     if (!admin) throw new BadRequestException('El aprobador indicado no es un administrador válido de esta empresa');
 
     await this.prisma.$transaction(async (tx) => {
-      const nota = await tx.notaVenta.findUniqueOrThrow({
-        where: { id: solicitud.nota_id },
-        include: { lineas: true, pagos: true },
-      });
-
-      await tx.evidenciaNota.create({
-        data: {
-          nota_id: nota.id,
-          empresa_id: solicitud.empresa_id,
-          tipo: 'TICKET_ORIGINAL',
-          descripcion: `Snapshot antes de edición autorizada (solicitud ${solicitud.id})`,
-          data_json: {
-            version: nota.version,
-            total: Number(nota.total),
-            lineas: nota.lineas.map((l) => ({
-              articulo_id: l.articulo_id, clave: l.clave, cantidad: Number(l.cantidad),
-              precio_unitario: Number(l.precio_unitario), descuento: Number(l.descuento), subtotal: Number(l.subtotal),
-            })),
-            pagos: nota.pagos.map((p) => ({ metodo: p.metodo, monto: Number(p.monto), referencia: p.referencia })),
-          } as any,
-          subido_por_id: admin.id,
-        },
-      });
-
-      const cargasActivas = await tx.cargaNota.findMany({
-        where: { nota_id: nota.id, anulada: false },
-        include: { lineas: { include: { linea: true } } },
-      });
-
-      for (const carga of cargasActivas) {
-        for (const cl of carga.lineas) {
-          const art = await tx.articulo.findUnique({ where: { id: cl.linea.articulo_id } });
-          if (!art) continue;
-
-          const cantAntes = Number(art.existencia_1 ?? 0);
-          const cantDespues = cantAntes + Number(cl.cantidad_cargada);
-
-          await tx.movimientoInventario.create({
-            data: {
-              ubicacion_id: nota.ubicacion_id,
-              articulo_id: art.id,
-              tipo: 'ENTRADA',
-              existencia_num: 1,
-              cantidad: cl.cantidad_cargada,
-              cantidad_antes: cantAntes,
-              cantidad_despues: cantDespues,
-              concepto: `Reversión por edición autorizada — nota #${nota.folio}`,
-              referencia_id: nota.id,
-              usuario_id: admin.id,
-            },
-          });
-
-          await tx.articulo.update({ where: { id: art.id }, data: { existencia_1: cantDespues } });
-        }
-
-        await tx.cargaNota.update({ where: { id: carga.id }, data: { anulada: true } });
-      }
-
-      await tx.notaVenta.update({ where: { id: nota.id }, data: { estatus: 'REABIERTA' } });
+      await this.reabrirEnTransaccion(tx, solicitud.nota_id, solicitud.empresa_id, admin.id, `solicitud ${solicitud.id}`);
 
       await tx.solicitudEdicionNota.update({
         where: { id: solicitud.id },
@@ -228,6 +171,131 @@ export class SolicitudesEdicionService {
     });
 
     return { ok: true, nota_id: solicitud.nota_id };
+  }
+
+  // ─── Apertura directa (ADMIN, sin correo ni token) ──────────────
+
+  async aperturarDirecto(notaId: string, ubicacionId: string, adminId: string, dto: CrearSolicitudDto) {
+    const nota = await this.prisma.notaVenta.findFirst({
+      where: { id: notaId, ubicacion_id: ubicacionId },
+      include: { ubicacion: { select: { empresa_id: true } } },
+    });
+    if (!nota) throw new NotFoundException('Nota no encontrada');
+
+    if (!ESTATUS_CON_EDICION_SOLICITABLE.includes(nota.estatus)) {
+      throw new ForbiddenException(`No se puede editar una nota en estatus ${nota.estatus}`);
+    }
+
+    if (nota.estatus === 'CREDITO') {
+      const abono = await this.prisma.movimientoCuenta.findFirst({
+        where: { nota_id: notaId, tipo: 'ABONO' },
+      });
+      if (abono) {
+        throw new BadRequestException(
+          'No se puede editar una nota a crédito que ya tiene abonos registrados',
+        );
+      }
+    }
+
+    const empresaId = nota.ubicacion.empresa_id;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Si un vendedor/encargado ya tenía una solicitud pendiente para esta
+      // nota, el admin la resuelve al abrir directo — no debe quedar colgada
+      // esperando un correo que ya no tiene sentido.
+      await tx.solicitudEdicionNota.updateMany({
+        where: { nota_id: notaId, estatus: 'PENDIENTE' },
+        data: {
+          estatus: 'APROBADA',
+          aprobado_por_id: adminId,
+          comentario_admin: 'Nota abierta directamente por un administrador',
+        },
+      });
+
+      const solicitud = await tx.solicitudEdicionNota.create({
+        data: {
+          nota_id: notaId,
+          empresa_id: empresaId,
+          solicitante_id: adminId,
+          motivo: dto.motivo,
+          estatus: 'APROBADA',
+          aprobado_por_id: adminId,
+        },
+      });
+
+      await this.reabrirEnTransaccion(tx, notaId, empresaId, adminId, `apertura directa ${solicitud.id}`);
+    });
+
+    return { ok: true, nota_id: notaId };
+  }
+
+  /** Snapshot de la nota + reversión de cargas activas + estatus REABIERTA. Compartido por aprobar() y aperturarDirecto(). */
+  private async reabrirEnTransaccion(
+    tx: Prisma.TransactionClient,
+    notaId: string,
+    empresaId: string,
+    adminId: string,
+    snapshotDescripcion: string,
+  ) {
+    const nota = await tx.notaVenta.findUniqueOrThrow({
+      where: { id: notaId },
+      include: { lineas: true, pagos: true },
+    });
+
+    await tx.evidenciaNota.create({
+      data: {
+        nota_id: nota.id,
+        empresa_id: empresaId,
+        tipo: 'TICKET_ORIGINAL',
+        descripcion: `Snapshot antes de edición autorizada (${snapshotDescripcion})`,
+        data_json: {
+          version: nota.version,
+          total: Number(nota.total),
+          lineas: nota.lineas.map((l) => ({
+            articulo_id: l.articulo_id, clave: l.clave, cantidad: Number(l.cantidad),
+            precio_unitario: Number(l.precio_unitario), descuento: Number(l.descuento), subtotal: Number(l.subtotal),
+          })),
+          pagos: nota.pagos.map((p) => ({ metodo: p.metodo, monto: Number(p.monto), referencia: p.referencia })),
+        } as any,
+        subido_por_id: adminId,
+      },
+    });
+
+    const cargasActivas = await tx.cargaNota.findMany({
+      where: { nota_id: nota.id, anulada: false },
+      include: { lineas: { include: { linea: true } } },
+    });
+
+    for (const carga of cargasActivas) {
+      for (const cl of carga.lineas) {
+        const art = await tx.articulo.findUnique({ where: { id: cl.linea.articulo_id } });
+        if (!art) continue;
+
+        const cantAntes = Number(art.existencia_1 ?? 0);
+        const cantDespues = cantAntes + Number(cl.cantidad_cargada);
+
+        await tx.movimientoInventario.create({
+          data: {
+            ubicacion_id: nota.ubicacion_id,
+            articulo_id: art.id,
+            tipo: 'ENTRADA',
+            existencia_num: 1,
+            cantidad: cl.cantidad_cargada,
+            cantidad_antes: cantAntes,
+            cantidad_despues: cantDespues,
+            concepto: `Reversión por edición autorizada — nota #${nota.folio}`,
+            referencia_id: nota.id,
+            usuario_id: adminId,
+          },
+        });
+
+        await tx.articulo.update({ where: { id: art.id }, data: { existencia_1: cantDespues } });
+      }
+
+      await tx.cargaNota.update({ where: { id: carga.id }, data: { anulada: true } });
+    }
+
+    await tx.notaVenta.update({ where: { id: nota.id }, data: { estatus: 'REABIERTA' } });
   }
 
   // ─── Rechazar (público, vía token) ──────────────────────────────

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle, Download } from 'lucide-react';
+import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle, Download, Unlock } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
@@ -118,6 +118,7 @@ export default function NotaDetallePage() {
 
   // Solicitud de edición
   const [dlgSolicitud, setDlgSolicitud] = useState(false);
+  const [modoDlgSolicitud, setModoDlgSolicitud] = useState<'solicitar' | 'aperturar'>('solicitar');
   const [solicitudMotivo, setSolicitudMotivo] = useState('');
   const [creandoSolicitud, setCreandoSolicitud] = useState(false);
   const [solicitudError, setSolicitudError] = useState<string | null>(null);
@@ -126,7 +127,10 @@ export default function NotaDetallePage() {
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canCarga = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
-  const canSolicitarEdicion = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
+  // ADMIN ya no "solicita" edición — es quien aprobaría su propia solicitud,
+  // así que en vez de eso abre la venta directo (ver canAperturarDirecto).
+  const canSolicitarEdicion = ['ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
+  const canAperturarDirecto = ['ADMIN'].includes(usuario?.rol ?? '');
 
   async function load() {
     setLoading(true);
@@ -501,6 +505,14 @@ export default function NotaDetallePage() {
   const solicitudPendiente = solicitudes.find((s) => s.estatus === 'PENDIENTE');
 
   function openSolicitud() {
+    setModoDlgSolicitud('solicitar');
+    setSolicitudMotivo('');
+    setSolicitudError(null);
+    setDlgSolicitud(true);
+  }
+
+  function openAperturarDirecto() {
+    setModoDlgSolicitud('aperturar');
     setSolicitudMotivo('');
     setSolicitudError(null);
     setDlgSolicitud(true);
@@ -515,11 +527,18 @@ export default function NotaDetallePage() {
     setCreandoSolicitud(true);
     setSolicitudError(null);
     try {
-      await api.post(`/ventas/${nota.id}/solicitudes-edicion`, { motivo: solicitudMotivo.trim() });
+      const url = modoDlgSolicitud === 'aperturar'
+        ? `/ventas/${nota.id}/solicitudes-edicion/abrir-directo`
+        : `/ventas/${nota.id}/solicitudes-edicion`;
+      await api.post(url, { motivo: solicitudMotivo.trim() });
       setDlgSolicitud(false);
-      loadSolicitudes();
+      if (modoDlgSolicitud === 'aperturar') {
+        void load();
+      } else {
+        loadSolicitudes();
+      }
     } catch (err) {
-      setSolicitudError(err instanceof Error ? err.message : 'Error al solicitar la edición');
+      setSolicitudError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
     } finally {
       setCreandoSolicitud(false);
     }
@@ -635,6 +654,8 @@ export default function NotaDetallePage() {
   const puedeSolicitarEdicion = canSolicitarEdicion
     && ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'].includes(nota.estatus)
     && !solicitudPendiente;
+  const puedeAperturarDirecto = canAperturarDirecto
+    && ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'].includes(nota.estatus);
 
   // Computa saldo y running balance para CREDITO
   const totalPagado = nota.pagos.reduce((s, p) => s + p.monto, 0);
@@ -718,6 +739,12 @@ export default function NotaDetallePage() {
             <Button variant="ghost" onClick={openSolicitud}>
               <Send className="h-4 w-4 mr-1.5" />
               Solicitar edición
+            </Button>
+          )}
+          {puedeAperturarDirecto && (
+            <Button variant="ghost" onClick={openAperturarDirecto}>
+              <Unlock className="h-4 w-4 mr-1.5" />
+              Abrir venta
             </Button>
           )}
           {['ABIERTA', 'PENDIENTE', 'REABIERTA'].includes(nota.estatus) && canCancel && (
@@ -1516,11 +1543,18 @@ export default function NotaDetallePage() {
         )}
       </Dialog>
 
-      {/* ── Dialog: solicitar edición ──────────────────────── */}
-      <Dialog open={dlgSolicitud} onClose={() => setDlgSolicitud(false)} title="Solicitar edición de venta" size="md">
+      {/* ── Dialog: solicitar edición / abrir directo ───────── */}
+      <Dialog
+        open={dlgSolicitud}
+        onClose={() => setDlgSolicitud(false)}
+        title={modoDlgSolicitud === 'aperturar' ? 'Abrir venta para editar' : 'Solicitar edición de venta'}
+        size="md"
+      >
         <div className="space-y-4">
           <p className="text-body-sm text-steel-500">
-            Esta venta ya fue cobrada. Se enviará un correo al administrador para que autorice la edición.
+            {modoDlgSolicitud === 'aperturar'
+              ? 'Esta venta ya fue cobrada. Se reabrirá de inmediato para que puedas editarla.'
+              : 'Esta venta ya fue cobrada. Se enviará un correo al administrador para que autorice la edición.'}
           </p>
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Motivo</label>
@@ -1542,7 +1576,7 @@ export default function NotaDetallePage() {
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setDlgSolicitud(false)}>Cancelar</Button>
             <Button type="button" loading={creandoSolicitud} onClick={onCrearSolicitud}>
-              Enviar solicitud
+              {modoDlgSolicitud === 'aperturar' ? 'Abrir venta' : 'Enviar solicitud'}
             </Button>
           </DialogFooter>
         </div>

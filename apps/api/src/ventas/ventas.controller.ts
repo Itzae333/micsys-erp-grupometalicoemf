@@ -207,4 +207,16 @@ export class VentasController {
   ) {
     return this.solicitudesEdicion.listarPorNota(id, ubicacionId);
   }
+
+  @Post(':id/solicitudes-edicion/abrir-directo')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'ADMIN reabre una venta cobrada de inmediato, sin pasar por aprobación por correo' })
+  abrirDirecto(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @Body() dto: CrearSolicitudDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.solicitudesEdicion.aperturarDirecto(id, ubicacionId, user.sub, dto);
+  }
 }
