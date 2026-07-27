@@ -52,7 +52,7 @@ export class ArticulosService {
       }));
     }
 
-    const [total, data] = await Promise.all([
+    const [total, data, conProveedor] = await Promise.all([
       this.prisma.articulo.count({ where }),
       this.prisma.articulo.findMany({
         where,
@@ -61,6 +61,10 @@ export class ArticulosService {
         orderBy: { clave: 'asc' },
         include: { proveedor: { select: { id: true, nombre: true } } },
       }),
+      // Independiente de la página/búsqueda actual: el front usa esto para
+      // decidir si muestra la columna "Proveedor" en toda la tabla, no solo
+      // en la página visible.
+      this.prisma.articulo.count({ where: { ubicacion_id: ubicacionId, proveedor_id: { not: null } } }),
     ]);
 
     return {
@@ -69,6 +73,7 @@ export class ArticulosService {
       page,
       limit,
       pages: Math.ceil(total / limit),
+      algun_proveedor_asignado: conProveedor > 0,
     };
   }
 

@@ -125,6 +125,7 @@ export interface ArticulosPage {
   page: number;
   limit: number;
   pages: number;
+  algun_proveedor_asignado: boolean;
 }
 
 export interface Cliente {

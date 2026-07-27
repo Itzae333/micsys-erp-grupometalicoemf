@@ -234,6 +234,10 @@ export default function InventarioPage() {
     .sort((a, b) => a.numero - b.numero);
   const activeExistencias = schema?.existencias.filter((e) => e.activa) ?? [];
   const activeDescripciones = schema?.descripciones.filter((d) => d.activa) ?? [];
+  // Columna oculta hasta que exista al menos un artículo con proveedor asignado
+  // en toda la ubicación (no solo en la página/búsqueda actual), para no
+  // mostrar una columna vacía a las empresas que no usan proveedores.
+  const hayProveedorAsignado = result?.algun_proveedor_asignado ?? false;
 
   return (
     <div className="flex flex-col h-full">
@@ -311,6 +315,11 @@ export default function InventarioPage() {
                     {d.label}
                   </th>
                 ))}
+                {hayProveedorAsignado && (
+                  <th className="px-4 py-2.5 text-eyebrow text-steel-500 tracking-widest uppercase">
+                    Proveedor
+                  </th>
+                )}
                 {activePrices.map((p) => (
                   <th key={p.numero} className="px-3 py-2.5 text-eyebrow text-steel-500 tracking-widest uppercase text-right w-24">
                     {p.label}
@@ -342,6 +351,13 @@ export default function InventarioPage() {
                       </span>
                     </td>
                   ))}
+                  {hayProveedorAsignado && (
+                    <td className="px-4 py-2.5">
+                      <span className="text-table text-steel-700 truncate block max-w-[160px]">
+                        {art.proveedor?.nombre ?? '—'}
+                      </span>
+                    </td>
+                  )}
                   {activePrices.map((p) => {
                     const val = art[`precio_${p.numero}` as keyof Articulo] as number | null;
                     return (
