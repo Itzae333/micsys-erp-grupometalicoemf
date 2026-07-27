@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
+import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID, EMPRESA_LAMINAS_MONTERREY_ID } from '@/lib/empresas';
 import type { NotasVentaPage, NotaVenta, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
@@ -136,6 +136,7 @@ export default function VentasPage() {
   const [cobrando, setCobrando] = useState(false);
   const [checkCredito, setCheckCredito] = useState(false);
   const [checkNotaPorPagar, setCheckNotaPorPagar] = useState(false);
+  const [checkSinPrecio, setCheckSinPrecio] = useState(false);
 
   // Email / PDF
   const [dlgEmail, setDlgEmail] = useState<'ticket' | null>(null);
@@ -664,7 +665,7 @@ export default function VentasPage() {
     pagosList: { metodo: string; monto: number; referencia: string }[],
     cambioFinal: number,
     copias = 1,
-    opts?: { soloAbono?: boolean; saldoAnterior?: number; folioOverride?: string },
+    opts?: { soloAbono?: boolean; saldoAnterior?: number; folioOverride?: string; sinPrecio?: boolean },
   ): Promise<boolean> {
     const totalPagadoNota = (nota.pagos ?? []).reduce((s, p) => s + p.monto, 0);
     const saldoRestante = Math.max(0, +(nota.total - totalPagadoNota).toFixed(2));
@@ -717,6 +718,7 @@ export default function VentasPage() {
       cambio: cambioFinal > 0 ? cambioFinal : 0,
       tipo_cierre: tipoCierre,
       saldo_restante: tipoCierre === 'CREDITO' ? saldoRestante : 0,
+      sin_precios: !!opts?.sinPrecio,
     };
 
     try {
@@ -829,6 +831,7 @@ export default function VentasPage() {
     setCobrandoError(null);
     setCheckCredito(false);
     setCheckNotaPorPagar(false);
+    setCheckSinPrecio(false);
     setShowTicketCobrar(false);
     setDlgCobrar(true);
   }
@@ -877,6 +880,11 @@ export default function VentasPage() {
       void printTicket(notaActualizada, tipoCierre, pagosSnap, cambioSnap, copiasAuto).then((ok) => {
         setPostCobro((prev) => prev ? { ...prev, printStatus: ok ? 'ok' : 'error' } : prev);
       });
+      // Láminas Monterrey: copia extra sin precios (nota de entrega), aparte
+      // de las copias normales — no afecta el printStatus de arriba.
+      if (checkSinPrecio) {
+        void printTicket(notaActualizada, tipoCierre, pagosSnap, cambioSnap, 1, { sinPrecio: true });
+      }
     } catch (err) {
       setCobrandoError(err instanceof Error ? err.message : 'Error al procesar');
     } finally {
@@ -1784,6 +1792,21 @@ export default function VentasPage() {
               </label>
             </div>
 
+            {empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-steel-200 hover:border-steel-300 bg-white cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-brand-600"
+                  checked={checkSinPrecio}
+                  onChange={(e) => setCheckSinPrecio(e.target.checked)}
+                />
+                <div>
+                  <p className="text-body-sm font-semibold text-steel-900">Imprimir nota sin precio</p>
+                  <p className="text-meta text-steel-500">Copia extra sin precios ni total, para firma de entrega</p>
+                </div>
+              </label>
+            )}
+
             {/* Sección de pagos — solo si ningún check activo */}
             {!checkCredito && !checkNotaPorPagar && (
               <div className="space-y-3">
@@ -2300,6 +2323,25 @@ export default function VentasPage() {
             >
               🖨️ Reimprimir ticket (ticketera)
             </Button>
+            {empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+              <Button
+                variant="secondary"
+                className="w-full justify-start"
+                onClick={() => {
+                  const pagosImp = (dlgReimprimir.pagos ?? []).map((p) => ({
+                    metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? '',
+                  }));
+                  const sumaP = pagosImp.reduce((s, p) => s + p.monto, 0);
+                  const cambioImp = Math.max(0, +(sumaP - dlgReimprimir.total).toFixed(2));
+                  const tipoCierreImp = dlgReimprimir.estatus === 'CREDITO' ? 'CREDITO'
+                    : dlgReimprimir.estatus === 'PENDIENTE' ? 'PENDIENTE' : 'PAGADA';
+                  void printTicket(dlgReimprimir, tipoCierreImp, pagosImp, cambioImp, 1, { sinPrecio: true });
+                  setDlgReimprimir(null);
+                }}
+              >
+                🖨️ Reimprimir sin precio
+              </Button>
+            )}
             <Button
               variant="secondary"
               className="w-full justify-start"

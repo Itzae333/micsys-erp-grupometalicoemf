@@ -9,3 +9,9 @@ export const EMPRESA_METALICOS_LYEVA_ID = 'metalicos-leyva-id';
 // (lo que les importa para el arqueo físico) en vez de "Total de ventas" —
 // mismo criterio de personalización puntual por empresa que Metálicos Lyeva.
 export const EMPRESA_EMFIMIFAR_ID = 'emfimifar-id';
+
+// Láminas Monterrey pidió un check "Imprimir nota sin precio" al cobrar/
+// reimprimir, que saca una copia extra del ticket sin precios/total/forma de
+// pago (nota de entrega para firma) — personalización puntual, mismo criterio
+// que arriba.
+export const EMPRESA_LAMINAS_MONTERREY_ID = 'laminas-monterrey-id';

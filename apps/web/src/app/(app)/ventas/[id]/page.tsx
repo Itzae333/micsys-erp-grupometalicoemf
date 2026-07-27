@@ -6,7 +6,7 @@ import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clo
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
+import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID, EMPRESA_LAMINAS_MONTERREY_ID } from '@/lib/empresas';
 import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
@@ -313,7 +313,7 @@ export default function NotaDetallePage() {
   }
 
   // ── Reimprimir ticket ──────────────────────────────────────
-  async function printTicketNota() {
+  async function printTicketNota(sinPrecio = false) {
     if (!nota) return;
     const tipoCierre = nota.estatus === 'CREDITO' ? 'CREDITO' : 'PAGADA';
     const totalPagadoCalc = nota.pagos.reduce((s, p) => s + p.monto, 0);
@@ -366,6 +366,7 @@ export default function NotaDetallePage() {
       cambio: cambioCalc,
       tipo_cierre: tipoCierre,
       saldo_restante: tipoCierre === 'CREDITO' ? saldoRestante : 0,
+      sin_precios: sinPrecio,
     };
 
     setPrinting(true);
@@ -711,6 +712,12 @@ export default function NotaDetallePage() {
             <Button variant="secondary" disabled={printing} onClick={() => void printTicketNota()}>
               <Printer className={`h-4 w-4 mr-1.5 ${printing ? 'animate-pulse' : ''}`} />
               {printing ? 'Imprimiendo…' : 'Reimprimir'}
+            </Button>
+          )}
+          {esCerrada && empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+            <Button variant="secondary" disabled={printing} onClick={() => void printTicketNota(true)}>
+              <Printer className={`h-4 w-4 mr-1.5 ${printing ? 'animate-pulse' : ''}`} />
+              {printing ? 'Imprimiendo…' : 'Reimprimir sin precio'}
             </Button>
           )}
           {esCerrada && canCancel && (

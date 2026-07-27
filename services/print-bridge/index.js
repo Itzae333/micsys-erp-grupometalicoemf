@@ -698,6 +698,11 @@ function buildEscPosBuffer(ticket) {
   if (ticket.nota.cliente) push(ln('Cliente: ' + ticket.nota.cliente));
   // Solo viene si el front lo mandó (Metálicos Lyeva pidió ver el vendedor).
   if (ticket.nota.usuario) push(ln('Vendedor: ' + norm(ticket.nota.usuario)));
+  // Láminas Monterrey: copia extra sin ningún monto, para firma de entrega —
+  // se rotula para no confundirla con el comprobante de cobro.
+  if (ticket.sin_precios) {
+    push(CMD.BOLD_ON, center('*** SIN VALOR FISCAL — SOLO ENTREGA ***'), CMD.BOLD_OFF);
+  }
   push(sep());
 
   // ── Productos ──────────────────────────────────────────
@@ -705,66 +710,70 @@ function buildEscPosBuffer(ticket) {
     const nombre = linea.descripcion || linea.clave;
     // Cantidad ANTES de la descripción; la impresora hace wrap automático
     push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
-    // Precio unitario y subtotal en su propia línea alineada
-    push(row('  P.U $' + formatMoney(Number(linea.precio)), 'Imp $' + formatMoney(Number(linea.subtotal))));
+    if (!ticket.sin_precios) {
+      // Precio unitario y subtotal en su propia línea alineada
+      push(row('  P.U $' + formatMoney(Number(linea.precio)), 'Imp $' + formatMoney(Number(linea.subtotal))));
+    }
   }
 
   push(sep('='));
 
-  // ── Total ──────────────────────────────────────────────
-  push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-  push(row('TOTAL', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
-  push(CMD.NORMAL, CMD.BOLD_OFF, sep());
+  if (!ticket.sin_precios) {
+    // ── Total ──────────────────────────────────────────────
+    push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
+    push(row('TOTAL', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
+    push(CMD.NORMAL, CMD.BOLD_OFF, sep());
 
-  // ── Forma de pago ──────────────────────────────────────
-  if (ticket.tipo_cierre === 'CREDITO') {
-    if (ticket.saldo_anterior != null) {
-      push(row('SALDO ANTERIOR', '$' + formatMoney(Number(ticket.saldo_anterior))));
+    // ── Forma de pago ──────────────────────────────────────
+    if (ticket.tipo_cierre === 'CREDITO') {
+      if (ticket.saldo_anterior != null) {
+        push(row('SALDO ANTERIOR', '$' + formatMoney(Number(ticket.saldo_anterior))));
+      }
+      const pagosAbono = (ticket.pagos ?? []).filter((p) => Number(p.monto) > 0);
+      if (pagosAbono.length > 0) {
+        push(ln('ABONO:'));
+        for (const pago of pagosAbono) {
+          push(row('  ' + norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
+        }
+        push(sep('-'));
+      }
+      const saldoRestante = Number(ticket.saldo_restante ?? 0);
+      if (saldoRestante > 0) {
+        push(CMD.BOLD_ON);
+        push(row('SALDO PENDIENTE', '$' + formatMoney(saldoRestante)));
+        push(CMD.BOLD_OFF);
+        push(center('ESTATUS: CREDITO'));
+      } else {
+        push(CMD.BOLD_ON);
+        push(center('*** PAGADA ***'));
+        push(CMD.BOLD_OFF);
+      }
+    } else if (ticket.tipo_cierre === 'PENDIENTE') {
+      push(row('PENDIENTE DE COBRO', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
+    } else {
+      for (const pago of (ticket.pagos ?? [])) {
+        if (Number(pago.monto) > 0) {
+          push(row(norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
+        }
+      }
+      if (Number(ticket.cambio) > 0) {
+        push(row('CAMBIO', '$' + formatMoney(Number(ticket.cambio))));
+      }
     }
-    const pagosAbono = (ticket.pagos ?? []).filter((p) => Number(p.monto) > 0);
-    if (pagosAbono.length > 0) {
-      push(ln('ABONO:'));
-      for (const pago of pagosAbono) {
-        push(row('  ' + norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
+
+    // ── Historial de anticipos (pedidos liquidados) ────────
+    if (ticket.historial_anticipos && ticket.historial_anticipos.length > 0) {
+      push(sep());
+      push(CMD.BOLD_ON, ln('HISTORIAL DE ANTICIPOS:'), CMD.BOLD_OFF);
+      let totalAnticipado = 0;
+      for (const a of ticket.historial_anticipos) {
+        const fechaA = a.fecha ? fmtDate(a.fecha) : '';
+        push(row('  ' + fechaA + ' ' + norm(a.metodo), '$' + formatMoney(Number(a.monto))));
+        totalAnticipado += Number(a.monto);
       }
       push(sep('-'));
+      push(row('  TOTAL ANTICIPADO', '$' + formatMoney(totalAnticipado)));
     }
-    const saldoRestante = Number(ticket.saldo_restante ?? 0);
-    if (saldoRestante > 0) {
-      push(CMD.BOLD_ON);
-      push(row('SALDO PENDIENTE', '$' + formatMoney(saldoRestante)));
-      push(CMD.BOLD_OFF);
-      push(center('ESTATUS: CREDITO'));
-    } else {
-      push(CMD.BOLD_ON);
-      push(center('*** PAGADA ***'));
-      push(CMD.BOLD_OFF);
-    }
-  } else if (ticket.tipo_cierre === 'PENDIENTE') {
-    push(row('PENDIENTE DE COBRO', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));
-  } else {
-    for (const pago of (ticket.pagos ?? [])) {
-      if (Number(pago.monto) > 0) {
-        push(row(norm(pago.metodo), '$' + formatMoney(Number(pago.monto))));
-      }
-    }
-    if (Number(ticket.cambio) > 0) {
-      push(row('CAMBIO', '$' + formatMoney(Number(ticket.cambio))));
-    }
-  }
-
-  // ── Historial de anticipos (pedidos liquidados) ────────
-  if (ticket.historial_anticipos && ticket.historial_anticipos.length > 0) {
-    push(sep());
-    push(CMD.BOLD_ON, ln('HISTORIAL DE ANTICIPOS:'), CMD.BOLD_OFF);
-    let totalAnticipado = 0;
-    for (const a of ticket.historial_anticipos) {
-      const fechaA = a.fecha ? fmtDate(a.fecha) : '';
-      push(row('  ' + fechaA + ' ' + norm(a.metodo), '$' + formatMoney(Number(a.monto))));
-      totalAnticipado += Number(a.monto);
-    }
-    push(sep('-'));
-    push(row('  TOTAL ANTICIPADO', '$' + formatMoney(totalAnticipado)));
   }
 
   // ── Pie ────────────────────────────────────────────────
