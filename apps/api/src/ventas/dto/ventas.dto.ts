@@ -134,4 +134,10 @@ export class SendEmailDto {
     cambio?: number;
     tipo_cierre?: string;
   };
+
+  /** Láminas Monterrey: enviar el comprobante sin precios/total (nota de entrega). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sinPrecios?: boolean;
 }

@@ -892,31 +892,34 @@ export class VentasService {
     ].filter(Boolean);
     const direccion = addrParts.join(', ');
 
+    // Láminas Monterrey: comprobante sin precios/total, como nota de entrega.
+    const sinPrecios = !!dto.sinPrecios;
     const accentColor = '#16a34a';
-    const badgeLabel = 'COMPROBANTE DE VENTA';
+    const badgeLabel = sinPrecios ? 'NOTA DE ENTREGA — SIN VALOR FISCAL' : 'COMPROBANTE DE VENTA';
 
     const lineasHtml = nota.lineas.map((l, idx) => {
       const descs = [l.articulo?.descripcion_1, l.articulo?.descripcion_2,
         (l.articulo as any)?.descripcion_3, (l.articulo as any)?.descripcion_4, (l.articulo as any)?.descripcion_5,
       ].filter(Boolean).join(' · ');
       const bg = idx % 2 === 1 ? '#f8fafc' : '#ffffff';
+      const precioCeldas = sinPrecios ? '' : `
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">$${fmt(Number(l.precio_unitario))}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:13px;font-weight:700;color:#0f172a;">$${fmt(Number(l.subtotal))}</td>`;
       return `
         <tr>
           <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};font-size:12px;color:#475569;">${descs || l.clave}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">${Number(l.cantidad).toLocaleString('es-MX')}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">$${fmt(Number(l.precio_unitario))}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:13px;font-weight:700;color:#0f172a;">$${fmt(Number(l.subtotal))}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #f1f5f9;background:${bg};text-align:right;font-size:12px;color:#0f172a;">${Number(l.cantidad).toLocaleString('es-MX')}</td>${precioCeldas}
         </tr>`;
     }).join('');
 
-    // Totales
-    const subtotalRow = `<tr><td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
-    const descuentoRow = Number(nota.descuento) > 0
+    // Totales — se omiten por completo si sinPrecios
+    const subtotalRow = sinPrecios ? '' : `<tr><td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
+    const descuentoRow = !sinPrecios && Number(nota.descuento) > 0
       ? `<tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
       : '';
 
     let pagoHtml = '';
-    if (dto.extra) {
+    if (!sinPrecios && dto.extra) {
       if (dto.extra.tipo_cierre === 'CREDITO') {
         pagoHtml = `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(nota.total))}</td></tr>`;
       } else if (dto.extra.tipo_cierre === 'PENDIENTE') {
@@ -931,7 +934,7 @@ export class VentasService {
       }
     }
 
-    const totalRow = `<tr style="background:#0f172a;"><td colspan="3" style="padding:12px 8px;text-align:right;color:#f8fafc;font-weight:700;font-size:14px;letter-spacing:.5px;">TOTAL</td><td style="padding:12px 8px;text-align:right;color:#ffffff;font-weight:900;font-size:18px;">$${fmt(Number(nota.total))}</td></tr>`;
+    const totalRow = sinPrecios ? '' : `<tr style="background:#0f172a;"><td colspan="3" style="padding:12px 8px;text-align:right;color:#f8fafc;font-weight:700;font-size:14px;letter-spacing:.5px;">TOTAL</td><td style="padding:12px 8px;text-align:right;color:#ffffff;font-weight:900;font-size:18px;">$${fmt(Number(nota.total))}</td></tr>`;
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -981,8 +984,9 @@ export class VentasService {
         <tr style="background:#0f172a;">
           <th style="padding:9px 8px;text-align:left;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Descripción</th>
           <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Cant.</th>
+          ${sinPrecios ? '' : `
           <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">P.U.</th>
-          <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Subtotal</th>
+          <th style="padding:9px 8px;text-align:right;font-size:9px;color:#e2e8f0;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Subtotal</th>`}
         </tr>
       </thead>
       <tbody>${lineasHtml}</tbody>

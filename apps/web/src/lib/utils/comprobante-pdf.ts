@@ -39,6 +39,7 @@ export async function generateComprobantePDF(
   nota: NotaVenta,
   empresa: EmpresaPDF | null,
   ubicacion: UbicacionPDF | null,
+  sinPrecios = false,
 ): Promise<void> {
   const folioStr = `#${String(nota.folio).padStart(4, '0')}`;
   const fechaStr = new Date(nota.created_at).toLocaleDateString('es-MX', {
@@ -83,30 +84,32 @@ export async function generateComprobantePDF(
       l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5,
     ].filter(Boolean).join(' · ');
     const bg = idx % 2 === 1 ? 'background:#f8fafc;' : '';
+    const precioCeldas = sinPrecios ? '' : `
+      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#0f172a;${bg}">$${fmt(Number(l.precio_unitario))}</td>
+      <td style="padding:9px 8px;text-align:right;font-size:13px;font-weight:700;color:#0f172a;${bg}">$${fmt(Number(l.subtotal))}</td>`;
     return `<tr>
       <td style="padding:9px 8px;font-size:12px;color:#475569;${bg}">${desc || l.clave}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#0f172a;${bg}">${Number(l.cantidad).toLocaleString('es-MX')}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#0f172a;${bg}">$${fmt(Number(l.precio_unitario))}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:13px;font-weight:700;color:#0f172a;${bg}">$${fmt(Number(l.subtotal))}</td>
+      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#0f172a;${bg}">${Number(l.cantidad).toLocaleString('es-MX')}</td>${precioCeldas}
     </tr>`;
   }).join('');
 
-  const subtotalRow = `<tr><td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
-  const descuentoRow = Number(nota.descuento) > 0
+  // Se omiten por completo si sinPrecios (nota de entrega sin valor fiscal)
+  const subtotalRow = sinPrecios ? '' : `<tr><td colspan="3" style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">Subtotal</td><td style="padding:7px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.subtotal))}</td></tr>`;
+  const descuentoRow = !sinPrecios && Number(nota.descuento) > 0
     ? `<tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
     : '';
 
   const totalPagado = nota.pagos.reduce((s, p) => s + Number(p.monto), 0);
   const saldoPendiente = Math.max(0, +(Number(nota.total) - totalPagado).toFixed(2));
 
-  const pagoRows = nota.pagos.map((p) =>
+  const pagoRows = sinPrecios ? '' : nota.pagos.map((p) =>
     `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">${METODO_LABEL[p.metodo] ?? p.metodo}</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(Number(p.monto))}</td></tr>`,
   ).join('');
-  const creditoRow = esCredito && saldoPendiente > 0
+  const creditoRow = !sinPrecios && esCredito && saldoPendiente > 0
     ? `<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">A crédito</td><td style="text-align:right;padding:5px 8px;font-size:12px;color:#64748b;">$${fmt(saldoPendiente)}</td></tr>`
     : '';
 
-  const totalFmt = fmt(Number(nota.total));
+  const totalRowHtml = sinPrecios ? '' : `<tr class="total-row"><td colspan="3">TOTAL</td><td>$${fmt(Number(nota.total))}</td></tr>`;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -151,7 +154,7 @@ export async function generateComprobantePDF(
   </div>
 
   <div class="badge-row">
-    <span class="badge-label">Comprobante de venta&nbsp;&nbsp;${folioStr}</span>
+    <span class="badge-label">${sinPrecios ? 'Nota de entrega — sin valor fiscal' : 'Comprobante de venta'}&nbsp;&nbsp;${folioStr}</span>
     <span class="badge-fecha">Fecha: ${fechaStr}</span>
   </div>
 
@@ -167,8 +170,9 @@ export async function generateComprobantePDF(
         <tr>
           <th>Descripción</th>
           <th class="r" style="width:55px">Cant.</th>
+          ${sinPrecios ? '' : `
           <th class="r" style="width:90px">P.U.</th>
-          <th class="r" style="width:92px">Subtotal</th>
+          <th class="r" style="width:92px">Subtotal</th>`}
         </tr>
       </thead>
       <tbody>${lineasHTML}</tbody>
@@ -177,7 +181,7 @@ export async function generateComprobantePDF(
         ${descuentoRow}
         ${pagoRows}
         ${creditoRow}
-        <tr class="total-row"><td colspan="3">TOTAL</td><td>$${totalFmt}</td></tr>
+        ${totalRowHtml}
       </tfoot>
     </table>
   </div>

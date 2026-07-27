@@ -387,17 +387,17 @@ export default function NotaDetallePage() {
     }
   }
 
-  async function descargarComprobante() {
+  async function descargarComprobante(sinPrecio = false) {
     if (!nota) return;
     setDescargando(true);
     try {
-      await generateComprobantePDF(nota, empresa, ubicacion);
+      await generateComprobantePDF(nota, empresa, ubicacion, sinPrecio);
     } finally {
       setDescargando(false);
     }
   }
 
-  function enviarComprobanteWhatsApp() {
+  function enviarComprobanteWhatsApp(sinPrecio = false) {
     if (!nota) return;
     const nombreCliente = nota.cliente
       ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
@@ -405,7 +405,7 @@ export default function NotaDetallePage() {
     const mensaje = `Hola ${nombreCliente}, aquí tu ticket de la venta #${String(nota.folio).padStart(4, '0')}`;
     const link = buildWhatsAppClientLink(nota.cliente?.telefono, mensaje);
     if (!link) return;
-    void generateComprobantePDF(nota, empresa, ubicacion);
+    void generateComprobantePDF(nota, empresa, ubicacion, sinPrecio);
     window.open(link, '_blank');
   }
 
@@ -726,14 +726,30 @@ export default function NotaDetallePage() {
               {descargando ? 'Generando…' : 'Descargar'}
             </Button>
           )}
+          {esCerrada && canCancel && empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+            <Button variant="secondary" disabled={descargando} onClick={() => void descargarComprobante(true)}>
+              <Download className="h-4 w-4 mr-1.5" />
+              {descargando ? 'Generando…' : 'Descargar sin precio'}
+            </Button>
+          )}
           {esCerrada && canCancel && (
             <Button
               variant="secondary"
               disabled={!nota.cliente?.telefono}
               title={!nota.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
-              onClick={enviarComprobanteWhatsApp}
+              onClick={() => enviarComprobanteWhatsApp()}
             >
               WhatsApp
+            </Button>
+          )}
+          {esCerrada && canCancel && empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+            <Button
+              variant="secondary"
+              disabled={!nota.cliente?.telefono}
+              title={!nota.cliente?.telefono ? 'Cliente sin número registrado' : undefined}
+              onClick={() => enviarComprobanteWhatsApp(true)}
+            >
+              WhatsApp sin precio
             </Button>
           )}
           {puedeCargar && (

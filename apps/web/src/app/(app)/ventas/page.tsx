@@ -141,6 +141,7 @@ export default function VentasPage() {
   // Email / PDF
   const [dlgEmail, setDlgEmail] = useState<'ticket' | null>(null);
   const [emailDest, setEmailDest] = useState('');
+  const [emailSinPrecio, setEmailSinPrecio] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailOk, setEmailOk] = useState(false);
@@ -750,12 +751,13 @@ export default function VentasPage() {
     nota: NotaVenta,
     emailTo: string,
     extra?: { pagos?: { metodo: string; monto: number }[]; cambio?: number; tipo_cierre?: string },
+    sinPrecios = false,
   ) {
     setSendingEmail(true);
     setEmailError(null);
     setEmailOk(false);
     try {
-      await api.post(`/ventas/${nota.id}/send-email`, { to: emailTo, extra });
+      await api.post(`/ventas/${nota.id}/send-email`, { to: emailTo, extra, sinPrecios });
       setEmailOk(true);
       setTimeout(() => { setDlgEmail(null); setEmailOk(false); setPostCobro(null); }, 1800);
     } catch (err) {
@@ -2353,6 +2355,7 @@ export default function VentasPage() {
                 setEmailDest(dlgReimprimir.cliente?.email ?? '');
                 setEmailError(null);
                 setEmailOk(false);
+                setEmailSinPrecio(false);
                 setPostCobro({
                   nota: dlgReimprimir,
                   tipoCierre: dlgReimprimir.estatus,
@@ -2367,6 +2370,34 @@ export default function VentasPage() {
             >
               ✉️ Reenviar por correo
             </Button>
+            {empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
+              <Button
+                variant="secondary"
+                className="w-full justify-start"
+                onClick={() => {
+                  const pagosImp = (dlgReimprimir.pagos ?? []).map((p) => ({
+                    metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? '',
+                  }));
+                  const sumaP = pagosImp.reduce((s, p) => s + p.monto, 0);
+                  setEmailDest(dlgReimprimir.cliente?.email ?? '');
+                  setEmailError(null);
+                  setEmailOk(false);
+                  setEmailSinPrecio(true);
+                  setPostCobro({
+                    nota: dlgReimprimir,
+                    tipoCierre: dlgReimprimir.estatus,
+                    pagos: (dlgReimprimir.pagos ?? []).map((p) => ({
+                      metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? '',
+                    })),
+                    cambio: Math.max(0, +(sumaP - dlgReimprimir.total).toFixed(2)),
+                  });
+                  setDlgEmail('ticket');
+                  setDlgReimprimir(null);
+                }}
+              >
+                ✉️ Reenviar sin precio
+              </Button>
+            )}
             <Button variant="ghost" className="w-full text-steel-400" onClick={() => setDlgReimprimir(null)}>
               Cancelar
             </Button>
@@ -2481,8 +2512,8 @@ export default function VentasPage() {
       {/* ── Dialog: enviar por correo (declarado al final para quedar SIEMPRE por encima de otros diálogos abiertos, p.ej. el de Comprobante) ─────────────────────── */}
       <Dialog
         open={!!dlgEmail}
-        onClose={() => { setDlgEmail(null); setEmailOk(false); setEmailError(null); }}
-        title="Enviar comprobante por correo"
+        onClose={() => { setDlgEmail(null); setEmailOk(false); setEmailError(null); setEmailSinPrecio(false); }}
+        title={emailSinPrecio ? 'Enviar nota sin precio por correo' : 'Enviar comprobante por correo'}
         size="sm"
       >
         <div className="space-y-4">
@@ -2518,7 +2549,7 @@ export default function VentasPage() {
                       pagos: postCobro.pagos.filter((p) => p.monto > 0).map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
                       cambio: postCobro.cambio,
                       tipo_cierre: postCobro.tipoCierre,
-                    } : undefined);
+                    } : undefined, emailSinPrecio);
                   }}
                 >
                   {sendingEmail ? 'Enviando…' : '✉️ Enviar'}
