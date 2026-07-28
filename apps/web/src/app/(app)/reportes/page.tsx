@@ -1256,6 +1256,8 @@ function TablaProductos({ titulo, productos }: {
   );
 }
 
+type SubTabProveedor = { id: string; label: string; total?: number };
+
 function TabVentasProveedor({
   desde, hasta, onRangoRapido,
 }: { desde: string; hasta: string; onRangoRapido: (desde: string, hasta: string) => void }) {
@@ -1263,6 +1265,7 @@ function TabVentasProveedor({
   const [data, setData] = useState<ReporteVentasProveedorData | null>(null);
   const [loading, setLoading] = useState(false);
   const [descargando, setDescargando] = useState<'xls' | 'pdf' | null>(null);
+  const [subTab, setSubTab] = useState('general');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1271,6 +1274,7 @@ function TabVentasProveedor({
         `/reportes/ventas-proveedor?desde=${desde}&hasta=${hasta}`,
       );
       setData(d);
+      setSubTab('general');
     } catch { setData(null); }
     finally { setLoading(false); }
   }, [desde, hasta]);
@@ -1308,139 +1312,146 @@ function TabVentasProveedor({
   const totalGeneral = data.general.reduce((s, p) => s + p.total, 0);
   const piezasGeneral = data.general.reduce((s, p) => s + p.cantidad, 0);
 
+  const subTabs: SubTabProveedor[] = [
+    { id: 'general', label: 'General' },
+    ...data.por_proveedor.map((g) => ({ id: g.proveedor, label: g.proveedor, total: g.total })),
+    { id: 'clientes', label: 'Clientes' },
+    { id: 'notas', label: 'Notas' },
+  ];
+  const grupoActivo = data.por_proveedor.find((g) => g.proveedor === subTab);
+
   return (
-    <div className="space-y-6">
-      {/* Atajos de fecha + exportar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="ghost" onClick={() => onRangoRapido(iniMes(), hoy())}>
-          Este mes
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => onRangoRapido(inicioSemana(), hoy())}>
-          Esta semana
-        </Button>
-        <div className="flex-1" />
-        <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarXls()}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          {descargando === 'xls' ? 'Generando…' : 'XLS'}
-        </Button>
-        <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarPdf()}>
-          <FileText className="h-3.5 w-3.5 mr-1.5" />
-          {descargando === 'pdf' ? 'Generando…' : 'PDF'}
-        </Button>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatMini label="Total vendido" value={fmt(totalGeneral)} sub={`${data.rango.desde} al ${data.rango.hasta}`} accent />
-        <StatMini label="Piezas vendidas" value={fmtNum(piezasGeneral)} />
-        <StatMini label="Proveedores" value={String(data.por_proveedor.length)} />
-      </div>
-
-      <TablaProductos titulo="General" productos={data.general} />
-
-      {data.por_proveedor.map((grupo) => (
-        <details key={grupo.proveedor} className="bg-white border border-steel-200 rounded-xl overflow-hidden group">
-          <summary className="px-4 py-3 cursor-pointer flex items-center justify-between list-none">
-            <span className="text-body font-semibold text-steel-700">{grupo.proveedor}</span>
-            <span className="text-body-sm font-medium text-steel-500">{fmt(grupo.total)}</span>
-          </summary>
-          <div className="border-t border-steel-100">
-            <table className="w-full text-body-sm">
-              <thead>
-                <tr className="border-b border-steel-100">
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Producto</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Piezas</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-steel-50">
-                {grupo.productos.map((p) => (
-                  <tr key={p.articulo_id} className="hover:bg-steel-50">
-                    <td className="px-4 py-2 text-steel-700 max-w-[280px] truncate">{p.producto}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtNum(p.cantidad)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(p.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      ))}
-
-      {/* Clientes */}
-      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-steel-100">
-          <SectionTitle>Clientes</SectionTitle>
+    <div>
+      {/* Barra fija: atajos de fecha, exportar y sub-tabs — no se mueve al
+          hacer scroll en la tabla de abajo (ver overflow-y-auto del padre). */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 pt-1 pb-3 bg-steel-50 border-b border-steel-200">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <Button size="sm" variant="ghost" onClick={() => onRangoRapido(iniMes(), hoy())}>
+            Este mes
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onRangoRapido(inicioSemana(), hoy())}>
+            Esta semana
+          </Button>
+          <div className="flex-1" />
+          <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarXls()}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {descargando === 'xls' ? 'Generando…' : 'XLS'}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarPdf()}>
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            {descargando === 'pdf' ? 'Generando…' : 'PDF'}
+          </Button>
         </div>
-        {data.clientes.length === 0 ? (
-          <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-body-sm">
-              <thead>
-                <tr className="border-b border-steel-100">
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-steel-50">
-                {data.clientes.map((c) => (
-                  <tr key={c.cliente} className="hover:bg-steel-50">
-                    <td className="px-4 py-2 text-steel-700 max-w-[240px] truncate">{c.cliente}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{c.notas}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(c.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+        <div className="flex gap-1 flex-wrap">
+          {subTabs.map((st) => (
+            <button
+              key={st.id}
+              onClick={() => setSubTab(st.id)}
+              className={`px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors whitespace-nowrap ${
+                subTab === st.id
+                  ? 'bg-steel-900 text-white'
+                  : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-100'
+              }`}
+            >
+              {st.label}
+              {st.total !== undefined && <span className="ml-1.5 opacity-70">{fmt(st.total)}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-4 space-y-6">
+        {subTab === 'general' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <StatMini label="Total vendido" value={fmt(totalGeneral)} sub={`${data.rango.desde} al ${data.rango.hasta}`} accent />
+              <StatMini label="Piezas vendidas" value={fmtNum(piezasGeneral)} />
+              <StatMini label="Proveedores" value={String(data.por_proveedor.length)} />
+            </div>
+            <TablaProductos titulo="General" productos={data.general} />
+          </>
+        )}
+
+        {grupoActivo && <TablaProductos titulo={grupoActivo.proveedor} productos={grupoActivo.productos} />}
+
+        {subTab === 'clientes' && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100">
+              <SectionTitle>Clientes</SectionTitle>
+            </div>
+            {data.clientes.length === 0 ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {data.clientes.map((c) => (
+                      <tr key={c.cliente} className="hover:bg-steel-50">
+                        <td className="px-4 py-2 text-steel-700 max-w-[240px] truncate">{c.cliente}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{c.notas}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(c.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Detalle de notas */}
-      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-steel-100">
-          <SectionTitle>Detalle de notas</SectionTitle>
-        </div>
-        {data.notas.length === 0 ? (
-          <div className="p-6 text-center text-body-sm text-steel-400">Sin notas en el período</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-body-sm">
-              <thead>
-                <tr className="border-b border-steel-100">
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Nota</th>
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Fecha</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Estado</th>
-                  <th className="px-4 py-2 text-left font-medium text-steel-500">Pago</th>
-                  <th className="px-4 py-2 text-right font-medium text-steel-500">Resta</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-steel-50">
-                {data.notas.map((n) => (
-                  <tr key={n.folio} className="hover:bg-steel-50">
-                    <td className="px-4 py-2 text-steel-700 tabular-nums">N{String(n.folio).padStart(4, '0')}</td>
-                    <td className="px-4 py-2 text-steel-700 max-w-[200px] truncate">{n.cliente}</td>
-                    <td className="px-4 py-2 text-steel-500 tabular-nums whitespace-nowrap">
-                      {new Date(n.fecha).toLocaleDateString('es-MX')}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(n.total)}</td>
-                    <td className="px-4 py-2">
-                      <Badge variant={NOTA_CFG[n.estatus]?.variant ?? 'default'}>
-                        {NOTA_CFG[n.estatus]?.label ?? n.estatus}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2 text-steel-600">{METODO_LABEL[n.tipo_pago] ?? n.tipo_pago}</td>
-                    <td className={`px-4 py-2 text-right tabular-nums font-medium ${n.resta > 0 ? 'text-brand-600' : 'text-steel-400'}`}>
-                      {fmt(n.resta)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {subTab === 'notas' && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100">
+              <SectionTitle>Detalle de notas</SectionTitle>
+            </div>
+            {data.notas.length === 0 ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Sin notas en el período</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Nota</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Fecha</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Estado</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Pago</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Resta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {data.notas.map((n) => (
+                      <tr key={n.folio} className="hover:bg-steel-50">
+                        <td className="px-4 py-2 text-steel-700 tabular-nums">N{String(n.folio).padStart(4, '0')}</td>
+                        <td className="px-4 py-2 text-steel-700 max-w-[200px] truncate">{n.cliente}</td>
+                        <td className="px-4 py-2 text-steel-500 tabular-nums whitespace-nowrap">
+                          {new Date(n.fecha).toLocaleDateString('es-MX')}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(n.total)}</td>
+                        <td className="px-4 py-2">
+                          <Badge variant={NOTA_CFG[n.estatus]?.variant ?? 'default'}>
+                            {NOTA_CFG[n.estatus]?.label ?? n.estatus}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-steel-600">{METODO_LABEL[n.tipo_pago] ?? n.tipo_pago}</td>
+                        <td className={`px-4 py-2 text-right tabular-nums font-medium ${n.resta > 0 ? 'text-brand-600' : 'text-steel-400'}`}>
+                          {fmt(n.resta)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1474,9 +1485,9 @@ export default function ReportesPage() {
   const visibleTabs = TABS.filter((t) => t.id !== 'ventas_proveedor' || empresa?.id === EMPRESA_EMFIMIFAR_ID);
 
   return (
-    <div>
-      {/* Page header */}
-      <div className="px-6 py-4 border-b border-steel-200 bg-white flex items-center gap-3">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Page header — fijo, no se va con el scroll */}
+      <div className="px-6 py-4 border-b border-steel-200 bg-white flex items-center gap-3 flex-shrink-0">
         <BarChart3 className="h-5 w-5 text-brand-600" />
         <div>
           <h1 className="text-display-sm font-bold text-steel-900">Reportes</h1>
@@ -1484,9 +1495,9 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      <div className="p-6">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 flex-wrap">
+      {/* Tabs + filtro de fecha — igual fijos */}
+      <div className="px-6 pt-4 flex-shrink-0">
+        <div className="flex gap-1 mb-4 flex-wrap">
           {visibleTabs.map((t) => (
             <button
               key={t.id}
@@ -1503,7 +1514,6 @@ export default function ReportesPage() {
           ))}
         </div>
 
-        {/* Date range filter — only for ranged tabs */}
         {needsRange && (
           <DateRangeBar
             desde={desde}
@@ -1514,8 +1524,10 @@ export default function ReportesPage() {
             loading={false}
           />
         )}
+      </div>
 
-        {/* Tab content */}
+      {/* Contenido del tab — esta es la única zona que hace scroll */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         {tab === 'ventas'      && <TabVentas     desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'inventario'  && <TabInventario />}
         {tab === 'credito'     && <TabCredito />}
