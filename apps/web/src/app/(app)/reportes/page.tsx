@@ -3,14 +3,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   BarChart3, ShoppingCart, Package, Users, Truck, Factory, UserCog,
-  Download, RefreshCw, TrendingUp, AlertTriangle, Printer, Landmark,
+  Download, RefreshCw, TrendingUp, AlertTriangle, Printer, Landmark, Building2, FileText,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useContextoStore } from '@/lib/store/contexto.store';
+import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
+import { generateReporteVentasProveedorPDF } from '@/lib/utils/reporte-proveedor-pdf';
 import type {
   ReporteVentasData, ReporteInventarioData, ReporteCreditoData,
   ReporteComprasData, ReporteProduccionData, ReporteAsistenciaData,
+  ReporteVentasProveedorData,
   EstatusNota, EstatusOrdenCompra, EstatusProduccion, EstatusAsistencia,
 } from '@/lib/types/api';
 
@@ -158,6 +162,7 @@ const TABS = [
   { id: 'produccion',  label: 'Producción',   icon: <Factory className="h-4 w-4" /> },
   { id: 'asistencia',  label: 'RH',           icon: <UserCog className="h-4 w-4" /> },
   { id: 'corte_caja',  label: 'Corte de Caja',icon: <Landmark className="h-4 w-4" /> },
+  { id: 'ventas_proveedor', label: 'Ventas x Proveedor', icon: <Building2 className="h-4 w-4" /> },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -167,6 +172,14 @@ function iniMes() {
 }
 function hoy() {
   return new Date().toISOString().slice(0, 10);
+}
+function inicioSemana() {
+  const d = new Date();
+  const dia = d.getDay(); // 0 = domingo
+  const diff = dia === 0 ? 6 : dia - 1; // la semana empieza en lunes
+  const lunes = new Date(d);
+  lunes.setDate(d.getDate() - diff);
+  return lunes.toISOString().slice(0, 10);
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
@@ -1198,22 +1211,283 @@ function TabCorteCaja({ desde, hasta }: { desde: string; hasta: string }) {
   );
 }
 
+function TablaProductos({ titulo, productos }: {
+  titulo: string; productos: ReporteVentasProveedorData['general'];
+}) {
+  const total = productos.reduce((s, p) => s + p.total, 0);
+  const piezas = productos.reduce((s, p) => s + p.cantidad, 0);
+  return (
+    <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-steel-100">
+        <SectionTitle>{titulo}</SectionTitle>
+      </div>
+      {productos.length === 0 ? (
+        <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-body-sm">
+            <thead>
+              <tr className="border-b border-steel-100">
+                <th className="px-4 py-2 text-left font-medium text-steel-500">Producto</th>
+                <th className="px-4 py-2 text-right font-medium text-steel-500">Piezas</th>
+                <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-steel-50">
+              {productos.map((p) => (
+                <tr key={p.articulo_id} className="hover:bg-steel-50">
+                  <td className="px-4 py-2 text-steel-700 max-w-[280px] truncate">{p.producto}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{fmtNum(p.cantidad)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(p.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-steel-200 bg-steel-50">
+                <td className="px-4 py-2 font-semibold text-steel-900">Total</td>
+                <td className="px-4 py-2 text-right tabular-nums font-semibold text-steel-900">{fmtNum(piezas)}</td>
+                <td className="px-4 py-2 text-right tabular-nums font-semibold text-brand-700">{fmt(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type SubTabProveedor = { id: string; label: string; total?: number };
+
+function TabVentasProveedor({
+  desde, hasta, onRangoRapido,
+}: { desde: string; hasta: string; onRangoRapido: (desde: string, hasta: string) => void }) {
+  const { empresa } = useContextoStore();
+  const [data, setData] = useState<ReporteVentasProveedorData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [descargando, setDescargando] = useState<'xls' | 'pdf' | null>(null);
+  const [subTab, setSubTab] = useState('general');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await api.get<ReporteVentasProveedorData>(
+        `/reportes/ventas-proveedor?desde=${desde}&hasta=${hasta}`,
+      );
+      setData(d);
+      setSubTab('general');
+    } catch { setData(null); }
+    finally { setLoading(false); }
+  }, [desde, hasta]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function descargarXls() {
+    setDescargando('xls');
+    try {
+      const { blob, filename } = await api.getBlob(`/reportes/ventas-proveedor/xlsx?desde=${desde}&hasta=${hasta}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename ?? `ventas-por-proveedor_${desde}_a_${hasta}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  async function descargarPdf() {
+    if (!data) return;
+    setDescargando('pdf');
+    try {
+      await generateReporteVentasProveedorPDF(data, empresa?.nombre ?? '');
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  if (loading) return <div className="p-8 text-center text-steel-400">Cargando…</div>;
+  if (!data) return <div className="p-8 text-center text-steel-400">Sin datos</div>;
+
+  const totalGeneral = data.general.reduce((s, p) => s + p.total, 0);
+  const piezasGeneral = data.general.reduce((s, p) => s + p.cantidad, 0);
+
+  const subTabs: SubTabProveedor[] = [
+    { id: 'general', label: 'General' },
+    ...data.por_proveedor.map((g) => ({ id: g.proveedor, label: g.proveedor, total: g.total })),
+    { id: 'clientes', label: 'Clientes' },
+    { id: 'notas', label: 'Notas' },
+  ];
+  const grupoActivo = data.por_proveedor.find((g) => g.proveedor === subTab);
+
+  return (
+    <div>
+      {/* Barra fija: atajos de fecha, exportar y sub-tabs — no se mueve al
+          hacer scroll en la tabla de abajo (ver overflow-y-auto del padre). */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 pt-1 pb-3 bg-steel-50 border-b border-steel-200">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <Button size="sm" variant="ghost" onClick={() => onRangoRapido(iniMes(), hoy())}>
+            Este mes
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onRangoRapido(inicioSemana(), hoy())}>
+            Esta semana
+          </Button>
+          <div className="flex-1" />
+          <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarXls()}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {descargando === 'xls' ? 'Generando…' : 'XLS'}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarPdf()}>
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            {descargando === 'pdf' ? 'Generando…' : 'PDF'}
+          </Button>
+        </div>
+
+        <div className="flex gap-1 flex-wrap">
+          {subTabs.map((st) => (
+            <button
+              key={st.id}
+              onClick={() => setSubTab(st.id)}
+              className={`px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors whitespace-nowrap ${
+                subTab === st.id
+                  ? 'bg-steel-900 text-white'
+                  : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-100'
+              }`}
+            >
+              {st.label}
+              {st.total !== undefined && <span className="ml-1.5 opacity-70">{fmt(st.total)}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-4 space-y-6">
+        {subTab === 'general' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <StatMini label="Total vendido" value={fmt(totalGeneral)} sub={`${data.rango.desde} al ${data.rango.hasta}`} accent />
+              <StatMini label="Piezas vendidas" value={fmtNum(piezasGeneral)} />
+              <StatMini label="Proveedores" value={String(data.por_proveedor.length)} />
+            </div>
+            <TablaProductos titulo="General" productos={data.general} />
+          </>
+        )}
+
+        {grupoActivo && <TablaProductos titulo={grupoActivo.proveedor} productos={grupoActivo.productos} />}
+
+        {subTab === 'clientes' && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100">
+              <SectionTitle>Clientes</SectionTitle>
+            </div>
+            {data.clientes.length === 0 ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {data.clientes.map((c) => (
+                      <tr key={c.cliente} className="hover:bg-steel-50">
+                        <td className="px-4 py-2 text-steel-700 max-w-[240px] truncate">{c.cliente}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{c.notas}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(c.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {subTab === 'notas' && (
+          <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-steel-100">
+              <SectionTitle>Detalle de notas</SectionTitle>
+            </div>
+            {data.notas.length === 0 ? (
+              <div className="p-6 text-center text-body-sm text-steel-400">Sin notas en el período</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-body-sm">
+                  <thead>
+                    <tr className="border-b border-steel-100">
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Nota</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Fecha</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Estado</th>
+                      <th className="px-4 py-2 text-left font-medium text-steel-500">Pago</th>
+                      <th className="px-4 py-2 text-right font-medium text-steel-500">Resta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steel-50">
+                    {data.notas.map((n) => (
+                      <tr key={n.folio} className="hover:bg-steel-50">
+                        <td className="px-4 py-2 text-steel-700 tabular-nums">N{String(n.folio).padStart(4, '0')}</td>
+                        <td className="px-4 py-2 text-steel-700 max-w-[200px] truncate">{n.cliente}</td>
+                        <td className="px-4 py-2 text-steel-500 tabular-nums whitespace-nowrap">
+                          {new Date(n.fecha).toLocaleDateString('es-MX')}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(n.total)}</td>
+                        <td className="px-4 py-2">
+                          <Badge variant={NOTA_CFG[n.estatus]?.variant ?? 'default'}>
+                            {NOTA_CFG[n.estatus]?.label ?? n.estatus}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-steel-600">{METODO_LABEL[n.tipo_pago] ?? n.tipo_pago}</td>
+                        <td className={`px-4 py-2 text-right tabular-nums font-medium ${n.resta > 0 ? 'text-brand-600' : 'text-steel-400'}`}>
+                          {fmt(n.resta)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 
 export default function ReportesPage() {
+  const { empresa } = useContextoStore();
   const [tab, setTab] = useState<TabId>('ventas');
   const [desde, setDesde] = useState(iniMes);
   const [hasta, setHasta] = useState(hoy);
   const [applied, setApplied] = useState({ desde: iniMes(), hasta: hoy() });
 
-  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja';
+  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja' || tab === 'ventas_proveedor';
 
   const handleApply = () => setApplied({ desde, hasta });
 
+  // Atajos de fecha (Este mes / Esta semana) del tab de Ventas x Proveedor —
+  // rellenan y aplican el mismo rango que usa el resto de los reportes.
+  const handleRangoRapido = (nuevoDesde: string, nuevoHasta: string) => {
+    setDesde(nuevoDesde);
+    setHasta(nuevoHasta);
+    setApplied({ desde: nuevoDesde, hasta: nuevoHasta });
+  };
+
+  // "Ventas x Proveedor" es un reporte personalizado que hoy solo pidió
+  // EMFIMIFAR — el endpoint no restringe empresa, solo se oculta el tab.
+  const visibleTabs = TABS.filter((t) => t.id !== 'ventas_proveedor' || empresa?.id === EMPRESA_EMFIMIFAR_ID);
+
   return (
-    <div>
-      {/* Page header */}
-      <div className="px-6 py-4 border-b border-steel-200 bg-white flex items-center gap-3">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Page header — fijo, no se va con el scroll */}
+      <div className="px-6 py-4 border-b border-steel-200 bg-white flex items-center gap-3 flex-shrink-0">
         <BarChart3 className="h-5 w-5 text-brand-600" />
         <div>
           <h1 className="text-display-sm font-bold text-steel-900">Reportes</h1>
@@ -1221,10 +1495,10 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      <div className="p-6">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 flex-wrap">
-          {TABS.map((t) => (
+      {/* Tabs + filtro de fecha — igual fijos */}
+      <div className="px-6 pt-4 flex-shrink-0">
+        <div className="flex gap-1 mb-4 flex-wrap">
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -1240,7 +1514,6 @@ export default function ReportesPage() {
           ))}
         </div>
 
-        {/* Date range filter — only for ranged tabs */}
         {needsRange && (
           <DateRangeBar
             desde={desde}
@@ -1251,8 +1524,10 @@ export default function ReportesPage() {
             loading={false}
           />
         )}
+      </div>
 
-        {/* Tab content */}
+      {/* Contenido del tab — esta es la única zona que hace scroll */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         {tab === 'ventas'      && <TabVentas     desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'inventario'  && <TabInventario />}
         {tab === 'credito'     && <TabCredito />}
@@ -1260,6 +1535,9 @@ export default function ReportesPage() {
         {tab === 'produccion'  && <TabProduccion desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'asistencia'  && <TabAsistencia desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'corte_caja'  && <TabCorteCaja  desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'ventas_proveedor' && (
+          <TabVentasProveedor desde={applied.desde} hasta={applied.hasta} onRangoRapido={handleRangoRapido} />
+        )}
       </div>
     </div>
   );

@@ -83,7 +83,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/movimientos/remisiones',
     label: 'Remisiones',
     icon: <Truck className="h-4 w-4" />,
-    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA'],
+    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'],
   },
   {
     href: '/movimientos/recibir',

@@ -64,7 +64,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     console.warn('[auth] sesión cerrada: el servidor rechazó el refresh token', { path, at: new Date().toISOString() });
     if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
     useAuthStore.getState().clearAuth();
-    window.location.href = '/login?motivo=sesion_expirada';
+    const destino = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login?motivo=sesion_expirada&redirect=${destino}`;
     throw new ApiError(401, 'Sesión expirada');
   }
 
@@ -219,9 +220,37 @@ export class ApiError extends Error {
   }
 }
 
+// Descarga de archivos (ej. reportes XLSX) — el navegador no puede mandar el
+// header Authorization en una navegación/link normal, así que se pide con
+// fetch autenticado y se arma un blob descargable a partir de la respuesta.
+async function apiGetBlob(path: string): Promise<{ blob: Blob; filename: string | null }> {
+  const token = useAuthStore.getState().accessToken;
+  const { empresa, ubicacion } = useContextoStore.getState();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (empresa?.id) headers['x-empresa-id'] = empresa.id;
+  if (ubicacion?.id) headers['x-ubicacion-id'] = ubicacion.id;
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError(0, 'Sin conexión');
+  }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Error al descargar el archivo' }));
+    throw new ApiError(response.status, error.message ?? 'Error al descargar el archivo');
+  }
+  const disposition = response.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  return { blob: await response.blob(), filename: match?.[1] ?? null };
+}
+
 export const api = {
   get: <T>(path: string, options?: FetchOptions) =>
     apiFetch<T>(path, { method: 'GET', ...options }),
+
+  getBlob: apiGetBlob,
 
   post: <T>(path: string, body?: unknown, options?: FetchOptions) =>
     apiFetch<T>(path, {
