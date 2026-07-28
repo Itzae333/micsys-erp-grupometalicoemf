@@ -63,6 +63,19 @@ function clienteLabel(c: Cliente): string {
   return c.razon_social ?? `${c.nombre}${c.apellidos ? ` ${c.apellidos}` : ''}`;
 }
 
+// La clave de artículos importados del sistema viejo es un folio interno
+// ("LEGACY-000123") sin significado para el usuario — se prioriza mostrar
+// siempre la descripción completa y solo se muestra la clave si es una
+// clave real (no un folio de importación).
+function esClaveLegacy(clave: string): boolean {
+  return /^legacy-/i.test(clave);
+}
+
+function descripcionCompleta(art: Pick<Articulo, 'descripcion_1' | 'descripcion_2' | 'descripcion_3' | 'descripcion_4' | 'descripcion_5'>): string {
+  return [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
+    .filter(Boolean).join(' · ');
+}
+
 export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: VentaRapidaDialogProps) {
   const toast = useToast();
   const { usuario, accessToken } = useAuthStore();
@@ -113,8 +126,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   }, [artQ, empresa?.id, ubicacion?.id]);
 
   function agregarArticulo(art: Articulo) {
-    const descripcion = [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
-      .filter(Boolean).join(' · ');
+    const descripcion = descripcionCompleta(art);
     setLineas((prev) => [...prev, {
       key: `${art.id}-${Date.now()}`,
       articulo_id: art.id,
@@ -351,11 +363,10 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
                   className="w-full text-left px-3 py-2 hover:bg-steel-50 text-body-sm border-b border-steel-100 last:border-0"
                   onClick={() => agregarArticulo(art)}
                 >
-                  <span className="font-medium text-steel-900">{art.clave}</span>
-                  {' — '}
-                  <span className="text-steel-500">
-                    {[art.descripcion_1, art.descripcion_2].filter(Boolean).join(' · ')}
-                  </span>
+                  <p className="font-medium text-steel-900 truncate">{descripcionCompleta(art) || art.clave}</p>
+                  {!esClaveLegacy(art.clave) && (
+                    <p className="text-caption text-steel-400 truncate">{art.clave}</p>
+                  )}
                 </button>
               ))}
             </div>
@@ -368,8 +379,10 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
             {lineas.map((l) => (
               <div key={l.key} className="flex items-center gap-2 px-3 py-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-body-sm font-medium text-steel-900 truncate">{l.clave}</p>
-                  <p className="text-caption text-steel-400 truncate">{l.descripcion}</p>
+                  <p className="text-body-sm font-medium text-steel-900 truncate">{l.descripcion || l.clave}</p>
+                  {!esClaveLegacy(l.clave) && (
+                    <p className="text-caption text-steel-400 truncate">{l.clave}</p>
+                  )}
                 </div>
                 <Input
                   type="number" min={1}
