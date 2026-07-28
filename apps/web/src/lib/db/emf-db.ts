@@ -75,6 +75,29 @@ export interface VentaPendiente {
   lastError?: string;
 }
 
+// ── PIN de acceso sin conexión (bloquea/reanuda sesión ya autenticada) ─────
+
+export interface OfflinePin {
+  usuarioId: string;   // PK
+  hash: string;        // base64 del digest PBKDF2
+  salt: string;         // base64
+  iterations: number;
+  failedAttempts: number;
+  lockedUntil: Date | null;   // bloqueo temporal tras varios intentos fallidos
+  expiresAt: Date;      // si ya pasó, el PIN deja de aceptar (exige reconectar)
+  createdAt: Date;
+}
+
+// ── Snapshot de sesión por usuario (para alternar usuarios sin conexión) ───
+
+export interface OfflineSession {
+  usuarioId: string;   // PK
+  email: string;        // indexado — se busca por correo desde /login sin red
+  usuario: string;       // JSON de UsuarioSesion completo
+  accessToken: string;   // último access token conocido (se refresca al reconectar)
+  savedAt: Date;
+}
+
 // ── Definición de la base de datos ────────────────────────────────────────
 
 export class EmfDatabase extends Dexie {
@@ -83,6 +106,8 @@ export class EmfDatabase extends Dexie {
   configColumnasCache!: EntityTable<ConfigColumnasCache, 'id'>;
   clientesCache!: EntityTable<ClienteCacheItem, 'id'>;
   ventasPendientes!: EntityTable<VentaPendiente, 'clientRef'>;
+  offlinePin!: EntityTable<OfflinePin, 'usuarioId'>;
+  offlineSessions!: EntityTable<OfflineSession, 'usuarioId'>;
 
   constructor() {
     super('emf-v1');
@@ -102,6 +127,25 @@ export class EmfDatabase extends Dexie {
       configColumnasCache: 'id, empresaId, ubicacionId, cachedAt',
       clientesCache: 'id, empresaId, ubicacionId, cachedAt',
       ventasPendientes: 'clientRef, empresaId, ubicacionId, syncStatus, createdAt',
+    });
+
+    this.version(3).stores({
+      syncQueue: '++id, status, empresaId, ubicacionId, createdAt',
+      articulosCache: 'id, empresaId, ubicacionId, clave, cachedAt',
+      configColumnasCache: 'id, empresaId, ubicacionId, cachedAt',
+      clientesCache: 'id, empresaId, ubicacionId, cachedAt',
+      ventasPendientes: 'clientRef, empresaId, ubicacionId, syncStatus, createdAt',
+      offlinePin: 'usuarioId',
+    });
+
+    this.version(4).stores({
+      syncQueue: '++id, status, empresaId, ubicacionId, createdAt',
+      articulosCache: 'id, empresaId, ubicacionId, clave, cachedAt',
+      configColumnasCache: 'id, empresaId, ubicacionId, cachedAt',
+      clientesCache: 'id, empresaId, ubicacionId, cachedAt',
+      ventasPendientes: 'clientRef, empresaId, ubicacionId, syncStatus, createdAt',
+      offlinePin: 'usuarioId',
+      offlineSessions: 'usuarioId, email',
     });
   }
 }

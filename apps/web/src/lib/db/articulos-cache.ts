@@ -37,6 +37,18 @@ export async function refreshArticulosCache(empresaId: string, ubicacionId: stri
   } while (page <= pages);
 }
 
+const REFRESH_TTL_MS = 10 * 60 * 1000; // 10 min
+
+// Igual que refreshArticulosCache, pero no repite la descarga completa si el
+// caché de esta empresa/ubicación ya se refrescó hace poco — para poder
+// llamarla libremente en segundo plano (al entrar a la app, al reconectar)
+// sin generar tráfico de más.
+export async function refreshArticulosCacheIfStale(empresaId: string, ubicacionId: string): Promise<void> {
+  const reciente = await emfDb.articulosCache.where({ empresaId, ubicacionId }).first();
+  if (reciente && Date.now() - reciente.cachedAt.getTime() < REFRESH_TTL_MS) return;
+  return refreshArticulosCache(empresaId, ubicacionId);
+}
+
 // Busca artículos en el caché local por clave o nombre (para el formulario de
 // venta rápida offline). No requiere conexión.
 export async function searchArticulosCache(

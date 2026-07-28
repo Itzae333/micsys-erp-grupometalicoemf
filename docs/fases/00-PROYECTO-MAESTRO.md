@@ -246,6 +246,14 @@ Las ubicaciones pueden tener internet inestable. El sistema debe seguir funciona
 3. Al recuperar conexión, la sync queue procesa en orden FIFO.
 4. Conflictos (ej. misma pieza vendida offline en dos PV): el servidor resuelve con timestamp y notifica al encargado.
 
+### Autenticación offline (agregado tras incidente de julio 2026)
+Lo anterior asume que el usuario ya está logueado antes de perder conexión — eso no estaba resuelto para "cerrar sesión y volver a entrar sin internet" (ej. cada inicio de turno), y causó que el personal quedara bloqueado sin poder ni trabajar offline. Decisión:
+- "Cerrar sesión" (botón del sidebar) es un **bloqueo local**, no un borrado — el `refresh_token` (cookie, 7 días) y la sesión guardada del navegador se conservan.
+- Un **PIN corto de 6 dígitos** (separado de la contraseña, configurado una vez con internet en Perfil) permite reabrir esa misma sesión sin conexión — nunca crea una sesión nueva desde cero; si el equipo nunca se logueó online, el PIN no tiene nada que desbloquear.
+- El PIN deja de aceptar tras 7 días sin que el equipo se conecte ni una vez (misma ventana que el `refresh_token`), y se bloquea temporalmente tras varios intentos fallidos.
+- "Cerrar todas las sesiones" (Perfil) sigue siendo el mecanismo real para un equipo perdido/robado: revoca el refresh token en el servidor y borra también el PIN local.
+- Ver `apps/web/src/lib/offline/pin.ts`, `apps/web/src/components/layout/LockScreen.tsx`.
+
 ---
 
 ## 10. Impresión térmica — estrategia

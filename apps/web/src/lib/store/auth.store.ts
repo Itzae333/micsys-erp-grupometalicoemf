@@ -23,8 +23,14 @@ export interface UsuarioSesion {
 interface AuthState {
   usuario: UsuarioSesion | null;
   accessToken: string | null;
+  // true = sesión bloqueada localmente ("Cerrar sesión" de cada turno) — a
+  // diferencia de clearAuth(), NO borra usuario/accessToken, así se puede
+  // reanudar sin internet con el PIN offline (ver lib/offline/pin.ts).
+  locked: boolean;
   setAuth: (usuario: UsuarioSesion, accessToken: string) => void;
   setAccessToken: (token: string) => void;
+  lock: () => void;
+  unlock: () => void;
   clearAuth: () => void;
   isAuthenticated: () => boolean;
 }
@@ -34,20 +40,26 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       usuario: null,
       accessToken: null,
+      locked: false,
 
-      setAuth: (usuario, accessToken) => set({ usuario, accessToken }),
+      setAuth: (usuario, accessToken) => set({ usuario, accessToken, locked: false }),
 
       setAccessToken: (accessToken) => set({ accessToken }),
 
-      clearAuth: () => set({ usuario: null, accessToken: null }),
+      lock: () => set({ locked: true }),
 
-      isAuthenticated: () => !!get().accessToken && !!get().usuario,
+      unlock: () => set({ locked: false }),
+
+      clearAuth: () => set({ usuario: null, accessToken: null, locked: false }),
+
+      isAuthenticated: () => !!get().accessToken && !!get().usuario && !get().locked,
     }),
     {
       name: 'emf-auth',
       partialize: (state) => ({
         usuario: state.usuario,
         accessToken: state.accessToken,
+        locked: state.locked,
       }),
     },
   ),

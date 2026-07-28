@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { getClientesCache } from '@/lib/db/clientes-cache';
-import { searchArticulosCache, refreshArticulosCache } from '@/lib/db/articulos-cache';
+import { searchArticulosCache, refreshArticulosCacheIfStale } from '@/lib/db/articulos-cache';
 import { enqueue } from '@/lib/db/sync-queue';
 import { addVentaPendiente, nextFolioLocal, type LineaVentaPendiente, type PagoVentaPendiente } from '@/lib/db/ventas-pendientes';
 import type { Cliente, Articulo, NotaVenta } from '@/lib/types/api';
@@ -87,7 +87,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
     if (!open || !empresa?.id || !ubicacion?.id) return;
     getClientesCache(empresa.id, ubicacion.id).then(setClientes);
     // Refresca el catálogo en segundo plano — no bloquea el formulario si falla.
-    refreshArticulosCache(empresa.id, ubicacion.id).catch(() => {});
+    refreshArticulosCacheIfStale(empresa.id, ubicacion.id).catch(() => {});
   }, [open, empresa?.id, ubicacion?.id]);
 
   useEffect(() => {
