@@ -1,6 +1,8 @@
-import { Controller, Get, Query, Headers } from '@nestjs/common';
+import { Controller, Get, Query, Headers, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { ReportesService } from './reportes.service';
+import { buildVentasProveedorWorkbook } from './reporte-ventas-proveedor-xlsx';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -40,6 +42,40 @@ export class ReportesController {
     @Query('hasta') hasta?: string,
   ) {
     return this.reportes.getReporteVentas(ubicacionId, { desde, hasta });
+  }
+
+  @Get('ventas-proveedor')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Productos vendidos agrupados por proveedor, clientes y detalle de notas' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  getVentasProveedor(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.reportes.getReporteVentasProveedor(ubicacionId, { desde, hasta });
+  }
+
+  @Get('ventas-proveedor/xlsx')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Descarga el reporte de ventas por proveedor en Excel (una hoja por proveedor)' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  async getVentasProveedorXlsx(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Res() res: Response,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    const data = await this.reportes.getReporteVentasProveedor(ubicacionId, { desde, hasta });
+    const workbook = buildVentasProveedorWorkbook(data);
+    const filename = `ventas-por-proveedor_${data.rango.desde}_a_${data.rango.hasta}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
   }
 
   @Get('inventario')

@@ -663,6 +663,147 @@ export class ReportesService {
     };
   }
 
+  // ── Ventas por proveedor (reporte personalizado, hoy solo lo usa EMFIMIFAR
+  //    desde el front, pero el endpoint no restringe empresa) ─────────────
+
+  async getReporteVentasProveedor(
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
+  ) {
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
+
+    const cerradasWhere: Prisma.NotaVentaWhereInput = {
+      ubicacion_id: ubicacionId,
+      created_at: { gte: desde, lte: hasta },
+      estatus: { in: ['PAGADA', 'CREDITO'] },
+    };
+
+    const [porArticuloRaw, porClienteRaw, notasRaw] = await Promise.all([
+      this.prisma.notaVentaLinea.groupBy({
+        by: ['articulo_id'],
+        where: { nota: cerradasWhere },
+        _sum: { cantidad: true, subtotal: true },
+      }),
+      this.prisma.notaVenta.groupBy({
+        by: ['cliente_id'],
+        where: cerradasWhere,
+        _sum: { total: true },
+        _count: { _all: true },
+        orderBy: { _sum: { total: 'desc' } },
+      }),
+      this.prisma.notaVenta.findMany({
+        where: cerradasWhere,
+        select: {
+          folio: true,
+          total: true,
+          created_at: true,
+          estatus: true,
+          cliente: { select: { nombre: true, apellidos: true, razon_social: true } },
+          pagos: { select: { metodo: true, monto: true } },
+        },
+        orderBy: { created_at: 'asc' },
+      }),
+    ]);
+
+    // Nombre/proveedor de cada artículo vendido — el monto sale de la línea
+    // (snapshot real de la venta), esto solo resuelve descripción + proveedor.
+    const articuloIds = porArticuloRaw.map((l) => l.articulo_id);
+    const articulos = articuloIds.length
+      ? await this.prisma.articulo.findMany({
+          where: { id: { in: articuloIds } },
+          select: {
+            id: true, clave: true, proveedor_id: true,
+            descripcion_1: true, descripcion_2: true, descripcion_3: true, descripcion_4: true, descripcion_5: true,
+          },
+        })
+      : [];
+    const articuloMap = new Map(articulos.map((a) => [a.id, a]));
+
+    const proveedorIds = [...new Set(articulos.map((a) => a.proveedor_id).filter((id): id is string => !!id))];
+    const proveedores = proveedorIds.length
+      ? await this.prisma.proveedor.findMany({ where: { id: { in: proveedorIds } }, select: { id: true, nombre: true } })
+      : [];
+    const proveedorMap = new Map(proveedores.map((p) => [p.id, p.nombre]));
+
+    const nombreArticulo = (a: typeof articulos[number] | undefined, claveFallback: string) => {
+      if (!a) return claveFallback;
+      return [a.descripcion_1, a.descripcion_2, a.descripcion_3, a.descripcion_4, a.descripcion_5]
+        .filter(Boolean).join(' · ') || a.clave;
+    };
+
+    const general = porArticuloRaw
+      .map((l) => {
+        const art = articuloMap.get(l.articulo_id);
+        return {
+          articulo_id: l.articulo_id,
+          clave: art?.clave ?? '',
+          producto: nombreArticulo(art, art?.clave ?? l.articulo_id),
+          cantidad: dec(l._sum?.cantidad),
+          total: dec(l._sum?.subtotal),
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    const porProveedorMap = new Map<string, { proveedor: string; productos: typeof general; total: number }>();
+    for (const linea of general) {
+      const art = articuloMap.get(linea.articulo_id);
+      const proveedorNombre = art?.proveedor_id ? (proveedorMap.get(art.proveedor_id) ?? 'Sin asignar') : 'Sin asignar';
+      if (!porProveedorMap.has(proveedorNombre)) {
+        porProveedorMap.set(proveedorNombre, { proveedor: proveedorNombre, productos: [], total: 0 });
+      }
+      const grupo = porProveedorMap.get(proveedorNombre)!;
+      grupo.productos.push(linea);
+      grupo.total = +(grupo.total + linea.total).toFixed(2);
+    }
+    const porProveedor = [...porProveedorMap.values()].sort((a, b) => b.total - a.total);
+
+    const clienteIds = porClienteRaw.filter((c) => c.cliente_id).map((c) => c.cliente_id as string);
+    const clientesInfo = clienteIds.length
+      ? await this.prisma.cliente.findMany({
+          where: { id: { in: clienteIds } },
+          select: { id: true, nombre: true, apellidos: true, razon_social: true },
+        })
+      : [];
+    const clienteInfoMap = new Map(clientesInfo.map((c) => [c.id, c]));
+
+    const clientes = porClienteRaw.map((c) => {
+      const info = c.cliente_id ? clienteInfoMap.get(c.cliente_id) : null;
+      const nombre = info
+        ? (info.razon_social ?? `${info.nombre} ${info.apellidos ?? ''}`.trim())
+        : 'Público en general';
+      return { cliente: nombre, notas: c._count._all, total: dec(c._sum?.total) };
+    }).sort((a, b) => b.total - a.total);
+
+    const notas = notasRaw.map((n) => {
+      const clienteNombre = n.cliente
+        ? (n.cliente.razon_social ?? `${n.cliente.nombre} ${n.cliente.apellidos ?? ''}`.trim())
+        : 'Público en general';
+      const pagado = n.pagos.reduce((s, p) => s + dec(p.monto), 0);
+      const metodos = [...new Set(n.pagos.map((p) => p.metodo))];
+      const tipoPago = n.estatus === 'CREDITO'
+        ? 'Crédito'
+        : metodos.length === 0 ? '—' : metodos.length === 1 ? metodos[0] : 'Múltiple';
+      return {
+        folio: n.folio,
+        cliente: clienteNombre,
+        fecha: n.created_at,
+        total: dec(n.total),
+        estatus: n.estatus,
+        tipo_pago: tipoPago,
+        resta: Math.max(0, +(dec(n.total) - pagado).toFixed(2)),
+      };
+    });
+
+    return {
+      rango: { desde: ymdEnMexico(desde), hasta: ymdEnMexico(hasta) },
+      general,
+      por_proveedor: porProveedor,
+      clientes,
+      notas,
+    };
+  }
+
   // ── Inventario ─────────────────────────────────────────────
 
   async getReporteInventario(ubicacionId: string) {

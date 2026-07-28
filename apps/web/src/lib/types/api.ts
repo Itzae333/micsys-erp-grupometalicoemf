@@ -710,6 +710,30 @@ export interface ReporteVentasData {
   ventas_diarias: DiaVenta[];
 }
 
+export interface ReporteVentasProveedorProducto {
+  articulo_id: string;
+  clave: string;
+  producto: string;
+  cantidad: number;
+  total: number;
+}
+
+export interface ReporteVentasProveedorData {
+  rango: { desde: string; hasta: string };
+  general: ReporteVentasProveedorProducto[];
+  por_proveedor: { proveedor: string; productos: ReporteVentasProveedorProducto[]; total: number }[];
+  clientes: { cliente: string; notas: number; total: number }[];
+  notas: {
+    folio: number;
+    cliente: string;
+    fecha: string;
+    total: number;
+    estatus: string;
+    tipo_pago: string;
+    resta: number;
+  }[];
+}
+
 export interface ReporteInventarioData {
   articulos_total: number;
   bajo_stock: {

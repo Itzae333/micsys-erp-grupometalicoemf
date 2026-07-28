@@ -3,14 +3,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   BarChart3, ShoppingCart, Package, Users, Truck, Factory, UserCog,
-  Download, RefreshCw, TrendingUp, AlertTriangle, Printer, Landmark,
+  Download, RefreshCw, TrendingUp, AlertTriangle, Printer, Landmark, Building2, FileText,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useContextoStore } from '@/lib/store/contexto.store';
+import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
+import { generateReporteVentasProveedorPDF } from '@/lib/utils/reporte-proveedor-pdf';
 import type {
   ReporteVentasData, ReporteInventarioData, ReporteCreditoData,
   ReporteComprasData, ReporteProduccionData, ReporteAsistenciaData,
+  ReporteVentasProveedorData,
   EstatusNota, EstatusOrdenCompra, EstatusProduccion, EstatusAsistencia,
 } from '@/lib/types/api';
 
@@ -158,6 +162,7 @@ const TABS = [
   { id: 'produccion',  label: 'Producción',   icon: <Factory className="h-4 w-4" /> },
   { id: 'asistencia',  label: 'RH',           icon: <UserCog className="h-4 w-4" /> },
   { id: 'corte_caja',  label: 'Corte de Caja',icon: <Landmark className="h-4 w-4" /> },
+  { id: 'ventas_proveedor', label: 'Ventas x Proveedor', icon: <Building2 className="h-4 w-4" /> },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -167,6 +172,14 @@ function iniMes() {
 }
 function hoy() {
   return new Date().toISOString().slice(0, 10);
+}
+function inicioSemana() {
+  const d = new Date();
+  const dia = d.getDay(); // 0 = domingo
+  const diff = dia === 0 ? 6 : dia - 1; // la semana empieza en lunes
+  const lunes = new Date(d);
+  lunes.setDate(d.getDate() - diff);
+  return lunes.toISOString().slice(0, 10);
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
@@ -1198,17 +1211,267 @@ function TabCorteCaja({ desde, hasta }: { desde: string; hasta: string }) {
   );
 }
 
+function TablaProductos({ titulo, productos }: {
+  titulo: string; productos: ReporteVentasProveedorData['general'];
+}) {
+  const total = productos.reduce((s, p) => s + p.total, 0);
+  const piezas = productos.reduce((s, p) => s + p.cantidad, 0);
+  return (
+    <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-steel-100">
+        <SectionTitle>{titulo}</SectionTitle>
+      </div>
+      {productos.length === 0 ? (
+        <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-body-sm">
+            <thead>
+              <tr className="border-b border-steel-100">
+                <th className="px-4 py-2 text-left font-medium text-steel-500">Producto</th>
+                <th className="px-4 py-2 text-right font-medium text-steel-500">Piezas</th>
+                <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-steel-50">
+              {productos.map((p) => (
+                <tr key={p.articulo_id} className="hover:bg-steel-50">
+                  <td className="px-4 py-2 text-steel-700 max-w-[280px] truncate">{p.producto}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{fmtNum(p.cantidad)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(p.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-steel-200 bg-steel-50">
+                <td className="px-4 py-2 font-semibold text-steel-900">Total</td>
+                <td className="px-4 py-2 text-right tabular-nums font-semibold text-steel-900">{fmtNum(piezas)}</td>
+                <td className="px-4 py-2 text-right tabular-nums font-semibold text-brand-700">{fmt(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabVentasProveedor({
+  desde, hasta, onRangoRapido,
+}: { desde: string; hasta: string; onRangoRapido: (desde: string, hasta: string) => void }) {
+  const { empresa } = useContextoStore();
+  const [data, setData] = useState<ReporteVentasProveedorData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [descargando, setDescargando] = useState<'xls' | 'pdf' | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await api.get<ReporteVentasProveedorData>(
+        `/reportes/ventas-proveedor?desde=${desde}&hasta=${hasta}`,
+      );
+      setData(d);
+    } catch { setData(null); }
+    finally { setLoading(false); }
+  }, [desde, hasta]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function descargarXls() {
+    setDescargando('xls');
+    try {
+      const { blob, filename } = await api.getBlob(`/reportes/ventas-proveedor/xlsx?desde=${desde}&hasta=${hasta}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename ?? `ventas-por-proveedor_${desde}_a_${hasta}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  async function descargarPdf() {
+    if (!data) return;
+    setDescargando('pdf');
+    try {
+      await generateReporteVentasProveedorPDF(data, empresa?.nombre ?? '');
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  if (loading) return <div className="p-8 text-center text-steel-400">Cargando…</div>;
+  if (!data) return <div className="p-8 text-center text-steel-400">Sin datos</div>;
+
+  const totalGeneral = data.general.reduce((s, p) => s + p.total, 0);
+  const piezasGeneral = data.general.reduce((s, p) => s + p.cantidad, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Atajos de fecha + exportar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={() => onRangoRapido(iniMes(), hoy())}>
+          Este mes
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onRangoRapido(inicioSemana(), hoy())}>
+          Esta semana
+        </Button>
+        <div className="flex-1" />
+        <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarXls()}>
+          <Download className="h-3.5 w-3.5 mr-1.5" />
+          {descargando === 'xls' ? 'Generando…' : 'XLS'}
+        </Button>
+        <Button size="sm" variant="secondary" disabled={descargando !== null} onClick={() => void descargarPdf()}>
+          <FileText className="h-3.5 w-3.5 mr-1.5" />
+          {descargando === 'pdf' ? 'Generando…' : 'PDF'}
+        </Button>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <StatMini label="Total vendido" value={fmt(totalGeneral)} sub={`${data.rango.desde} al ${data.rango.hasta}`} accent />
+        <StatMini label="Piezas vendidas" value={fmtNum(piezasGeneral)} />
+        <StatMini label="Proveedores" value={String(data.por_proveedor.length)} />
+      </div>
+
+      <TablaProductos titulo="General" productos={data.general} />
+
+      {data.por_proveedor.map((grupo) => (
+        <details key={grupo.proveedor} className="bg-white border border-steel-200 rounded-xl overflow-hidden group">
+          <summary className="px-4 py-3 cursor-pointer flex items-center justify-between list-none">
+            <span className="text-body font-semibold text-steel-700">{grupo.proveedor}</span>
+            <span className="text-body-sm font-medium text-steel-500">{fmt(grupo.total)}</span>
+          </summary>
+          <div className="border-t border-steel-100">
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Producto</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Piezas</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {grupo.productos.map((p) => (
+                  <tr key={p.articulo_id} className="hover:bg-steel-50">
+                    <td className="px-4 py-2 text-steel-700 max-w-[280px] truncate">{p.producto}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmtNum(p.cantidad)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(p.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ))}
+
+      {/* Clientes */}
+      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-steel-100">
+          <SectionTitle>Clientes</SectionTitle>
+        </div>
+        {data.clientes.length === 0 ? (
+          <div className="p-6 text-center text-body-sm text-steel-400">Sin ventas en el período</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Notas</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {data.clientes.map((c) => (
+                  <tr key={c.cliente} className="hover:bg-steel-50">
+                    <td className="px-4 py-2 text-steel-700 max-w-[240px] truncate">{c.cliente}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{c.notas}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(c.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Detalle de notas */}
+      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-steel-100">
+          <SectionTitle>Detalle de notas</SectionTitle>
+        </div>
+        {data.notas.length === 0 ? (
+          <div className="p-6 text-center text-body-sm text-steel-400">Sin notas en el período</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-body-sm">
+              <thead>
+                <tr className="border-b border-steel-100">
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Nota</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Cliente</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Fecha</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Total</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Estado</th>
+                  <th className="px-4 py-2 text-left font-medium text-steel-500">Pago</th>
+                  <th className="px-4 py-2 text-right font-medium text-steel-500">Resta</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-steel-50">
+                {data.notas.map((n) => (
+                  <tr key={n.folio} className="hover:bg-steel-50">
+                    <td className="px-4 py-2 text-steel-700 tabular-nums">N{String(n.folio).padStart(4, '0')}</td>
+                    <td className="px-4 py-2 text-steel-700 max-w-[200px] truncate">{n.cliente}</td>
+                    <td className="px-4 py-2 text-steel-500 tabular-nums whitespace-nowrap">
+                      {new Date(n.fecha).toLocaleDateString('es-MX')}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(n.total)}</td>
+                    <td className="px-4 py-2">
+                      <Badge variant={NOTA_CFG[n.estatus]?.variant ?? 'default'}>
+                        {NOTA_CFG[n.estatus]?.label ?? n.estatus}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2 text-steel-600">{METODO_LABEL[n.tipo_pago] ?? n.tipo_pago}</td>
+                    <td className={`px-4 py-2 text-right tabular-nums font-medium ${n.resta > 0 ? 'text-brand-600' : 'text-steel-400'}`}>
+                      {fmt(n.resta)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 
 export default function ReportesPage() {
+  const { empresa } = useContextoStore();
   const [tab, setTab] = useState<TabId>('ventas');
   const [desde, setDesde] = useState(iniMes);
   const [hasta, setHasta] = useState(hoy);
   const [applied, setApplied] = useState({ desde: iniMes(), hasta: hoy() });
 
-  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja';
+  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja' || tab === 'ventas_proveedor';
 
   const handleApply = () => setApplied({ desde, hasta });
+
+  // Atajos de fecha (Este mes / Esta semana) del tab de Ventas x Proveedor —
+  // rellenan y aplican el mismo rango que usa el resto de los reportes.
+  const handleRangoRapido = (nuevoDesde: string, nuevoHasta: string) => {
+    setDesde(nuevoDesde);
+    setHasta(nuevoHasta);
+    setApplied({ desde: nuevoDesde, hasta: nuevoHasta });
+  };
+
+  // "Ventas x Proveedor" es un reporte personalizado que hoy solo pidió
+  // EMFIMIFAR — el endpoint no restringe empresa, solo se oculta el tab.
+  const visibleTabs = TABS.filter((t) => t.id !== 'ventas_proveedor' || empresa?.id === EMPRESA_EMFIMIFAR_ID);
 
   return (
     <div>
@@ -1224,7 +1487,7 @@ export default function ReportesPage() {
       <div className="p-6">
         {/* Tabs */}
         <div className="flex gap-1 mb-6 flex-wrap">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -1260,6 +1523,9 @@ export default function ReportesPage() {
         {tab === 'produccion'  && <TabProduccion desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'asistencia'  && <TabAsistencia desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'corte_caja'  && <TabCorteCaja  desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'ventas_proveedor' && (
+          <TabVentasProveedor desde={applied.desde} hasta={applied.hasta} onRangoRapido={handleRangoRapido} />
+        )}
       </div>
     </div>
   );
