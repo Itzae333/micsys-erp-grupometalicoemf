@@ -95,11 +95,38 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 // reproducir la cola offline (un token snapshoteado hace días ya está vencido).
 export function refreshAccessToken(): Promise<RefreshResult> {
   if (!refreshPromise) {
-    refreshPromise = doRefresh().finally(() => {
+    refreshPromise = refreshAcrossTabs().finally(() => {
       refreshPromise = null;
     });
   }
   return refreshPromise;
+}
+
+const REFRESH_LOCK_NAME = 'micsys-auth-refresh';
+
+// El mismo usuario puede tener la pestaña del navegador Y la PWA instalada
+// abiertas a la vez (mismo origen, mismas cookies) — ambas calculan el mismo
+// momento para renovar el token y, sin coordinarse, pueden pegarle al
+// servidor casi al mismo tiempo. Como el refresh token rota en cada uso (el
+// anterior se revoca), la segunda en llegar recibe un rechazo real aunque la
+// sesión esté sana, y esa pestaña cierra sesión sin motivo. El Web Lock
+// serializa el refresh entre pestañas del mismo navegador; la que pierde la
+// carrera revisa si la otra ya la refrescó (ver el listener de `storage` más
+// abajo) antes de intentar su propio refresh con un token ya rotado.
+async function refreshAcrossTabs(): Promise<RefreshResult> {
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    return doRefresh();
+  }
+  return navigator.locks.request(REFRESH_LOCK_NAME, async () => {
+    const current = useAuthStore.getState().accessToken;
+    if (current) {
+      const expiryMs = getTokenExpiryMs(current);
+      if (expiryMs !== null && expiryMs - Date.now() > SAFETY_MARGIN_MS) {
+        return { ok: true };
+      }
+    }
+    return doRefresh();
+  });
 }
 
 async function doRefresh(): Promise<RefreshResult> {
@@ -191,6 +218,23 @@ if (typeof window !== 'undefined') {
     } else if (refreshTimer) {
       clearTimeout(refreshTimer);
       refreshTimer = null;
+    }
+  });
+
+  // Cuando otra pestaña/PWA del mismo navegador renueva el token, Zustand
+  // persist ya lo escribió en localStorage — este evento solo llega a las
+  // OTRAS pestañas (no a la que hizo el cambio), así que sirve para que se
+  // enteren sin tener que esperar su propio timer ni pegarle al servidor.
+  window.addEventListener('storage', (e) => {
+    if (e.key !== 'emf-auth' || !e.newValue) return;
+    try {
+      const parsed = JSON.parse(e.newValue) as { state?: { accessToken?: string | null } };
+      const newToken = parsed.state?.accessToken;
+      if (newToken && newToken !== useAuthStore.getState().accessToken) {
+        useAuthStore.getState().setAccessToken(newToken);
+      }
+    } catch {
+      // Payload inesperado en localStorage — se ignora, el respaldo reactivo cubre el resto.
     }
   });
 

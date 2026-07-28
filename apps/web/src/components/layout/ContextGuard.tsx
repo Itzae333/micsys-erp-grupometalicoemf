@@ -6,6 +6,12 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { LockScreen } from './LockScreen';
 
+// Si nadie toca la pantalla/teclado por este tiempo, se bloquea sola con PIN
+// — no espera a que el access token expire y el refresh sea rechazado (eso
+// es un cierre de sesión real, no un bloqueo por inactividad).
+const IDLE_LOCK_MS = 60 * 60 * 1000; // 1 hora
+const IDLE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+
 export function ContextGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -13,6 +19,21 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
   const usuario = useAuthStore((s) => s.usuario);
   const locked = useAuthStore((s) => s.locked);
   const { empresa, ubicacion } = useContextoStore();
+
+  useEffect(() => {
+    if (!usuario || locked) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => useAuthStore.getState().lock(), IDLE_LOCK_MS);
+    };
+    reset();
+    IDLE_EVENTS.forEach((ev) => window.addEventListener(ev, reset, { passive: true }));
+    return () => {
+      clearTimeout(timer);
+      IDLE_EVENTS.forEach((ev) => window.removeEventListener(ev, reset));
+    };
+  }, [usuario, locked]);
 
   // Arranca en `false` tanto en el render de servidor como en el primer
   // render del cliente (idénticos, para no chocar con la hidratación de
