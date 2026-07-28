@@ -14,7 +14,12 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!usuario) {
-      router.replace('/login');
+      // Conserva a dónde iba (ej. un QR de remisión: /movimientos/recibir?folio=...)
+      // para regresarlo ahí después de loguearse, en vez de mandarlo siempre
+      // al dashboard.
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const destino = encodeURIComponent(pathname + search);
+      router.replace(`/login?redirect=${destino}`);
       return;
     }
     if ((!empresa || !ubicacion) && pathname !== '/seleccionar-contexto') {

@@ -94,7 +94,7 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
   const [showPreview, setShowPreview]   = useState(false);
 
   const canManage  = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
-  const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
+  const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'].includes(usuario?.rol ?? '');
 
   const load = useCallback(async () => {
     setLoading(true);

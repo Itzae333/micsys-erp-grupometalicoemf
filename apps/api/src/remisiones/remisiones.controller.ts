@@ -81,7 +81,7 @@ export class RemisionesController {
   }
 
   @Patch(':id/recibir')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
   @ApiOperation({ summary: 'Marcar remisión como recibida (suma existencias en destino)' })
   recibir(
     @Param('id') id: string,

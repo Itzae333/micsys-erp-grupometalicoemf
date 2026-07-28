@@ -62,7 +62,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     console.warn('[auth] sesión cerrada: el servidor rechazó el refresh token', { path, at: new Date().toISOString() });
     if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
     useAuthStore.getState().clearAuth();
-    window.location.href = '/login?motivo=sesion_expirada';
+    const destino = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login?motivo=sesion_expirada&redirect=${destino}`;
     throw new ApiError(401, 'Sesión expirada');
   }
 

@@ -66,6 +66,14 @@ function LoginPageContent() {
     searchParams.get('motivo') === 'sesion_expirada' ? 'Tu sesión expiró, vuelve a iniciar sesión.' : null,
   );
 
+  // A dónde regresar tras loguearse (ej. un QR de remisión) — solo se acepta
+  // una ruta relativa propia (empieza con "/" y no "//") para no abrir la
+  // puerta a un redirect hacia un sitio externo.
+  const redirectParam = searchParams.get('redirect');
+  const redirectTo = redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')
+    ? redirectParam
+    : null;
+
   const {
     register,
     handleSubmit,
@@ -119,12 +127,12 @@ function LoginPageContent() {
             telefono: me.ubicaciones[0].ubicacion.telefono,
           },
         );
-        router.push('/dashboard');
+        router.push(redirectTo ?? '/dashboard');
       } else if (me.empresa) {
         // Sin ubicaciones asignadas → ir al selector de contexto
         router.push('/seleccionar-contexto');
       } else {
-        router.push('/dashboard');
+        router.push(redirectTo ?? '/dashboard');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
