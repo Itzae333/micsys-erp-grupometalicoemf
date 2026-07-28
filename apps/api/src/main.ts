@@ -1,3 +1,4 @@
+import { webcrypto } from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -6,6 +7,14 @@ import helmet from 'helmet';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { AppModule } from './app.module';
+
+// Node 18 no expone `crypto` como global (eso llegó sin flag hasta Node 19) —
+// @nestjs/schedule usa `crypto.randomUUID()` asumiendo que sí existe. Sin este
+// polyfill, el boot truena en ScheduleExplorer.onModuleInit con
+// "ReferenceError: crypto is not defined" en cualquier Node 18.x.
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

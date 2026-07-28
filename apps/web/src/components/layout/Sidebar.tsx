@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -148,18 +148,18 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { usuario, clearAuth } = useAuthStore();
-  const { empresa, ubicacion, clearContexto } = useContextoStore();
+  const { usuario, lock } = useAuthStore();
+  const { empresa, ubicacion } = useContextoStore();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { canInstall, installed, install } = usePwaInstall();
   const [showPwaGuide, setShowPwaGuide] = useState(false);
 
   function handleLogout() {
-    clearAuth();
-    clearContexto();
-    router.push('/login');
+    // Bloqueo local, no borrado: permite reanudar con el PIN offline sin
+    // internet (ver auth.store.ts). El borrado real vive en Perfil → "Cerrar
+    // todas las sesiones" / "Olvidar este equipo".
+    lock();
   }
 
   function handleNavClick() {

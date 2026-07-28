@@ -1,4 +1,6 @@
 import { emfDb, type HttpMethod, type SyncQueueItem } from './emf-db';
+import { refreshAccessToken } from '../api/client';
+import { useAuthStore } from '../store/auth.store';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 const MAX_RETRIES = 3;
@@ -33,6 +35,13 @@ export async function flushQueue(): Promise<{ ok: number; errors: number }> {
     .equals('pending')
     .sortBy('createdAt');
 
+  if (pending.length === 0) return { ok: 0, errors: 0 };
+
+  // El token snapshoteado al encolar cada venta puede llevar días vencido si
+  // el equipo estuvo offline mucho tiempo (dura 30 min) — se refresca una vez
+  // aquí con la sesión viva actual en vez de arrastrar el 401 por ítem.
+  await refreshAccessToken();
+
   let ok = 0;
   let errors = 0;
 
@@ -51,11 +60,12 @@ async function _processItem(item: SyncQueueItem): Promise<boolean> {
   await emfDb.syncQueue.update(item.id, { status: 'processing' });
 
   try {
+    const tokenActual = useAuthStore.getState().accessToken ?? item.accessToken;
     const response = await fetch(`${BASE_URL}${item.url}`, {
       method: item.method,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${item.accessToken}`,
+        Authorization: `Bearer ${tokenActual}`,
         'x-empresa-id': item.empresaId,
         'x-ubicacion-id': item.ubicacionId,
       },

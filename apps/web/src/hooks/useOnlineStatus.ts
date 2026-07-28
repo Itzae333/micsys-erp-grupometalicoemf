@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { flushQueue, cleanDoneItems, getPendingCount } from '@/lib/db/sync-queue';
 import { reconcileVentasPendientes } from '@/lib/db/ventas-pendientes';
+import { refreshArticulosCacheIfStale } from '@/lib/db/articulos-cache';
+import { getClientesCache } from '@/lib/db/clientes-cache';
+import { useContextoStore } from '@/lib/store/contexto.store';
 
 interface OnlineStatus {
   isOnline: boolean;
@@ -28,6 +31,13 @@ export function useOnlineStatus(): OnlineStatus {
       await reconcileVentasPendientes();
       await cleanDoneItems();
       await refreshPending();
+      // Y aprovecha para refrescar el catálogo offline, por si el usuario
+      // abrió la app sin conexión (vía PIN) y no lo tenía precargado.
+      const { empresa, ubicacion } = useContextoStore.getState();
+      if (empresa?.id && ubicacion?.id) {
+        void refreshArticulosCacheIfStale(empresa.id, ubicacion.id).catch(() => {});
+        void getClientesCache(empresa.id, ubicacion.id).catch(() => {});
+      }
     }
 
     function handleOffline() {

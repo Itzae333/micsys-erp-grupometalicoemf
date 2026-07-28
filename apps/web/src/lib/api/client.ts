@@ -1,5 +1,7 @@
 import { useAuthStore } from '../store/auth.store';
 import { useContextoStore } from '../store/contexto.store';
+import { bumpExpiry } from '../offline/pin';
+import { saveSessionSnapshot } from '../offline/session-cache';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -89,7 +91,9 @@ type RefreshResult = { ok: true } | { ok: false; reason: 'network' | 'rejected' 
 // cookie ya revocada, o el servidor rechaza la segunda y se cierra la sesión sin motivo real.
 let refreshPromise: Promise<RefreshResult> | null = null;
 
-function refreshAccessToken(): Promise<RefreshResult> {
+// Exportada para que sync-queue.ts pueda forzar un token fresco antes de
+// reproducir la cola offline (un token snapshoteado hace días ya está vencido).
+export function refreshAccessToken(): Promise<RefreshResult> {
   if (!refreshPromise) {
     refreshPromise = doRefresh().finally(() => {
       refreshPromise = null;
@@ -115,6 +119,13 @@ async function doRefresh(): Promise<RefreshResult> {
   }
   const data = await response.json() as { access_token: string };
   useAuthStore.getState().setAccessToken(data.access_token);
+  // El refresh_token real sigue vivo — se extiende la vigencia del PIN offline
+  // en la misma medida, y se refresca el snapshot cacheado (ver lib/offline/).
+  const usuarioActivo = useAuthStore.getState().usuario;
+  if (usuarioActivo) {
+    void bumpExpiry(usuarioActivo.id);
+    void saveSessionSnapshot(usuarioActivo, data.access_token);
+  }
   return { ok: true };
 }
 
