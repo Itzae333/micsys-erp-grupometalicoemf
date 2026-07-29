@@ -372,7 +372,10 @@ export default function NotaDetallePage() {
     setPrinting(true);
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      // El print-bridge deja hasta 25s al proceso de PowerShell que manda a
+      // imprimir — este timeout debe ser mayor, o el navegador cancela la
+      // petición antes de que termine y muestra error aunque sí haya impreso.
+      const timer = setTimeout(() => controller.abort(), 30000);
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -459,7 +462,10 @@ export default function NotaDetallePage() {
     };
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      // El print-bridge deja hasta 25s al proceso de PowerShell que manda a
+      // imprimir — este timeout debe ser mayor, o el navegador cancela la
+      // petición antes de que termine y muestra error aunque sí haya impreso.
+      const timer = setTimeout(() => controller.abort(), 30000);
       await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

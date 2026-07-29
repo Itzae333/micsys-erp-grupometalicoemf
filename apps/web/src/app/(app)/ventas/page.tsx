@@ -724,7 +724,11 @@ export default function VentasPage() {
 
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      // El print-bridge deja hasta 25s al proceso de PowerShell que manda a
+      // imprimir (ver services/print-bridge/index.js) — este timeout debe ser
+      // mayor, o el navegador cancela la petición antes de que termine y
+      // muestra "no se pudo imprimir" aunque el ticket sí haya salido.
+      const timer = setTimeout(() => controller.abort(), 30000);
       const res = await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2423,7 +2427,11 @@ export default function VentasPage() {
 
       {/* ── Dialog: comprobante post-cobro ────────────────── */}
       <Dialog
-        open={!!postCobro}
+        // Se oculta apenas se abre el diálogo de correo (para no quedar
+        // apilada detrás) sin perder los datos de postCobro — el botón
+        // "Enviar" de ese diálogo los sigue necesitando. Si cancelan el
+        // correo, dlgEmail vuelve a null y esta reaparece.
+        open={!!postCobro && !dlgEmail}
         onClose={() => setPostCobro(null)}
         title="Comprobante"
         size="sm"
