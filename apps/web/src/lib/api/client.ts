@@ -2,6 +2,7 @@ import { useAuthStore } from '../store/auth.store';
 import { useContextoStore } from '../store/contexto.store';
 import { bumpExpiry } from '../offline/pin';
 import { saveSessionSnapshot } from '../offline/session-cache';
+import { markLoginRedirect } from '../auth/session-redirect';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -65,6 +66,7 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
     useAuthStore.getState().clearAuth();
     const destino = encodeURIComponent(window.location.pathname + window.location.search);
+    markLoginRedirect();
     window.location.href = `/login?motivo=sesion_expirada&redirect=${destino}`;
     throw new ApiError(401, 'Sesión expirada');
   }
@@ -241,8 +243,7 @@ if (typeof window !== 'undefined') {
   // Las tablets/navegadores pueden suspender setTimeout en segundo plano —
   // al regresar a la pestaña, se corrige de inmediato en vez de esperar un
   // timer que pudo haberse perdido.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return;
+  function checkTokenFreshnessNow() {
     const token = useAuthStore.getState().accessToken;
     if (!token) return;
     const expiryMs = getTokenExpiryMs(token);
@@ -251,7 +252,19 @@ if (typeof window !== 'undefined') {
     } else {
       scheduleProactiveRefresh(token);
     }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    checkTokenFreshnessNow();
   });
+
+  // `visibilitychange` no se dispara si la pestaña ya estaba en foco cuando
+  // el equipo se suspendió (la laptop se durmió, no la pestaña se ocultó) —
+  // `focus` sí es confiable en ese caso al despertar. `online` cubre el caso
+  // de wifi cortado y restablecido con la pestaña siempre visible/enfocada.
+  window.addEventListener('focus', checkTokenFreshnessNow);
+  window.addEventListener('online', checkTokenFreshnessNow);
 }
 
 export class ApiError extends Error {

@@ -179,6 +179,15 @@ model RefreshToken {
   revocado   Boolean  @default(false)
   created_at DateTime @default(now())
 
+  // Margen de gracia para la rotación: si la respuesta de un refresh se
+  // pierde (redeploy, tablet dormida, wifi cortado) justo cuando el token
+  // viejo ya se marcó usado, `replaced_by` deja recuperar el par nuevo que
+  // ya se había generado, en vez de cerrar la sesión sin motivo real.
+  revocado_at    DateTime?
+  replaced_by_id String?
+  replaced_by    RefreshToken?  @relation("TokenRotation", fields: [replaced_by_id], references: [id])
+  replaced_from  RefreshToken[] @relation("TokenRotation")
+
   usuario Usuario @relation(fields: [usuario_id], references: [id])
 
   @@map("refresh_tokens")

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { isRedirectingToLogin } from '@/lib/auth/session-redirect';
 import { LockScreen } from './LockScreen';
 
 // Si nadie toca la pantalla/teclado por este tiempo, se bloquea sola con PIN
@@ -45,6 +46,10 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
     if (!usuario || locked) return;
 
     function handleBeforeUnload(e: BeforeUnloadEvent) {
+      // No interceptar cuando es la propia app redirigiendo a /login por una
+      // sesión realmente vencida (ver client.ts) — eso no es el usuario
+      // cerrando la pestaña, y no debe verse un diálogo de "¿salir?".
+      if (isRedirectingToLogin()) return;
       e.preventDefault();
       e.returnValue = '';
     }
