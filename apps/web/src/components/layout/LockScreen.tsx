@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { verifyPin, clearPin, PIN_LENGTH } from '@/lib/offline/pin';
 import { listCachedUsers, getSessionSnapshot, deleteSessionSnapshot, type CachedUser } from '@/lib/offline/session-cache';
+import { refreshAccessToken } from '@/lib/api/client';
 
 function fmtSegundosRestantes(lockedUntil: Date): string {
   const seg = Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000));
@@ -60,6 +61,14 @@ export function LockScreen() {
       if (result.ok) {
         if (usuario && pinTarget.usuarioId === usuario.id) {
           unlock();
+          // El PIN solo se verifica localmente — no confirma con el
+          // servidor que el token guardado siga vivo (pudo morir por un
+          // redeploy, por ejemplo). Se fuerza una renovación ya mismo en
+          // vez de esperar al próximo timer o a que una petición real
+          // falle primero; si el refresh token sí murió de verdad, esto ya
+          // dispara el flujo normal de sesión expirada en vez de dejar a
+          // medias un token muerto.
+          void refreshAccessToken();
           return;
         }
         // Cambiando a otro usuario ya cacheado en este equipo — sin red.
@@ -70,6 +79,7 @@ export function LockScreen() {
           return;
         }
         setAuth(snapshot.usuario, snapshot.accessToken);
+        void refreshAccessToken();
         return;
       }
       setPin('');
