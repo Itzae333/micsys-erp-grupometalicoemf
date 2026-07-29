@@ -198,7 +198,7 @@ function LoginPageContent() {
       if (!result.ok) {
         setOfflinePin('');
         if (result.reason === 'expirado') {
-          setOfflineError('Pasaron más de 7 días sin conexión — necesitas conectarte a internet para renovar el acceso.');
+          setOfflineError('Pasó demasiado tiempo sin conexión — necesitas conectarte a internet para renovar el acceso.');
         } else if (result.reason === 'bloqueado') {
           setOfflineError('Demasiados intentos incorrectos. Espera unos minutos.');
         } else {

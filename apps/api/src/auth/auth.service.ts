@@ -9,6 +9,7 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from './types/jwt-payload.type';
+import { refreshExpiresInMs } from './refresh-expiry.util';
 
 @Injectable()
 export class AuthService {
@@ -186,9 +187,7 @@ export class AuthService {
 
   private async createRefreshToken(userId: string): Promise<string> {
     const token = randomBytes(64).toString('hex');
-    const expiresIn = this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d';
-    const days = parseInt(expiresIn.replace('d', ''), 10);
-    const expires_at = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const expires_at = new Date(Date.now() + refreshExpiresInMs(this.config));
 
     await this.prisma.refreshToken.create({
       data: { usuario_id: userId, token, expires_at },

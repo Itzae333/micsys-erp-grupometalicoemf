@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Search, ChevronLeft, ChevronRight, ClipboardList, Trash2, Pencil, Check, X, AlertCircle } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, ClipboardList, Trash2, Pencil, Check, X, AlertCircle, Printer } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
-import type { PedidosPage, Pedido, PedidoLinea, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema, RegistrarAnticipoResult, LiquidarPedidoResult } from '@/lib/types/api';
+import type { PedidosPage, Pedido, PedidoLinea, AnticiposPedido, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema, RegistrarAnticipoResult, LiquidarPedidoResult } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
@@ -106,6 +106,10 @@ export default function PedidosPage() {
   const [pagosLiquidar, setPagosLiquidar] = useState<PagoForm[]>(initPagos());
   const [liquidando, setLiquidando] = useState(false);
   const [errorLiquidar, setErrorLiquidar] = useState<string | null>(null);
+
+  // ── Reimprimir anticipo ──────────────────────────────────────
+  const [reimprimiendoId, setReimprimiendoId] = useState<string | null>(null);
+  const [errorReimprimir, setErrorReimprimir] = useState<string | null>(null);
 
   // ── Debounce arts ───────────────────────────────────────────
   const artDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -259,12 +263,12 @@ export default function PedidosPage() {
   }
 
   // ── Imprimir ticket ─────────────────────────────────────────
-  async function printTicket(payload: Record<string, unknown>, copias = 1) {
+  async function printTicket(payload: Record<string, unknown>, copias = 1): Promise<boolean> {
     try {
       const logoUrl = getTicketLogoUrl(empresa, ubicacion);
       let escpos: string | undefined;
       if (logoUrl) { try { escpos = (await logoToEscPosBase64(logoUrl as string)) ?? undefined; } catch { /* sin logo */ } }
-      await fetch('http://localhost:7788/print', {
+      const res = await fetch('http://localhost:7788/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,8 +281,56 @@ export default function PedidosPage() {
           ...(escpos ? { logo_escpos_b64: escpos } : {}),
         }),
       });
+      return res.ok;
     } catch {
       // print bridge no disponible, ignorar silenciosamente
+      return false;
+    }
+  }
+
+  // ── Reimprimir el ticket de un anticipo ya registrado ────────
+  // Reconstruye el mismo payload que arma el backend al registrar el
+  // anticipo (pedidos.service.ts `registrarAnticipo`): la suma de los
+  // anticipos anteriores a este (por orden cronológico) se muestra como
+  // "ANTICIPOS ANTERIORES", este anticipo como "ESTE ANTICIPO", y el saldo
+  // resultante en ese momento — igual que salió la primera vez que se
+  // imprimió, sin importar si después se registraron más anticipos.
+  async function reimprimirAnticipo(anticipo: AnticiposPedido) {
+    if (!pedidoActivo || reimprimiendoId) return;
+    setReimprimiendoId(anticipo.id);
+    setErrorReimprimir(null);
+    try {
+      const idx = pedidoActivo.anticipos.findIndex((a) => a.id === anticipo.id);
+      const anteriores = +pedidoActivo.anticipos.slice(0, idx).reduce((s, a) => s + a.monto, 0).toFixed(2);
+      const totalPagadoHastaEste = +(anteriores + anticipo.monto).toFixed(2);
+      const payload = {
+        tipo: 'anticipo_pedido',
+        pedido: {
+          folio: pedidoActivo.folio,
+          fecha: anticipo.created_at,
+          cliente_nombre: pedidoActivo.cliente
+            ? (pedidoActivo.cliente.razon_social ?? `${pedidoActivo.cliente.nombre}${pedidoActivo.cliente.apellidos ? ' ' + pedidoActivo.cliente.apellidos : ''}`)
+            : 'Cliente',
+        },
+        lineas: pedidoActivo.lineas.map((l) => ({
+          cantidad: l.cantidad,
+          descripcion: l.descripcion || l.clave,
+          precio: l.precio_unitario,
+          subtotal: l.subtotal,
+        })),
+        totales: {
+          total_pedido: pedidoActivo.total,
+          anticipos_anteriores: anteriores,
+          este_anticipo: anticipo.monto,
+          total_pagado: totalPagadoHastaEste,
+          saldo_pendiente: Math.max(0, +(pedidoActivo.total - totalPagadoHastaEste).toFixed(2)),
+        },
+        metodos_pago: [{ metodo: anticipo.metodo, monto: anticipo.monto }],
+      };
+      const ok = await printTicket(payload);
+      if (!ok) setErrorReimprimir('No se pudo imprimir: la ticketera (print bridge) no responde.');
+    } finally {
+      setReimprimiendoId(null);
     }
   }
 
@@ -679,12 +731,18 @@ export default function PedidosPage() {
                   <div className="px-4 py-3 border-b border-steel-100">
                     <h3 className="text-body font-semibold text-steel-800">Anticipos registrados</h3>
                   </div>
+                  {errorReimprimir && (
+                    <div className="mx-4 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-body-sm text-red-700">
+                      {errorReimprimir}
+                    </div>
+                  )}
                   <table className="w-full text-body-sm">
                     <thead>
                       <tr className="border-b border-steel-100 bg-steel-50">
                         <th className="text-left px-4 py-2 text-table-header text-steel-500 font-semibold uppercase tracking-wide">Fecha</th>
                         <th className="text-left px-3 py-2 text-table-header text-steel-500 font-semibold uppercase tracking-wide">Método</th>
                         <th className="text-right px-4 py-2 text-table-header text-steel-500 font-semibold uppercase tracking-wide">Monto</th>
+                        <th className="text-right px-4 py-2 text-table-header text-steel-500 font-semibold uppercase tracking-wide">Ticket</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -697,6 +755,17 @@ export default function PedidosPage() {
                             <Badge variant="default">{METODO_LABEL[a.metodo] ?? a.metodo}</Badge>
                           </td>
                           <td className="px-4 py-2 text-right font-medium text-emerald-700">${formatMoney(a.monto)}</td>
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => void reimprimirAnticipo(a)}
+                              disabled={reimprimiendoId === a.id}
+                              title="Reimprimir ticket de este anticipo"
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-steel-200 text-meta text-steel-600 hover:bg-steel-50 hover:text-steel-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                              {reimprimiendoId === a.id ? 'Imprimiendo…' : 'Reimprimir'}
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

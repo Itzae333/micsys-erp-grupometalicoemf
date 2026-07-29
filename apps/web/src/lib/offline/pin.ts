@@ -6,7 +6,9 @@ import { emfDb } from '../db/emf-db';
 
 const ITERATIONS = 150_000;
 const PIN_LENGTH = 6;
-const VIGENCIA_DIAS = 7;
+// Debe coincidir con JWT_REFRESH_EXPIRES_IN del backend (apps/api/.env) — la
+// sesión no debe cerrarse sola por inactividad, solo por logout explícito.
+const VIGENCIA_DIAS = 3650;
 const MAX_INTENTOS = 5;
 const BLOQUEO_MS = 5 * 60 * 1000;
 

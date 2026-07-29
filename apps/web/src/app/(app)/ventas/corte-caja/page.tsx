@@ -118,6 +118,7 @@ export default function CorteCajaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pendingSync, setPendingSync] = useState(0);
+  const [desgloseMultipago, setDesgloseMultipago] = useState(false);
 
   useEffect(() => {
     getPendingCount().then(setPendingSync).catch(() => {});
@@ -185,6 +186,7 @@ export default function CorteCajaPage() {
             : null,
           desde: data.desde,
           hasta: data.hasta,
+          desglose_multipago: desgloseMultipago,
           total_ventas: data.total_ventas ?? data.total_cobrado,
           total_cobrado: data.total_cobrado,
           total_gastos: data.total_gastos,
@@ -330,9 +332,20 @@ export default function CorteCajaPage() {
           Corte del Día
         </Button>
         {data && (
-          <Button variant="outline" onClick={print} className="gap-2 ml-auto">
-            <Printer className="h-4 w-4" /> Imprimir ticket
-          </Button>
+          <div className="flex items-center gap-3 ml-auto">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-steel-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={desgloseMultipago}
+                onChange={(e) => setDesgloseMultipago(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-steel-300 text-brand-600 focus:ring-brand-500"
+              />
+              Desglosar multipagos en el ticket
+            </label>
+            <Button variant="outline" onClick={print} className="gap-2">
+              <Printer className="h-4 w-4" /> Imprimir ticket
+            </Button>
+          </div>
         )}
       </div>
 

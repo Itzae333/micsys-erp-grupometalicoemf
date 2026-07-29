@@ -35,6 +35,32 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
     };
   }, [usuario, locked]);
 
+  // Cerrar la pestaña/ventana ("la X"), recargar o navegar fuera de la app
+  // bloquea con PIN — mismo efecto que "Cerrar sesión" del menú. `beforeunload`
+  // solo sirve para mostrar el aviso nativo del navegador (su texto es fijo,
+  // ningún sitio puede personalizarlo); el bloqueo real ocurre en `pagehide`,
+  // que solo dispara si la página realmente se descarga — si el usuario
+  // cancela el aviso y se queda, no se bloquea nada.
+  useEffect(() => {
+    if (!usuario || locked) return;
+
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    function handlePageHide() {
+      const state = useAuthStore.getState();
+      if (state.usuario && !state.locked) state.lock();
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [usuario, locked]);
+
   // Arranca en `false` tanto en el render de servidor como en el primer
   // render del cliente (idénticos, para no chocar con la hidratación de
   // React) — la revisión real de localStorage pasa solo dentro de un

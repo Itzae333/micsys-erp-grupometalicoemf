@@ -76,7 +76,7 @@ export function LockScreen() {
       if (result.reason === 'sin-pin') {
         setError('Este usuario no tiene un PIN configurado en este equipo.');
       } else if (result.reason === 'expirado') {
-        setError('Pasaron más de 7 días sin conexión — necesitas conectarte a internet para renovar el acceso.');
+        setError('Pasó demasiado tiempo sin conexión — necesitas conectarte a internet para renovar el acceso.');
       } else if (result.reason === 'bloqueado' && result.lockedUntil) {
         setLockedUntil(result.lockedUntil);
         setError('Demasiados intentos incorrectos.');

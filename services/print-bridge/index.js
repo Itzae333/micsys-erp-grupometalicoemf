@@ -430,19 +430,31 @@ function buildEscPosBuffer(ticket) {
     push(sep('='));
 
     // ── Lista de ventas ─────────────────────────────────
+    // Si viene marcado el checkbox "Desglosar multipagos", cada venta con más
+    // de un método de pago mete, justo debajo de su fila, una línea por cada
+    // método con su monto — en vez de solo la etiqueta genérica "MULTI_PAGO".
+    const desglosarMultipago = !!ticket.desglose_multipago;
     const pushNotaRow = (n, indent) => {
       const folioStr = 'N' + String(n.folio).padStart(5, '0');
+      const esMultipago = n.estatus !== 'CREDITO' && n.pagos && n.pagos.length > 1;
       let mLabel;
       if (n.estatus === 'CREDITO') {
         mLabel = 'CREDITO';
       } else if (!n.pagos || n.pagos.length === 0) {
         mLabel = '';
-      } else if (n.pagos.length > 1) {
+      } else if (esMultipago) {
         mLabel = 'MULTI_PAGO';
       } else {
         mLabel = norm(n.pagos[0].metodo ?? '');
       }
       push(dotRow((indent ? '  ' : '') + folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? '  ' + mLabel : '')));
+      if (desglosarMultipago && esMultipago) {
+        for (const p of n.pagos) {
+          if (!(Number(p.monto) > 0)) continue;
+          const metodoLbl = norm(METODO_LABELS[p.metodo] ?? p.metodo ?? '');
+          push(dotRow((indent ? '    - ' : '  - ') + metodoLbl, '$' + formatMoney(Number(p.monto))));
+        }
+      }
     };
 
     push(CMD.BOLD_ON, ln('VENTAS'), CMD.BOLD_OFF);
