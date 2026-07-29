@@ -51,9 +51,9 @@ export function TicketPreviewRemision({
         {lineas.length === 0 ? (
           <p className="text-steel-400 py-1">Sin artículos</p>
         ) : lineas.map((l, idx) => (
-          <div key={`${l.clave}-${idx}`} className="flex justify-between text-steel-700 leading-5">
-            <span className="truncate max-w-[160px]">{l.clave}</span>
-            <span>{l.cantidad}</span>
+          <div key={`${l.clave}-${idx}`} className="flex justify-between gap-2 text-steel-700 leading-5">
+            <span className="truncate">{l.descripcion || l.clave}</span>
+            <span className="flex-shrink-0">{l.cantidad}</span>
           </div>
         ))}
       </div>

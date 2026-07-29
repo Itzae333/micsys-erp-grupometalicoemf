@@ -33,7 +33,11 @@ const REM_INCLUDE = {
   lineas: {
     include: {
       articulo: {
-        select: { id: true, clave: true, descripcion_1: true, descripcion_2: true },
+        select: {
+          id: true, clave: true,
+          descripcion_1: true, descripcion_2: true,
+          descripcion_3: true, descripcion_4: true, descripcion_5: true,
+        },
       },
     },
   },

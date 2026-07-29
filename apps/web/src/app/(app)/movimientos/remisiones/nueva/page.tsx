@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import { cn } from '@/lib/utils';
 import { getTicketLogoUrl } from '@/lib/utils/ticket-logo';
+import { printRemisionTicket, type RemisionTicket } from '@/lib/utils/print-remision';
 import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
 import type { Articulo, ArticulosPage } from '@/lib/types/api';
 
@@ -130,7 +131,10 @@ export default function NuevaRemisionPage() {
       const rem = await api.post<{ id: string }>('/remisiones', body);
 
       if (enviar) {
-        await api.patch(`/remisiones/${rem.id}/enviar`, {});
+        const actualizada = await api.patch<RemisionTicket>(`/remisiones/${rem.id}/enviar`, {});
+        // Mismo estándar y misma función que "Reimprimir ticket" en el detalle —
+        // si el print bridge no responde no bloquea el flujo, se puede reimprimir después.
+        void printRemisionTicket(actualizada);
       }
 
       router.push(`/movimientos/remisiones/${rem.id}`);
@@ -376,7 +380,7 @@ export default function NuevaRemisionPage() {
                   empresaDestino={empresaDst?.nombre ?? '—'}
                   ubDestino={ubDestinoNombre}
                   fecha={new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  lineas={lineas.map((l) => ({ clave: l.articulo.clave, descripcion: l.articulo.descripcion_1, cantidad: l.cantidad }))}
+                  lineas={lineas.map((l) => ({ clave: l.articulo.clave, descripcion: descripcionCompleta(l.articulo) || null, cantidad: l.cantidad }))}
                 />
               </div>
             )}

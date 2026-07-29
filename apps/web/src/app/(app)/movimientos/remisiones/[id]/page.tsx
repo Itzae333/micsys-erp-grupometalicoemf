@@ -11,7 +11,8 @@ import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
+import { getTicketLogoUrl } from '@/lib/utils/ticket-logo';
+import { printRemisionTicket, fechaTicketRemision } from '@/lib/utils/print-remision';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
 
@@ -25,7 +26,11 @@ interface RemisionLinea {
   cantidad_enviada: number;
   cantidad_recibida: number | null;
   notas: string | null;
-  articulo: { id: string; clave: string; descripcion_1: string | null; descripcion_2: string | null };
+  articulo: {
+    id: string; clave: string;
+    descripcion_1: string | null; descripcion_2: string | null;
+    descripcion_3: string | null; descripcion_4: string | null; descripcion_5: string | null;
+  };
 }
 
 interface Remision {
@@ -72,6 +77,11 @@ const ESTATUS_CFG: Record<EstatusRemision, {
   CANCELADA:         { label: 'Cancelada',   icon: <XCircle className="h-4 w-4" />,      cls: 'bg-red-100 text-red-600' },
 };
 
+function descripcionCompleta(art: RemisionLinea['articulo']): string {
+  return [art.descripcion_1, art.descripcion_2, art.descripcion_3, art.descripcion_4, art.descripcion_5]
+    .filter(Boolean).join(' · ');
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3001';
 const APP_URL  = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -92,6 +102,7 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
   const [showRecibir, setShowRecibir]   = useState(false);
   const [cantidades, setCantidades]     = useState<Record<string, number>>({});
   const [showPreview, setShowPreview]   = useState(false);
+  const [printing, setPrinting]         = useState(false);
 
   const canManage  = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'].includes(usuario?.rol ?? '');
@@ -126,8 +137,14 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
     setAction('enviar');
     setError(null);
     try {
-      await api.patch(`/remisiones/${rem.id}/enviar`, {});
+      const actualizada = await api.patch<Remision>(`/remisiones/${rem.id}/enviar`, {});
       await load();
+      // Imprime el ticket de salida automáticamente al enviar — mismo formato
+      // y misma función que "Reimprimir ticket" (printRemisionTicket).
+      setPrinting(true);
+      const ok = await printRemisionTicket(actualizada);
+      if (!ok) setError('La remisión se envió, pero no se pudo imprimir: la ticketera (print bridge) no responde.');
+      setPrinting(false);
     } catch (err: any) {
       setError(err?.message ?? 'Error al enviar');
     } finally {
@@ -169,36 +186,11 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
 
   async function printTicket() {
     if (!rem) return;
-    // Logo/datos fiscales de la ubicación que emite la remisión (origen)
-    const logoUrl = getTicketLogoUrl(rem.empresa_origen, rem.ub_origen);
-    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
-
-    const payload = {
-      tipo: 'remision',
-      logo_escpos_b64,
-      empresa: { nombre: rem.empresa_origen.nombre },
-      ubicacion: { nombre: rem.ub_origen.nombre, ...buildTicketUbicacionFiscal(rem.ub_origen) },
-      empresa_origen: { nombre: rem.empresa_origen.nombre },
-      folio: rem.folio,
-      concepto: rem.concepto ?? null,
-      origen: { empresa: rem.empresa_origen.nombre, ubicacion: rem.ub_origen.nombre },
-      destino: { empresa: rem.empresa_destino.nombre, ubicacion: rem.ub_destino.nombre },
-      fecha: new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', {
-        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-      }),
-      lineas: rem.lineas.map((l) => ({
-        clave: l.articulo.clave,
-        descripcion: l.articulo.descripcion_1 ?? null,
-        cantidad: l.cantidad_enviada,
-      })),
-      qr_url: `${APP_URL}/movimientos/recibir?folio=${rem.folio}`,
-    };
-
-    fetch('http://localhost:7788/print', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(console.error);
+    setPrinting(true);
+    setError(null);
+    const ok = await printRemisionTicket(rem);
+    if (!ok) setError('No se pudo imprimir: la ticketera (print bridge) no responde.');
+    setPrinting(false);
   }
 
   const fmt = (d: string) =>
@@ -236,9 +228,9 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
 
         {/* Acciones */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" onClick={printTicket}>
+          <Button variant="outline" size="sm" onClick={printTicket} disabled={printing}>
             <Printer className="h-3.5 w-3.5 mr-1.5" />
-            Imprimir
+            {printing ? 'Imprimiendo…' : rem.estatus === 'BORRADOR' ? 'Imprimir' : 'Reimprimir ticket'}
           </Button>
           {rem.estatus === 'BORRADOR' && canManage && (
             <>
@@ -282,8 +274,8 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
               ubOrigen={rem.ub_origen.nombre}
               empresaDestino={rem.empresa_destino.nombre}
               ubDestino={rem.ub_destino.nombre}
-              fecha={new Date(rem.fecha_envio ?? rem.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              lineas={rem.lineas.map((l) => ({ clave: l.articulo.clave, descripcion: l.articulo.descripcion_1, cantidad: l.cantidad_enviada }))}
+              fecha={fechaTicketRemision(rem)}
+              lineas={rem.lineas.map((l) => ({ clave: l.articulo.clave, descripcion: descripcionCompleta(l.articulo) || null, cantidad: l.cantidad_enviada }))}
               qrUrl={qrUrl}
             />
           </div>
@@ -356,8 +348,10 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                   return (
                     <tr key={linea.id} className="bg-white hover:bg-steel-50 transition-colors">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-steel-800">{linea.articulo.clave}</p>
-                        <p className="text-meta text-steel-500">{linea.articulo.descripcion_1}</p>
+                        <p className="font-semibold text-steel-900 leading-tight">
+                          {descripcionCompleta(linea.articulo) || linea.articulo.clave}
+                        </p>
+                        <p className="text-meta text-steel-400">{linea.articulo.clave}</p>
                       </td>
                       <td className="px-3 py-3 text-center text-steel-500 hidden md:table-cell">
                         <span className="text-meta">{linea.slot_origen} → {linea.slot_destino}</span>

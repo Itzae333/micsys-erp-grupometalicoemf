@@ -1366,18 +1366,20 @@ export default function VentasPage() {
                   />
                 </div>
               ) : (
-                <table className="w-full text-body-sm">
+                <table className="w-full table-fixed text-body-sm">
                   <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
                     <tr>
-                      <th className="px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
-                      <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
+                      <th className="w-[9%] px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
+                      <th className="w-[34%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
+                      <th className="w-[13%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
+                      <th className="w-[24%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
+                      <th className="w-[20%] px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-steel-100">
                     {filtered.map((nota, i) => {
                       const cfg = ESTATUS_CONFIG[nota.estatus];
+                      const pagosVisibles = (nota.pagos ?? []).filter((p) => p.monto > 0);
                       return (
                         <tr
                           key={nota.id}
@@ -1397,7 +1399,7 @@ export default function VentasPage() {
                           <td className="px-4 py-2.5">
                             <span className="font-bold text-steel-900">#{String(nota.folio).padStart(4, '0')}</span>
                           </td>
-                          <td className="px-3 py-2.5 max-w-[120px]">
+                          <td className="px-3 py-2.5 overflow-hidden">
                             <p className="text-steel-900 truncate">
                               {nota.cliente
                                 ? nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim()
@@ -1410,7 +1412,21 @@ export default function VentasPage() {
                           <td className="px-3 py-2.5">
                             <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                           </td>
-                          <td className="px-4 py-2.5 text-right">
+                          {/* Métodos de pago — mismo desglose que el corte de caja */}
+                          <td className="px-3 py-2.5 overflow-hidden">
+                            <div className="flex gap-1 flex-wrap">
+                              {pagosVisibles.length > 0 ? (
+                                pagosVisibles.map((p, j) => (
+                                  <span key={j} className="text-[10px] bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                    {METODO_LABEL[p.metodo] ?? p.metodo} {formatPrecio(p.monto)}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-meta text-steel-400">—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             <span className="font-semibold text-steel-900">
                               {formatPrecio(nota.estatus === 'CANCELADA' ? 0 : nota.total)}
                             </span>

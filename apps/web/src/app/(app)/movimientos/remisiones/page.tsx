@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   PackagePlus, ArrowRight, Clock, CheckCircle2, AlertCircle,
-  XCircle, Truck, Plus,
+  XCircle, Truck, Plus, Printer,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
+import { printRemisionTicket, type RemisionTicket } from '@/lib/utils/print-remision';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
 
@@ -76,8 +77,27 @@ export default function RemisionesPage() {
   const [result, setResult] = useState<RemisionesPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage]     = useState(1);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
 
   const canCreate = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+
+  // Reimprime el ticket de la remisión de salida sin salir del listado. Se pide
+  // el detalle porque el ticket necesita los datos fiscales del origen y las
+  // claves/descripciones de cada artículo.
+  async function reimprimir(id: string) {
+    setPrintingId(id);
+    setPrintError(null);
+    try {
+      const detalle = await api.get<RemisionTicket>(`/remisiones/${id}`);
+      const ok = await printRemisionTicket(detalle);
+      if (!ok) setPrintError('No se pudo imprimir: la ticketera (print bridge) no responde.');
+    } catch {
+      setPrintError('No se pudo obtener la remisión para reimprimir.');
+    } finally {
+      setPrintingId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!empresa) return;
@@ -132,6 +152,12 @@ export default function RemisionesPage() {
         ))}
       </div>
 
+      {printError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-body-sm text-red-700">
+          {printError}
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
         {loading ? (
@@ -151,11 +177,14 @@ export default function RemisionesPage() {
                 <th className="text-left px-4 py-3 font-medium text-steel-600 hidden md:table-cell">Artículos</th>
                 <th className="text-left px-4 py-3 font-medium text-steel-600 hidden lg:table-cell">Fecha</th>
                 <th className="text-left px-4 py-3 font-medium text-steel-600">Estatus</th>
+                <th className="text-right px-4 py-3 font-medium text-steel-600">Ticket</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-steel-100 bg-white">
               {result.data.map((rem) => {
                 const cfg = ESTATUS_CFG[rem.estatus];
+                // Solo las de salida (esta empresa es el origen) tienen ticket de remisión.
+                const esSalida = rem.empresa_origen.id === empresa?.id && rem.estatus !== 'CANCELADA';
                 return (
                   <tr
                     key={rem.id}
@@ -183,6 +212,21 @@ export default function RemisionesPage() {
                         {cfg.icon}
                         {cfg.label}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {esSalida ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void reimprimir(rem.id); }}
+                          disabled={printingId === rem.id}
+                          title="Reimprimir ticket de remisión de salida"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-steel-200 text-meta text-steel-600 hover:bg-steel-50 hover:text-steel-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          {printingId === rem.id ? 'Imprimiendo…' : 'Reimprimir'}
+                        </button>
+                      ) : (
+                        <span className="text-meta text-steel-300">—</span>
+                      )}
                     </td>
                   </tr>
                 );

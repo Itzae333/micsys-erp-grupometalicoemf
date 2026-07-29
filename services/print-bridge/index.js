@@ -234,6 +234,16 @@ function fmtTime(d) {
 }
 function fmtDateTime(d) { return fmtDate(d) + ' ' + fmtTime(d); }
 
+/**
+ * Formatea una fecha suelta "YYYY-MM-DD" a "DD/MM/YYYY" sin pasar por Date()
+ * — `new Date('2026-07-27')` se interpreta como UTC y en horario de México
+ * retrocedería un día. Si el string no tiene ese formato se deja tal cual.
+ */
+function fmtFechaSimple(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s ?? ''));
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : String(s ?? '');
+}
+
 /** Igual que row() pero con puntos como relleno */
 function dotRow(left, right) {
   const w = config.columns;
@@ -324,13 +334,14 @@ function buildEscPosBuffer(ticket) {
     push(row('Fecha', norm(ticket.fecha ?? '')));
     push(sep('-'));
 
-    const colNombre = config.columns - 7;
-    push(ln(('ARTICULO').padEnd(colNombre) + ' CANT'.padStart(6)));
+    push(CMD.BOLD_ON, ln('ARTICULOS'), CMD.BOLD_OFF);
     push(sep('-'));
     for (const linea of (ticket.lineas ?? [])) {
-      const desc = norm(linea.clave + (linea.descripcion ? ' ' + linea.descripcion : ''));
-      const cant = String(linea.cantidad).padStart(6);
-      push(ln(desc.slice(0, colNombre).padEnd(colNombre) + cant));
+      // Igual que en el ticket de venta: solo la descripción (todas las
+      // descripciones del artículo ya vienen concatenadas desde el front),
+      // nunca la clave — la impresora hace wrap automático de líneas largas.
+      const nombre = linea.descripcion || linea.clave;
+      push(CMD.BOLD_ON, ln(norm(String(linea.cantidad)) + '  ' + nombre), CMD.BOLD_OFF);
     }
     push(sep('-'));
     push(ln('Total: ' + (ticket.lineas ?? []).length + ' articulos'));
@@ -408,9 +419,13 @@ function buildEscPosBuffer(ticket) {
     push(CMD.ALIGN_LEFT, sep('='));
     push(CMD.BOLD_ON, center('CORTE DE CAJA'), CMD.BOLD_OFF);
 
+    // En el ticket impreso la fecha va como día/mes/año (el resto del sistema
+    // la maneja en ISO año-mes-día).
+    const desdeLbl = fmtFechaSimple(ticket.desde);
+    const hastaLbl = fmtFechaSimple(ticket.hasta);
     const rangoLabel = ticket.desde === ticket.hasta
-      ? norm(ticket.desde ?? '')
-      : norm((ticket.desde ?? '') + ' al ' + (ticket.hasta ?? ''));
+      ? norm(desdeLbl)
+      : norm(desdeLbl + ' al ' + hastaLbl);
     push(center(rangoLabel));
     push(sep('='));
 
