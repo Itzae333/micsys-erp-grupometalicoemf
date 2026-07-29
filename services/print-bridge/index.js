@@ -476,16 +476,6 @@ function buildEscPosBuffer(ticket) {
       push(sep('-'));
     }
 
-    // ── Ventas por método de pago ────────────────────────
-    if (ticket.por_metodo) {
-      for (const m of METODOS) {
-        const res = ticket.por_metodo[m] ?? { count: 0, total: 0 };
-        if (res.count === 0) continue;
-        push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
-      }
-      push(sep('-'));
-    }
-
     // ── Anticipos de pedidos ────────────────────────────
     if (ticket.anticipos_pedido && ticket.anticipos_pedido.count > 0) {
       push(sep('='));
