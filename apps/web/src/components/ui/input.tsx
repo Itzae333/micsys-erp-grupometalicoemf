@@ -6,11 +6,17 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, error, ...props }, ref) => {
+  ({ className, type, error, onWheel, ...props }, ref) => {
     return (
       <div className="w-full">
         <input
           type={type}
+          // En Chrome/Edge, si el mouse queda sobre un <input type="number"> enfocado
+          // y el usuario mueve la rueda (aunque sea sin querer, al hacer scroll de la
+          // página), el valor cambia solo por el `step` — así se corrompen montos como
+          // 5500.00 → 5499.99 con un solo "tick" sin que nadie lo note. Quitamos el foco
+          // al primer wheel para que el scroll siga funcionando pero ya no toque el valor.
+          onWheel={type === 'number' ? (e) => { e.currentTarget.blur(); onWheel?.(e); } : onWheel}
           className={cn(
             'flex h-9 w-full rounded-md border border-steel-300 bg-white px-3 py-1 text-body text-steel-900 shadow-none transition-colors',
             'placeholder:text-steel-400',
