@@ -1378,9 +1378,10 @@ export default function VentasPage() {
                   <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
                     <tr>
                       <th className="w-[9%] px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
-                      <th className="w-[34%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
-                      <th className="w-[13%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
-                      <th className="w-[24%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
+                      <th className="w-[29%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
+                      <th className="w-[11%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
+                      <th className="w-[12%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Entrega</th>
+                      <th className="w-[19%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
                       <th className="w-[20%] px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
                     </tr>
                   </thead>
@@ -1440,9 +1441,11 @@ export default function VentasPage() {
                           <td className="px-3 py-2.5">
                             <div className="flex flex-col gap-1 items-start">
                               <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
-                              <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                               {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
                             </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                           </td>
                           {/* Métodos de pago — mismo desglose que el corte de caja */}
                           <td className="px-3 py-2.5 overflow-hidden">
