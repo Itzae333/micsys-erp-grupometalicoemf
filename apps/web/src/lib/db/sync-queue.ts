@@ -1,5 +1,5 @@
 import { emfDb, type HttpMethod, type SyncQueueItem } from './emf-db';
-import { refreshAccessToken } from '../api/client';
+import { checkSessionAlive } from '../api/client';
 import { useAuthStore } from '../store/auth.store';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
@@ -37,10 +37,11 @@ export async function flushQueue(): Promise<{ ok: number; errors: number }> {
 
   if (pending.length === 0) return { ok: 0, errors: 0 };
 
-  // El token snapshoteado al encolar cada venta puede llevar días vencido si
-  // el equipo estuvo offline mucho tiempo (dura 30 min) — se refresca una vez
-  // aquí con la sesión viva actual en vez de arrastrar el 401 por ítem.
-  await refreshAccessToken();
+  // El access_token ya no expira solo, pero pudo ser revocado ("Cerrar
+  // todas las sesiones") mientras el equipo estuvo offline — se confirma
+  // una vez aquí antes de reproducir todo el lote, en vez de arrastrar el
+  // 401 por cada ítem pendiente.
+  await checkSessionAlive();
 
   let ok = 0;
   let errors = 0;

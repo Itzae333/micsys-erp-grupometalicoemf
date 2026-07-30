@@ -11,7 +11,7 @@ import { LockScreen } from './LockScreen';
 // — no espera a que el access token expire y el refresh sea rechazado (eso
 // es un cierre de sesión real, no un bloqueo por inactividad).
 const IDLE_LOCK_MS = 60 * 60 * 1000; // 1 hora
-const IDLE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+const IDLE_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel', 'scroll'] as const;
 
 export function ContextGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -29,10 +29,14 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
       timer = setTimeout(() => useAuthStore.getState().lock(), IDLE_LOCK_MS);
     };
     reset();
-    IDLE_EVENTS.forEach((ev) => window.addEventListener(ev, reset, { passive: true }));
+    // `capture: true` es necesario para 'scroll': ese evento no burbujea, así
+    // que sin captura solo se detectaría el scroll de la página completa, no
+    // el de un <div> interno con su propio overflow (listas largas, paneles
+    // de detalle, etc.) — con captura sí se ve pasar aunque no burbujee.
+    IDLE_EVENTS.forEach((ev) => window.addEventListener(ev, reset, { passive: true, capture: true }));
     return () => {
       clearTimeout(timer);
-      IDLE_EVENTS.forEach((ev) => window.removeEventListener(ev, reset));
+      IDLE_EVENTS.forEach((ev) => window.removeEventListener(ev, reset, { capture: true }));
     };
   }, [usuario, locked]);
 

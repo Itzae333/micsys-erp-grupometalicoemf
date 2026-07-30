@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { User, Shield, LogOut, RefreshCw, KeyRound } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Shield, LogOut, KeyRound } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,26 +11,11 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { hasPin, setPin, clearPin, isPinFormatValid, PIN_LENGTH } from '@/lib/offline/pin';
 import { deleteSessionSnapshot } from '@/lib/offline/session-cache';
 
-interface Session {
-  id: string;
-  created_at: string;
-  expires_at: string;
-}
-
-function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleString('es-MX', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 export default function PerfilPage() {
   const { usuario, clearAuth } = useAuthStore();
   const { clearContexto } = useContextoStore();
   const router = useRouter();
 
-  const [sessions, setSessions]       = useState<Session[]>([]);
-  const [loadingSess, setLoadingSess] = useState(false);
   const [revoking, setRevoking]       = useState(false);
   const [revoked, setRevoked]         = useState(false);
 
@@ -40,17 +25,6 @@ export default function PerfilPage() {
   const [pinError, setPinError]             = useState<string | null>(null);
   const [pinOk, setPinOk]                   = useState(false);
   const [guardandoPin, setGuardandoPin]     = useState(false);
-
-  const loadSessions = useCallback(async () => {
-    setLoadingSess(true);
-    try {
-      const data = await api.get<Session[]>('/auth/sessions');
-      setSessions(data);
-    } catch { /* noop */ }
-    finally { setLoadingSess(false); }
-  }, []);
-
-  useEffect(() => { void loadSessions(); }, [loadSessions]);
 
   useEffect(() => {
     if (!usuario) return;
@@ -92,7 +66,6 @@ export default function PerfilPage() {
         await deleteSessionSnapshot(usuario.id);
       }
       setRevoked(true);
-      setSessions([]);
       setTimeout(() => {
         clearAuth();
         clearContexto();
@@ -175,64 +148,29 @@ export default function PerfilPage() {
 
       {/* Sesiones activas */}
       <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-steel-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-steel-500" />
-            <h2 className="text-body font-semibold text-steel-700">
-              Sesiones activas ({sessions.length})
-            </h2>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void loadSessions()}
-            disabled={loadingSess}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingSess ? 'animate-spin' : ''}`} />
-          </Button>
+        <div className="px-5 py-4 border-b border-steel-100 flex items-center gap-2">
+          <Shield className="h-4 w-4 text-steel-500" />
+          <h2 className="text-body font-semibold text-steel-700">Sesión</h2>
         </div>
 
-        {loadingSess ? (
-          <div className="p-6 text-center text-body-sm text-steel-400">Cargando…</div>
-        ) : sessions.length === 0 ? (
-          <div className="p-6 text-center text-body-sm text-steel-400">Sin sesiones activas</div>
-        ) : (
-          <table className="w-full text-body-sm">
-            <thead>
-              <tr className="border-b border-steel-100 bg-steel-50">
-                <th className="px-4 py-2 text-left font-medium text-steel-500">Iniciada</th>
-                <th className="px-4 py-2 text-left font-medium text-steel-500">Expira</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-steel-50">
-              {sessions.map((s, i) => (
-                <tr key={s.id} className="hover:bg-steel-50">
-                  <td className="px-4 py-2 text-steel-700 tabular-nums">
-                    {fmtFecha(s.created_at)}
-                    {i === 0 && (
-                      <span className="ml-2 text-meta bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                        actual
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-steel-400 tabular-nums">{fmtFecha(s.expires_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <p className="px-5 py-4 text-body-sm text-steel-500">
+          Tu sesión no se cierra sola por inactividad, ni al cerrar la pestaña
+          (eso solo bloquea con PIN). La única forma de cerrarla de verdad es
+          con el botón de abajo — esto termina tu acceso en todos los equipos
+          donde hayas iniciado sesión, no solo en este.
+        </p>
 
         <div className="px-5 py-4 border-t border-steel-100 bg-steel-50">
           {revoked ? (
             <p className="text-body-sm text-green-700 font-medium">
-              Sesiones cerradas. Redirigiendo al login…
+              Sesión cerrada. Redirigiendo al login…
             </p>
           ) : (
             <Button
               variant="destructive"
               size="sm"
               onClick={() => void revokeAll()}
-              disabled={revoking || sessions.length === 0}
+              disabled={revoking}
             >
               <LogOut className="h-3.5 w-3.5 mr-1.5" />
               {revoking ? 'Cerrando sesiones…' : 'Cerrar todas las sesiones'}

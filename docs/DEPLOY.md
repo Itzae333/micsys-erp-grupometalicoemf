@@ -29,10 +29,11 @@ Crea un archivo `apps/api/.env` en local o configura estos valores en Railway:
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=require"
 
 # JWT — genera un secreto seguro con: openssl rand -base64 64
+# El access_token es la única credencial (sin refresh_token) — 3650d (~10
+# años) es el "para siempre" práctico; la sesión solo termina por "Cerrar
+# todas las sesiones" o porque un admin desactiva al usuario.
 JWT_SECRET="CAMBIA_ESTO_POR_UN_SECRETO_LARGO_Y_ALEATORIO"
-JWT_REFRESH_SECRET="OTRO_SECRETO_DIFERENTE_PARA_REFRESH"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+JWT_EXPIRES_IN="3650d"
 
 # CORS — URL pública del frontend (sin barra final)
 FRONTEND_URL="https://tu-app.vercel.app"
@@ -90,9 +91,7 @@ Start Command:    node apps/api/dist/main
 |---|---|
 | `DATABASE_URL` | *(copiado del servicio Postgres de Railway)* |
 | `JWT_SECRET` | *(secreto aleatorio)* |
-| `JWT_REFRESH_SECRET` | *(secreto aleatorio diferente)* |
-| `JWT_EXPIRES_IN` | `15m` |
-| `JWT_REFRESH_EXPIRES_IN` | `7d` |
+| `JWT_EXPIRES_IN` | `3650d` |
 | `FRONTEND_URL` | `https://tu-app.vercel.app` |
 | `NODE_ENV` | `production` |
 | `PORT` | `3001` *(Railway sobreescribe con $PORT — puedes omitirlo)* |

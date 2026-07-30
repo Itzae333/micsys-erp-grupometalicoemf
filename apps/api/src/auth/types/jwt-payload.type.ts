@@ -9,4 +9,5 @@ export interface JwtPayload {
   empresa_id: string;
   ubicacion_ids: string[];
   allowed_ips: string[];
+  token_version: number;
 }

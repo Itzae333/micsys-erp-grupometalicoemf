@@ -6,8 +6,10 @@ import { emfDb } from '../db/emf-db';
 
 const ITERATIONS = 150_000;
 const PIN_LENGTH = 6;
-// Debe coincidir con JWT_REFRESH_EXPIRES_IN del backend (apps/api/.env) — la
-// sesión no debe cerrarse sola por inactividad, solo por logout explícito.
+// Ventana propia de este equipo, independiente del backend — el access_token
+// ya no rota ni expira solo (ver JWT_EXPIRES_IN en apps/api/.env), así que
+// esto ya no necesita "coincidir" con nada del lado del servidor. Se fija al
+// configurar el PIN y se extiende en cada login online exitoso.
 const VIGENCIA_DIAS = 3650;
 const MAX_INTENTOS = 5;
 const BLOQUEO_MS = 5 * 60 * 1000;
@@ -86,8 +88,8 @@ export async function clearPin(usuarioId: string): Promise<void> {
   await emfDb.offlinePin.delete(usuarioId);
 }
 
-// Extiende la vigencia otros 7 días — se llama tras cada login o refresh de
-// token exitosos, para que la ventana ruede igual que el refresh_token real.
+// Extiende la vigencia otros VIGENCIA_DIAS días — se llama tras cada login
+// online exitoso, para que un equipo que sigue usándose no se quede sin PIN.
 export async function bumpExpiry(usuarioId: string): Promise<void> {
   const row = await emfDb.offlinePin.get(usuarioId);
   if (!row) return;

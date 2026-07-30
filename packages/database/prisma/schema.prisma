@@ -116,6 +116,10 @@ model Usuario {
   activo        Boolean    @default(true)
   ultimo_acceso DateTime?
   allowed_ips   String[]   @default([])
+  // Se incrementa al "cerrar todas las sesiones" — cualquier access token
+  // firmado con una versión anterior deja de ser válido al instante, sin
+  // importar su fecha de expiración (ver JwtStrategy).
+  token_version Int        @default(0)
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
 
