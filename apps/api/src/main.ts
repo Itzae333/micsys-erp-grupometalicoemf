@@ -17,7 +17,12 @@ if (!globalThis.crypto) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `bodyParser: false` desactiva el parser automático de Nest (limit por
+  // default de Express/body-parser: 100kb) para poder registrar el propio
+  // con un límite más alto — las evidencias de pago (comprobantes, fotos)
+  // viajan como base64 dentro del JSON y una imagen comprimida ya fácil
+  // pesa 200-500kb, muy por arriba del default.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   // Directorio para logos subidos — se crea si no existe
   const uploadsDir = join(process.cwd(), 'uploads', 'logos');
@@ -25,6 +30,9 @@ async function bootstrap() {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const express = require('express') as typeof import('express');
+
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
   // Servir /uploads/ con header CORS explícito (se registra antes que enableCors).
   // Se refleja el Origin real del request, igual que enableCors({ origin: true }),
