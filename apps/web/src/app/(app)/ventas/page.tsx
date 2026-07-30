@@ -1440,7 +1440,7 @@ export default function VentasPage() {
                           <td className="px-3 py-2.5">
                             <div className="flex flex-col gap-1 items-start">
                               <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
-                              <EstatusEntregaTag estatusEntrega={nota.estatus_entrega} />
+                              <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                               {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
                             </div>
                           </td>
@@ -1529,7 +1529,7 @@ export default function VentasPage() {
                       <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
                         {ESTATUS_CONFIG[detalleNota.estatus]?.label}
                       </Badge>
-                      <EstatusEntregaTag estatusEntrega={detalleNota.estatus_entrega} />
+                      <EstatusEntregaTag estatus={detalleNota.estatus} estatusEntrega={detalleNota.estatus_entrega} />
                       {detalleNota.pedido_origen && <PedidoOrigenTag pedidoOrigen={detalleNota.pedido_origen} />}
                     </div>
                   </div>

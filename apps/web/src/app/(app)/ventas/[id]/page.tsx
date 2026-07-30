@@ -710,7 +710,7 @@ export default function NotaDetallePage() {
               #{String(nota.folio).padStart(4, '0')}{nota.version > 1 && <span className="text-steel-400"> · v{nota.version}</span>}
             </h1>
             <Badge variant={cfg?.variant ?? 'outline'}>{cfg?.label}</Badge>
-            <EstatusEntregaTag estatusEntrega={nota.estatus_entrega} />
+            <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
             {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
           </div>
         </div>
