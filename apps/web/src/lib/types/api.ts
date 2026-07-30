@@ -219,6 +219,12 @@ export interface NotaVenta {
   created_at: string;
   updated_at: string;
   cerrada_at: string | null;
+  /** Si la nota nació de liquidar un pedido — el estatus se queda igual (PAGADA), esto solo es para mostrarlo aparte. */
+  pedido_origen: {
+    id: string;
+    folio: number;
+    anticipos: { monto: number; metodo: MetodoPago; referencia: string | null; created_at: string }[];
+  } | null;
 }
 
 // ─── Cotizaciones — tablas y folio propios, independientes de NotaVenta ───

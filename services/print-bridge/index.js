@@ -547,8 +547,11 @@ function buildEscPosBuffer(ticket) {
       push(sep('-'));
 
       // A petición de EMFIMIFAR: "Total de ventas" engloba los anticipos de
-      // pedidos del período (se suman), no solo las notas cerradas.
-      const totalVentasConAnticipos = Number(ticket.total_ventas ?? 0) + Number(ticket.anticipos_pedido?.total ?? 0);
+      // pedidos del período que SIGUEN pendientes (se suman), no solo las notas
+      // cerradas — si un pedido ya se liquidó, su anticipo ya quedó contado
+      // dentro de total_ventas vía la nota resultante, así que se usa
+      // total_pendiente y no total, o se duplicaría ese dinero.
+      const totalVentasConAnticipos = Number(ticket.total_ventas ?? 0) + Number(ticket.anticipos_pedido?.total_pendiente ?? ticket.anticipos_pedido?.total ?? 0);
       push(dotRow('TOTAL DE VENTAS', '$' + formatMoney(totalVentasConAnticipos)));
 
       const ventasCreditoEmf = ticket.por_estatus?.CREDITO;

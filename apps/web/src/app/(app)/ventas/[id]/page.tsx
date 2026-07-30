@@ -19,6 +19,7 @@ import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
@@ -701,6 +702,7 @@ export default function NotaDetallePage() {
               #{String(nota.folio).padStart(4, '0')}{nota.version > 1 && <span className="text-steel-400"> · v{nota.version}</span>}
             </h1>
             <Badge variant={cfg?.variant ?? 'outline'}>{cfg?.label}</Badge>
+            {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
           </div>
         </div>
         <div className="flex items-center gap-2">

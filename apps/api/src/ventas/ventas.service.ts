@@ -30,6 +30,19 @@ const NOTA_INCLUDE = {
     orderBy: { created_at: 'asc' as const },
     include: { subido_por: { select: { id: true, nombre: true, apellidos: true } } },
   },
+  // Si la nota nació de liquidar un pedido, se expone el pedido origen con su
+  // historial de anticipos — para mostrarlo junto al badge "Pagada" en vez de
+  // inventar un estatus nuevo (ver conversación: la BD se queda tal cual).
+  pedido_origen: {
+    select: {
+      id: true,
+      folio: true,
+      anticipos: {
+        select: { monto: true, metodo: true, referencia: true, created_at: true },
+        orderBy: { created_at: 'asc' as const },
+      },
+    },
+  },
 } satisfies Prisma.NotaVentaInclude;
 
 type NotaRaw = Prisma.NotaVentaGetPayload<{ include: typeof NOTA_INCLUDE }>;
@@ -710,6 +723,13 @@ export class VentasService {
         ...ev,
         data_json: ev.data_json as { base64?: string } | null,
       })),
+      pedido_origen: nota.pedido_origen ? {
+        ...nota.pedido_origen,
+        anticipos: nota.pedido_origen.anticipos.map((a) => ({
+          ...a,
+          monto: Number(a.monto),
+        })),
+      } : null,
     };
   }
 
@@ -1091,6 +1111,15 @@ export class VentasService {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
           usuario: { select: { id: true, nombre: true, apellidos: true } },
           pagos: true,
+          // Si la nota nació de liquidar un pedido, se marca con el folio y la
+          // fecha del primer anticipo — para que se note a simple vista que
+          // parte de ese dinero ya se reportó en un corte anterior.
+          pedido_origen: {
+            select: {
+              folio: true,
+              anticipos: { select: { created_at: true }, orderBy: { created_at: 'asc' }, take: 1 },
+            },
+          },
         },
       }),
       this.prisma.anticiposPedido.findMany({
@@ -1100,6 +1129,7 @@ export class VentasService {
           pedido: {
             select: {
               folio: true,
+              estatus: true,
               cliente: { select: { nombre: true, apellidos: true, razon_social: true } },
             },
           },
@@ -1189,6 +1219,15 @@ export class VentasService {
       DEPOSITO:     { count: 0, total: 0 },
     };
     let totalAnticipos = 0;
+    // Cuando el pedido se liquida en el mismo período, su anticipo ya quedó
+    // reflejado dentro del total de la nota resultante (ver PedidosService.liquidar
+    // y el filtro de origen_anticipo_pedido de arriba) — sumarlo aquí de nuevo
+    // duplicaría ese dinero. Este total aparte, sin los ya liquidados, es el que
+    // hay que usar para "engloba los anticipos" en el ticket (a petición de
+    // EMFIMIFAR); el desglose completo (`total`/`detalle`) se deja igual, sigue
+    // siendo información real de lo cobrado hoy.
+    let totalAnticiposPendientes = 0;
+    let efectivoAnticiposPendientes = 0;
 
     for (const ant of anticiposPedido) {
       const m = ant.metodo as string;
@@ -1197,6 +1236,12 @@ export class VentasService {
       metodoAnticipos[m].count++;
       metodoAnticipos[m].total = +(metodoAnticipos[m].total + monto).toFixed(2);
       totalAnticipos = +(totalAnticipos + monto).toFixed(2);
+      if (ant.pedido.estatus !== 'LIQUIDADO') {
+        totalAnticiposPendientes = +(totalAnticiposPendientes + monto).toFixed(2);
+        if (m === 'EFECTIVO') {
+          efectivoAnticiposPendientes = +(efectivoAnticiposPendientes + monto).toFixed(2);
+        }
+      }
     }
 
     // por_metodo queda como cobro bruto de ventas del día (sin gastos ni créditos mezclados).
@@ -1244,11 +1289,15 @@ export class VentasService {
     const pagosCreditoPorUsuario = Array.from(pagosCreditoPorUsuarioMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
 
     // El efectivo de anticipos de pedido es dinero real que hay que entregar hoy,
-    // aunque no venga de una nota — se suma igual que el efectivo de pagos de crédito.
+    // aunque no venga de una nota — se suma igual que el efectivo de pagos de
+    // crédito. Se usa solo el de pedidos que SIGUEN pendientes: si el pedido ya
+    // se liquidó, ese efectivo ya quedó contado dentro de metodos['EFECTIVO']
+    // (vía la nota resultante) y sumarlo de nuevo aquí duplicaría el efectivo a
+    // entregar.
     const totalEntregarEfectivo = +(
       metodos['EFECTIVO'].total +
       metodoPagosCredito['EFECTIVO'].total +
-      metodoAnticipos['EFECTIVO'].total -
+      efectivoAnticiposPendientes -
       totalGastosEfectivo
     ).toFixed(2);
 
@@ -1287,6 +1336,9 @@ export class VentasService {
           metodo: p.metodo,
           monto: p.metodo === 'EFECTIVO' ? efectivoReal : Number(p.monto),
         })),
+        pedido_origen: n.pedido_origen
+          ? { folio: n.pedido_origen.folio, primer_anticipo: n.pedido_origen.anticipos[0]?.created_at ?? null }
+          : null,
       };
     });
 
@@ -1343,6 +1395,7 @@ export class VentasService {
       })),
       anticipos_pedido: {
         total: totalAnticipos,
+        total_pendiente: totalAnticiposPendientes,
         count: anticiposPedido.length,
         por_metodo: metodoAnticipos,
         detalle: anticiposPedido.map((a) => ({

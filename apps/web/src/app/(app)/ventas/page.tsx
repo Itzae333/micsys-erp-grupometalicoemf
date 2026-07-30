@@ -28,6 +28,7 @@ import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -1414,7 +1415,10 @@ export default function VentasPage() {
                             </p>
                           </td>
                           <td className="px-3 py-2.5">
-                            <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
+                              {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
+                            </div>
                           </td>
                           {/* Métodos de pago — mismo desglose que el corte de caja */}
                           <td className="px-3 py-2.5 overflow-hidden">
@@ -1497,9 +1501,12 @@ export default function VentasPage() {
                         {new Date(detalleNota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
-                    <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
-                      {ESTATUS_CONFIG[detalleNota.estatus]?.label}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
+                        {ESTATUS_CONFIG[detalleNota.estatus]?.label}
+                      </Badge>
+                      {detalleNota.pedido_origen && <PedidoOrigenTag pedidoOrigen={detalleNota.pedido_origen} />}
+                    </div>
                   </div>
                   {detalleNota.cliente && (
                     <p className="text-body-sm text-steel-700 font-medium">

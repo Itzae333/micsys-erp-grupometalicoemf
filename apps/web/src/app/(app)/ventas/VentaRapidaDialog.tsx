@@ -318,6 +318,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       cerrada_at: dto.tipo_cierre === 'PENDIENTE' ? null : new Date().toISOString(),
+      pedido_origen: null,
     };
 
     const pagosList = pagosPendiente.map((p) => ({ metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? '' }));

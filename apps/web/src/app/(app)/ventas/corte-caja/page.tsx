@@ -24,6 +24,7 @@ interface NotaCorte {
   created_at: string;
   cliente: { nombre: string };
   pagos: { metodo: string; monto: number }[];
+  pedido_origen: { folio: number; primer_anticipo: string | null } | null;
 }
 interface GastoCorte {
   id: string; concepto: string; categoria: string; monto: number;
@@ -47,7 +48,7 @@ interface AnticipoDetalle {
   referencia: string | null; fecha: string;
 }
 interface AnticiposPedidoResumen {
-  total: number; count: number;
+  total: number; total_pendiente?: number; count: number;
   por_metodo: Record<string, MetodoResumen>;
   detalle: AnticipoDetalle[];
 }
@@ -106,6 +107,8 @@ const ESTATUS_BADGE: Record<string, string> = {
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtHour = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+const fmtDiaCorto = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
 
 // ── componente ───────────────────────────────────────────────
 
@@ -217,7 +220,28 @@ export default function CorteCajaPage() {
 
   const notaRow = (n: NotaCorte, i: number) => (
     <tr key={n.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
-      <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(n.folio).padStart(4, '0')}</td>
+      <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">
+        #{String(n.folio).padStart(4, '0')}
+        {n.pedido_origen && (
+          <span
+            title={
+              `Viene del pedido #${String(n.pedido_origen.folio).padStart(4, '0')}`
+              + (n.pedido_origen.primer_anticipo
+                ? ` · anticipo desde ${fmtDiaCorto(n.pedido_origen.primer_anticipo)}`
+                : '')
+            }
+            className="ml-1 text-amber-500 cursor-help"
+          >
+            *
+          </span>
+        )}
+        {n.pedido_origen && (
+          <p className="text-[10px] font-normal text-steel-400 normal-case">
+            Pedido #{String(n.pedido_origen.folio).padStart(4, '0')}
+            {n.pedido_origen.primer_anticipo && ` · anticipo ${fmtDiaCorto(n.pedido_origen.primer_anticipo)}`}
+          </p>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-steel-500">{fmtHour(n.created_at)}</td>
       <td className="px-4 py-2.5 text-steel-700 max-w-[160px] truncate">{n.cliente.nombre}</td>
       <td className="px-4 py-2.5">
@@ -616,6 +640,11 @@ export default function CorteCajaPage() {
           <div>
             <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
               Detalle de notas
+              {data.notas.some((n) => n.pedido_origen) && (
+                <span className="ml-2 normal-case text-steel-400 font-normal">
+                  <span className="text-amber-500">*</span> viene de un pedido con anticipo — parte de ese dinero ya se contó en un corte anterior
+                </span>
+              )}
             </h2>
             {agruparPorUsuario ? (
               <div className="space-y-4">
