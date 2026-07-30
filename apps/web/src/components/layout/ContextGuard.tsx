@@ -83,6 +83,17 @@ export function ContextGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const check = () => {
       if (useAuthStore.persist.hasHydrated() && useContextoStore.persist.hasHydrated()) {
+        // `pagehide` bloquea con PIN sin distinguir POR QUÉ se descargó la
+        // página — cerrar la pestaña, recargar (F5) y navegar a otra URL
+        // disparan el mismo evento. El navegador sí sabe distinguirlo del
+        // otro lado: `performance.getEntriesByType('navigation')[0].type`
+        // dice con certeza si ESTA carga fue un recargo. Si lo fue, se
+        // deshace el bloqueo que `pagehide` acaba de poner al salir — un
+        // simple F5 no debe pedir PIN, solo cerrar la pestaña de verdad.
+        const [nav] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+        if (nav?.type === 'reload' && useAuthStore.getState().locked) {
+          useAuthStore.getState().unlock();
+        }
         setHydrated(true);
       }
     };

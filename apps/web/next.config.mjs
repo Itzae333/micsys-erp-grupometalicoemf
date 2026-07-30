@@ -15,7 +15,13 @@ export default withPWA({
   dest: 'public',
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
-  reloadOnOnline: true,
+  // false: antes recargaba la página sola cada vez que el navegador detectaba
+  // que la conexión "volvió" (evento `online`) — un parpadeo de wifi durante
+  // un deploy dispara justo eso, y esa recarga no pasa por el código que
+  // protege contra el diálogo de "¿salir?" ni contra perder lo que se estaba
+  // haciendo. Va exactamente en contra de que la sesión nunca se interrumpa
+  // sola por un problema técnico.
+  reloadOnOnline: false,
   swcMinify: true,
   disable: process.env.NODE_ENV === 'development',
   workboxOptions: {
