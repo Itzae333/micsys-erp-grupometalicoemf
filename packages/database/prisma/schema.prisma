@@ -369,6 +369,13 @@ model NotaVenta {
   cliente_id   String?
 
   estatus   EstatusNota @default(ABIERTA)
+  // Entrega de mercancía (ver CargasNotaService) — independiente del estatus
+  // de pago. Antes registrar una carga sobreescribía `estatus` a
+  // FINALIZADA/INCOMPLETA sin importar si la nota era CREDITO, lo que
+  // rompía poder seguir abonándole (abonar() exige estatus === CREDITO).
+  // Ahora la entrega vive aparte y el estatus de pago nunca se toca al
+  // cargar mercancía. null = nunca se le registró una carga.
+  estatus_entrega EstatusCarga?
   version   Int         @default(1)
   subtotal  Decimal     @db.Decimal(12, 2)
   descuento Decimal     @default(0) @db.Decimal(12, 2)

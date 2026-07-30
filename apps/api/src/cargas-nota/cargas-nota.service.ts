@@ -99,9 +99,12 @@ export class CargasNotaService {
         },
       });
 
+      // Solo se toca `estatus_entrega` — el estatus de pago (PAGADA/CREDITO)
+      // nunca se sobreescribe aquí, o se pierde que la nota siga a crédito y
+      // ya no se le pueda registrar el abono (ver abonar() en ventas.service.ts).
       await tx.notaVenta.update({
         where: { id: nota.id },
-        data: { estatus: todaCompleta ? 'FINALIZADA' : 'INCOMPLETA' },
+        data: { estatus_entrega: todaCompleta ? 'COMPLETA' : 'INCOMPLETA' },
       });
 
       return { completa: todaCompleta };
@@ -141,6 +144,7 @@ export class CargasNotaService {
       nota_id: nota.id,
       folio: nota.folio,
       estatus: nota.estatus,
+      estatus_entrega: nota.estatus_entrega,
       lineas: nota.lineas.map((l) => {
         const cargado = l.carga_lineas.reduce((s, c) => s + Number(c.cantidad_cargada), 0);
         const descripcion = [

@@ -20,6 +20,7 @@ import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
+import { EstatusEntregaTag } from '@/components/ventas/EstatusEntregaTag';
 
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cargada' | 'cancelled' }> = {
   ABIERTA:    { label: 'Abierta',    variant: 'pending' },
@@ -454,12 +455,19 @@ export default function NotaDetallePage() {
         ...buildTicketUbicacionFiscal(ubicacion),
       },
       folio: String(nota.folio).padStart(4, '0'),
-      lineas: detalle.lineas.map((l) => ({
-        clave: l.clave,
-        descripcion: l.descripcion,
-        cargado_ahora: cargadoAhora[l.id] ?? 0,
-        pendiente: l.pendiente,
-      })),
+      // `detalle.lineas[].pendiente` es el pendiente ANTES de esta carga (el
+      // snapshot que se cargó al abrir el diálogo) — hay que restarle lo que
+      // se acaba de entregar ahora mismo, o el ticket imprime el pendiente
+      // viejo completo en vez de lo que de verdad falta después de esta carga.
+      lineas: detalle.lineas.map((l) => {
+        const entregadoAhora = cargadoAhora[l.id] ?? 0;
+        return {
+          clave: l.clave,
+          descripcion: l.descripcion,
+          cargado_ahora: entregadoAhora,
+          pendiente: Math.max(0, +(l.pendiente - entregadoAhora).toFixed(3)),
+        };
+      }),
     };
     try {
       const controller = new AbortController();
@@ -702,6 +710,7 @@ export default function NotaDetallePage() {
               #{String(nota.folio).padStart(4, '0')}{nota.version > 1 && <span className="text-steel-400"> · v{nota.version}</span>}
             </h1>
             <Badge variant={cfg?.variant ?? 'outline'}>{cfg?.label}</Badge>
+            <EstatusEntregaTag estatusEntrega={nota.estatus_entrega} />
             {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
           </div>
         </div>

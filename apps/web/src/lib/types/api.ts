@@ -200,6 +200,8 @@ export interface NotaVenta {
   cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null; limite_credito: number; saldo_pendiente: number; precio_num: number | null } | null;
   usuario: { id: string; nombre: string; apellidos: string } | null;
   estatus: EstatusNota;
+  /** Entrega de mercancía — independiente del estatus de pago (una nota puede seguir CREDITO y ya estar entregada). */
+  estatus_entrega: 'COMPLETA' | 'INCOMPLETA' | null;
   version: number;
   subtotal: number;
   descuento: number;
@@ -308,6 +310,7 @@ export interface CargaNotaPendientes {
   nota_id: string;
   folio: number;
   estatus: EstatusNota;
+  estatus_entrega: 'COMPLETA' | 'INCOMPLETA' | null;
   lineas: {
     id: string;
     articulo_id: string;
