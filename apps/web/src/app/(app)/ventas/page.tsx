@@ -1384,7 +1384,27 @@ export default function VentasPage() {
                   <tbody className="divide-y divide-steel-100">
                     {filtered.map((nota, i) => {
                       const cfg = ESTATUS_CONFIG[nota.estatus];
-                      const pagosVisibles = (nota.pagos ?? []).filter((p) => p.monto > 0);
+                      // El chip de Efectivo muestra lo que quedó en caja, no lo que
+                      // entregó el cliente en mano — se le resta el cambio (el cambio
+                      // siempre sale del efectivo, nunca de tarjeta/transferencia). En
+                      // una nota a crédito (pago parcial) no hay cambio que restar, así
+                      // que se usa lo realmente pagado y no el total completo de la nota.
+                      const pagosCrudos = (nota.pagos ?? []).filter((p) => p.monto > 0);
+                      const sumPagos = pagosCrudos.reduce((s, p) => s + p.monto, 0);
+                      const baseHoy = Math.min(nota.total, sumPagos);
+                      const nonCashTotal = pagosCrudos
+                        .filter((p) => p.metodo !== 'EFECTIVO')
+                        .reduce((s, p) => s + p.monto, 0);
+                      const efectivoNeto = Math.max(0, +(baseHoy - nonCashTotal).toFixed(2));
+                      let efectivoAsignado = false;
+                      const pagosVisibles = pagosCrudos
+                        .map((p) => {
+                          if (p.metodo !== 'EFECTIVO') return p;
+                          const monto = efectivoAsignado ? 0 : efectivoNeto;
+                          efectivoAsignado = true;
+                          return { ...p, monto };
+                        })
+                        .filter((p) => p.monto > 0);
                       return (
                         <tr
                           key={nota.id}
