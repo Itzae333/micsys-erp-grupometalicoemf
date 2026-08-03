@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto } from './dto/ventas.dto';
-import type { Prisma } from '@grupometalicoemf/database';
-import { inicioDiaMx, finDiaMx } from '../common/utils/fecha-mx';
+import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
+import { inicioDiaMx, finDiaMx, restarDiasHabilesMx } from '../common/utils/fecha-mx';
 
 const NOTA_INCLUDE = {
   cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true, precio_num: true } },
@@ -1037,8 +1037,18 @@ export class VentasService {
   async getCorteCaja(
     ubicacionId: string,
     query: { desde?: string; hasta?: string },
+    rol?: RolUsuario,
   ) {
     const { desde, hasta } = query;
+
+    if (rol === 'ENCARGADO' && desde) {
+      const limite = restarDiasHabilesMx(7);
+      if (desde < limite) {
+        throw new BadRequestException(
+          `Como encargado solo puedes generar cortes de hasta 7 días hábiles atrás (desde ${limite}).`,
+        );
+      }
+    }
 
     const where: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,

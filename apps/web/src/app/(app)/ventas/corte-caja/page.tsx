@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
@@ -87,6 +88,20 @@ function hoyMx(): string {
 
 const TODAY = hoyMx();
 
+// Resta `n` días hábiles (lunes a viernes) a hoy (hora de México). Usado para
+// limitar al rol ENCARGADO qué tan atrás puede generar un corte de caja — el
+// backend aplica el mismo límite, esto solo evita el viaje redondo al servidor.
+function restarDiasHabilesMx(n: number): string {
+  const fecha = new Date(`${TODAY}T00:00:00-06:00`);
+  let restantes = n;
+  while (restantes > 0) {
+    fecha.setUTCDate(fecha.getUTCDate() - 1);
+    const diaSemana = fecha.getUTCDay();
+    if (diaSemana !== 0 && diaSemana !== 6) restantes--;
+  }
+  return fecha.toISOString().slice(0, 10);
+}
+
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
@@ -114,6 +129,9 @@ const fmtDiaCorto = (iso: string) =>
 
 export default function CorteCajaPage() {
   const { empresa, ubicacion } = useContextoStore();
+  const { usuario } = useAuthStore();
+
+  const minDesde = usuario?.rol === 'ENCARGADO' ? restarDiasHabilesMx(7) : undefined;
 
   const [desde, setDesde] = useState(TODAY);
   const [hasta, setHasta] = useState(TODAY);
@@ -341,7 +359,21 @@ export default function CorteCajaPage() {
       <div className="bg-white rounded-xl border border-steel-200 p-4 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-steel-500 uppercase tracking-wide">Desde</label>
-          <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="w-40" />
+          <Input
+            type="date"
+            value={desde}
+            min={minDesde}
+            onChange={(e) => {
+              const val = e.target.value;
+              // El navegador solo bloquea las fechas fuera de rango en el calendario
+              // desplegable — si el encargado la teclea a mano, hay que recortarla igual.
+              setDesde(minDesde && val < minDesde ? minDesde : val);
+            }}
+            className="w-40"
+          />
+          {minDesde && (
+            <span className="text-[11px] text-steel-400">Máximo 7 días hábiles atrás</span>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-steel-500 uppercase tracking-wide">Hasta</label>

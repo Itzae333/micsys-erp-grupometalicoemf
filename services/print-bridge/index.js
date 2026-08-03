@@ -481,6 +481,14 @@ function buildEscPosBuffer(ticket) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('ANTICIPOS DE PEDIDOS:'), CMD.BOLD_OFF);
       push(sep('-'));
+      if (ticket.anticipos_pedido.detalle && ticket.anticipos_pedido.detalle.length > 0) {
+        for (const a of ticket.anticipos_pedido.detalle) {
+          const folioStr = 'PEDIDO ' + String(a.pedido_folio).padStart(5, '0');
+          const metodoLbl = norm(METODO_LABELS[a.metodo] ?? a.metodo ?? '');
+          push(dotRow('  ' + folioStr, '$' + formatMoney(Number(a.monto)) + '  ' + metodoLbl));
+        }
+        push(sep('-'));
+      }
       for (const m of METODOS) {
         const res = ticket.anticipos_pedido.por_metodo?.[m] ?? { count: 0, total: 0 };
         if (res.count === 0) continue;

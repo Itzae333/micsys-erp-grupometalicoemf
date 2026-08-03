@@ -129,7 +129,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/reportes',
     label: 'Reportes',
     icon: <BarChart3 className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
+    roles: ['SUPER_USUARIO', 'ADMIN'],
     ocultarParaTipos: ['FABRICA'],
   },
   {

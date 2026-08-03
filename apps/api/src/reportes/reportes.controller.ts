@@ -32,7 +32,7 @@ export class ReportesController {
   }
 
   @Get('ventas')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de ventas por rango de fechas' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -45,7 +45,7 @@ export class ReportesController {
   }
 
   @Get('ventas-proveedor')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Productos vendidos agrupados por proveedor, clientes y detalle de notas' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -58,7 +58,7 @@ export class ReportesController {
   }
 
   @Get('ventas-proveedor/xlsx')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Descarga el reporte de ventas por proveedor en Excel (una hoja por proveedor)' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -79,21 +79,21 @@ export class ReportesController {
   }
 
   @Get('inventario')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de inventario: bajo stock y movimientos del mes' })
   getInventario(@Headers('x-ubicacion-id') ubicacionId: string) {
     return this.reportes.getReporteInventario(ubicacionId);
   }
 
   @Get('credito')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de cartera de crédito y clientes con saldo' })
   getCredito(@Headers('x-ubicacion-id') ubicacionId: string) {
     return this.reportes.getReporteCredito(ubicacionId);
   }
 
   @Get('compras')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de órdenes de compra y cuentas por pagar' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -106,7 +106,7 @@ export class ReportesController {
   }
 
   @Get('produccion')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de órdenes de producción por rango de fechas' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -119,7 +119,7 @@ export class ReportesController {
   }
 
   @Get('asistencia')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Reporte de asistencia de empleados por rango de fechas' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })
@@ -132,7 +132,7 @@ export class ReportesController {
   }
 
   @Get('corte-caja')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Corte de caja por rango de fechas' })
   @ApiQuery({ name: 'desde', required: false })
   @ApiQuery({ name: 'hasta', required: false })

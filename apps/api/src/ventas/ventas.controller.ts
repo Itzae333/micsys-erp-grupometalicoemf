@@ -28,10 +28,11 @@ export class VentasController {
   @ApiQuery({ name: 'hasta', required: false, description: 'YYYY-MM-DD' })
   getCorteCaja(
     @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
   ) {
-    return this.ventas.getCorteCaja(ubicacionId, { desde, hasta });
+    return this.ventas.getCorteCaja(ubicacionId, { desde, hasta }, user.rol);
   }
 
   @Get()

@@ -17,3 +17,17 @@ export function inicioDiaMx(fecha: string): Date {
 export function finDiaMx(fecha: string): Date {
   return fecha.includes('T') ? new Date(fecha) : new Date(`${fecha}T23:59:59.999-06:00`);
 }
+
+// Resta `n` días hábiles (lunes a viernes, sin festivos) a la fecha de hoy en
+// horario de México y regresa el resultado como "YYYY-MM-DD". Usado para
+// limitar cuánto puede retroceder el rol ENCARGADO al generar un corte de caja.
+export function restarDiasHabilesMx(n: number): string {
+  const fecha = inicioDiaMx(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }));
+  let restantes = n;
+  while (restantes > 0) {
+    fecha.setUTCDate(fecha.getUTCDate() - 1);
+    const diaSemana = fecha.getUTCDay(); // 0 = domingo, 6 = sábado
+    if (diaSemana !== 0 && diaSemana !== 6) restantes--;
+  }
+  return fecha.toISOString().slice(0, 10);
+}
