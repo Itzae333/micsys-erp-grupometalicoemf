@@ -853,8 +853,11 @@ export default function VentasPage() {
 
     // Snapshot antes de cualquier operación async (los estados se resetean después)
     const notaSnap = notaActiva;
-    const pagosSnap = [...pagos];
-    const cambioSnap = cambio;
+    // checkCredito === venta 100% a crédito, sin cobro real: el ticket no debe
+    // mostrar ningún "ABONO" fantasma con lo que haya quedado tecleado en el
+    // campo de pago (mismo criterio que usa la llamada a /cerrar más abajo).
+    const pagosSnap = checkCredito ? [] : [...pagos];
+    const cambioSnap = checkCredito ? 0 : cambio;
     const tipoCierre: 'PAGADA' | 'CREDITO' | 'PENDIENTE' = checkNotaPorPagar
       ? 'PENDIENTE'
       : checkCredito || saldoCredito > 0
