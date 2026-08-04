@@ -1632,7 +1632,7 @@ export default function VentasPage() {
                       Ver detalle
                     </Button>
                   )}
-                  {['PAGADA', 'CREDITO'].includes(detalleNota.estatus) && canAdmin && (
+                  {['PAGADA', 'CREDITO', 'PENDIENTE'].includes(detalleNota.estatus) && canAdmin && (
                     <Button variant="secondary" size="sm" onClick={() => setDlgReimprimir(detalleNota)}>
                       🖨 Reimprimir
                     </Button>

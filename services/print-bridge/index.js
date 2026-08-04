@@ -436,9 +436,11 @@ function buildEscPosBuffer(ticket) {
     const desglosarMultipago = !!ticket.desglose_multipago;
     const pushNotaRow = (n, indent) => {
       const folioStr = 'N' + String(n.folio).padStart(5, '0');
-      const esMultipago = n.estatus !== 'CREDITO' && n.pagos && n.pagos.length > 1;
+      const esMultipago = n.estatus !== 'CREDITO' && n.estatus !== 'CANCELADA' && n.pagos && n.pagos.length > 1;
       let mLabel;
-      if (n.estatus === 'CREDITO') {
+      if (n.estatus === 'CANCELADA') {
+        mLabel = 'CANCELADA';
+      } else if (n.estatus === 'CREDITO') {
         mLabel = 'CREDITO';
       } else if (!n.pagos || n.pagos.length === 0) {
         mLabel = '';

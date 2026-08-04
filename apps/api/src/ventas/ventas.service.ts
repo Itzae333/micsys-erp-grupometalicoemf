@@ -1052,9 +1052,11 @@ export class VentasService {
 
     const where: Prisma.NotaVentaWhereInput = {
       ubicacion_id: ubicacionId,
-      // Las canceladas no son venta ni dinero cobrado: se excluyen por completo
-      // del corte (ni lista, ni "por estatus", ni impresión).
-      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'INCOMPLETA', 'FINALIZADA'] as any[] },
+      // Las canceladas sí se listan (folio, hora, cliente) para que el corte no
+      // "salte" folios, pero no son venta ni dinero cobrado: se fuerzan a 0 en
+      // total/cambio/método (ver loop de abajo y notasMapeadas) y no suman a
+      // ningún total del corte.
+      estatus: { in: ['PAGADA', 'CREDITO', 'REABIERTA', 'INCOMPLETA', 'FINALIZADA', 'CANCELADA'] as any[] },
     };
     if (desde || hasta) {
       where.created_at = {
@@ -1180,6 +1182,11 @@ export class VentasService {
       const est = nota.estatus as string;
       if (!porEstatus[est]) porEstatus[est] = { count: 0, total: 0 };
       porEstatus[est].count++;
+
+      // Canceladas: solo se cuenta el folio/estatus para que no "salte" en el
+      // corte — no aportan monto a por_estatus, total_ventas ni por_metodo.
+      if (est === 'CANCELADA') continue;
+
       porEstatus[est].total = +(porEstatus[est].total + Number(nota.total)).toFixed(2);
 
       const notaTotal = Number(nota.total);
@@ -1351,6 +1358,27 @@ export class VentasService {
     ).toFixed(2);
 
     const notasMapeadas = notas.map((n) => {
+      // Canceladas: se listan solo por folio/hora/cliente para no "saltar" el
+      // folio en el corte — total, cambio y método se fuerzan a 0/"CANCELADA"
+      // sin importar los pagos que la nota tuviera antes de cancelarse.
+      if (n.estatus === 'CANCELADA') {
+        return {
+          id: n.id,
+          folio: n.folio,
+          estatus: n.estatus,
+          total: 0,
+          cambio: 0,
+          created_at: n.created_at,
+          cliente: n.cliente
+            ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
+            : { nombre: 'MOSTRADOR' },
+          pagos: [{ metodo: 'CANCELADA', monto: 0 }],
+          pedido_origen: n.pedido_origen
+            ? { folio: n.pedido_origen.folio, primer_anticipo: n.pedido_origen.anticipos[0]?.created_at ?? null }
+            : null,
+        };
+      }
+
       const notaTotal = Number(n.total);
       // Igual que arriba: los pagos que solo replican un anticipo de pedido ya se
       // reportaron en el corte del día del anticipo — no se listan hoy de nuevo.

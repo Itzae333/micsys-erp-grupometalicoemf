@@ -105,6 +105,7 @@ function restarDiasHabilesMx(n: number): string {
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  CANCELADA: 'Cancelada',
 };
 const METODO_ICON: Record<string, React.ReactNode> = {
   EFECTIVO:      <Banknote  className="h-4 w-4 text-green-600" />,
@@ -269,12 +270,12 @@ export default function CorteCajaPage() {
       </td>
       <td className="px-4 py-2.5">
         <div className="flex gap-1 flex-wrap">
-          {n.pagos.filter((p) => p.monto > 0).map((p, j) => (
+          {n.pagos.filter((p) => p.monto > 0 || p.metodo === 'CANCELADA').map((p, j) => (
             <span key={j} className="text-xs bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded">
-              {METODO_LABEL[p.metodo] ?? p.metodo} {fmt(p.monto)}
+              {METODO_LABEL[p.metodo] ?? p.metodo}{p.monto > 0 ? ` ${fmt(p.monto)}` : ''}
             </span>
           ))}
-          {n.pagos.filter((p) => p.monto > 0).length === 0 && (
+          {n.pagos.filter((p) => p.monto > 0 || p.metodo === 'CANCELADA').length === 0 && (
             <span className="text-xs text-steel-400">—</span>
           )}
         </div>
