@@ -1282,6 +1282,45 @@ export class VentasService {
       totalPagosCredito = +(totalPagosCredito + monto).toFixed(2);
     }
 
+    // A petición del negocio: si una nota queda a CREDITO el mismo día de la
+    // venta y ese mismo día se le hicieron abonos (varios depósitos, etc.),
+    // esos pagos también se muestran en el apartado "Pagos de crédito" del
+    // corte — aunque la nota no venga de un día anterior. Esto es solo para
+    // el desglose de ESTE apartado (metodoPagosCreditoDisplay/detalle de
+    // abajo): no se suma a `metodoPagosCredito`/`totalPagosCredito`, que se
+    // siguen usando sin cambios para total_entregar_efectivo, porque ese
+    // dinero ya quedó contado en `metodos` vía el loop principal de notas.
+    const detalleCreditoMismoDia: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
+    for (const nota of notas) {
+      if (nota.estatus !== 'CREDITO') continue;
+      for (const pago of nota.pagos) {
+        if (pago.origen_anticipo_pedido) continue;
+        detalleCreditoMismoDia.push({
+          folio: nota.folio,
+          metodo: pago.metodo as string,
+          monto: Number(pago.monto),
+          fecha: pago.created_at,
+        });
+      }
+    }
+
+    const metodoPagosCreditoDisplay: Record<string, { count: number; total: number }> = {};
+    for (const m of Object.keys(metodoPagosCredito)) {
+      metodoPagosCreditoDisplay[m] = { ...metodoPagosCredito[m] };
+    }
+    let totalPagosCreditoDisplay = totalPagosCredito;
+    for (const item of detalleCreditoMismoDia) {
+      if (!metodoPagosCreditoDisplay[item.metodo]) metodoPagosCreditoDisplay[item.metodo] = { count: 0, total: 0 };
+      metodoPagosCreditoDisplay[item.metodo].count++;
+      metodoPagosCreditoDisplay[item.metodo].total = +(metodoPagosCreditoDisplay[item.metodo].total + item.monto).toFixed(2);
+      totalPagosCreditoDisplay = +(totalPagosCreditoDisplay + item.monto).toFixed(2);
+    }
+
+    const detalleCreditoCombinado = [
+      ...pagosCredito.map((p) => ({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at })),
+      ...detalleCreditoMismoDia,
+    ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+
     // Agrupado por usuario (vendedor) de los pagos de crédito — igual que
     // por_usuario en notas, solo lo usa Metálicos Lyeva; el resto lo ignora.
     const pagosCreditoPorUsuarioMap = new Map<string, { usuario_id: string; nombre: string; total: number; detalle: { folio: number; monto: number; fecha: Date }[] }>();
@@ -1383,15 +1422,10 @@ export class VentasService {
       por_metodo: metodos,
       por_estatus: porEstatus,
       pagos_credito: {
-        total: totalPagosCredito,
-        count: pagosCredito.length,
-        por_metodo: metodoPagosCredito,
-        detalle: pagosCredito.map((p) => ({
-          folio: p.nota.folio,
-          metodo: p.metodo,
-          monto: Number(p.monto),
-          fecha: p.created_at,
-        })),
+        total: totalPagosCreditoDisplay,
+        count: detalleCreditoCombinado.length,
+        por_metodo: metodoPagosCreditoDisplay,
+        detalle: detalleCreditoCombinado,
         por_usuario: pagosCreditoPorUsuario,
       },
       gastos: gastos.map((g) => ({

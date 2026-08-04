@@ -299,7 +299,7 @@ export default function ClientesVentasPage() {
         size="md"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Nombre <span className="text-brand-600">*</span></label>
               <Input placeholder="Juan Carlos" error={errors.nombre?.message} {...register('nombre')} />

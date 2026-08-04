@@ -9,7 +9,7 @@ const CONFIG: Record<'PENDIENTE' | 'COMPLETA' | 'INCOMPLETA', { label: string; v
 // Mismo criterio que ESTATUS_CON_CARGA_PERMITIDA en cargas-nota.service.ts —
 // solo en estos estatus de pago tiene sentido hablar de entrega. Una nota
 // ABIERTA (carrito sin cerrar) o CANCELADA nunca puede tener una carga.
-const ESTATUS_CON_ENTREGA_APLICABLE = ['PAGADA', 'CREDITO'];
+export const ESTATUS_CON_ENTREGA_APLICABLE = ['PAGADA', 'CREDITO'];
 
 /**
  * Estatus de entrega de mercancía — independiente del estatus de pago (una

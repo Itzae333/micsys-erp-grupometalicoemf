@@ -29,7 +29,7 @@ import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
-import { EstatusEntregaTag } from '@/components/ventas/EstatusEntregaTag';
+import { EstatusEntregaTag, ESTATUS_CON_ENTREGA_APLICABLE } from '@/components/ventas/EstatusEntregaTag';
 
 // ── Estatus ──────────────────────────────────────────────────
 const ESTATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'paid' | 'credit' | 'pending' | 'incomplete' | 'cancelled' | 'nota_por_pagar' | 'cargada' }> = {
@@ -166,6 +166,7 @@ export default function VentasPage() {
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAdmin = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const isVendedor = usuario?.rol === 'VENDEDOR';
 
   // Dialog reimprimir / reenviar
   const [dlgReimprimir, setDlgReimprimir] = useState<NotaVenta | null>(null);
@@ -1360,7 +1361,7 @@ export default function VentasPage() {
             )}
 
             {/* Tabla */}
-            <div className="flex-1 overflow-y-auto bg-white">
+            <div className="flex-1 overflow-auto bg-white">
               {loading ? (
                 <div className="p-4 space-y-2">
                   {[...Array(8)].map((_, i) => (
@@ -1377,15 +1378,14 @@ export default function VentasPage() {
                   />
                 </div>
               ) : (
-                <table className="w-full table-fixed text-body-sm">
+                <table className="w-full min-w-[480px] text-body-sm">
                   <thead className="sticky top-0 bg-steel-50 border-b border-steel-200 z-10">
                     <tr>
-                      <th className="w-[9%] px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
-                      <th className="w-[29%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
-                      <th className="w-[11%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
-                      <th className="w-[12%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Entrega</th>
-                      <th className="w-[19%] px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
-                      <th className="w-[20%] px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
+                      <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-steel-100">
@@ -1418,8 +1418,12 @@ export default function VentasPage() {
                           ref={(el) => { rowRefs.current[i] = el; }}
                           onClick={() => void seleccionarNotaIdx(i)}
                           onDoubleClick={() => {
-                            if (nota.estatus === 'ABIERTA') void openEditarNota(nota);
-                            else router.push(`/ventas/${nota.id}`);
+                            if (nota.estatus === 'ABIERTA') { void openEditarNota(nota); return; }
+                            const entregaPendiente = nota.estatus_entrega !== 'COMPLETA';
+                            const irARegistrarCarga = isVendedor
+                              && ESTATUS_CON_ENTREGA_APLICABLE.includes(nota.estatus)
+                              && entregaPendiente;
+                            router.push(irARegistrarCarga ? `/ventas/${nota.id}?carga=1` : `/ventas/${nota.id}`);
                           }}
                           className={cn(
                             'cursor-pointer transition-colors',
@@ -1445,13 +1449,11 @@ export default function VentasPage() {
                             <div className="flex flex-col gap-1 items-start">
                               <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                               {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
+                              <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                             </div>
                           </td>
-                          <td className="px-3 py-2.5">
-                            <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
-                          </td>
                           {/* Métodos de pago — mismo desglose que el corte de caja */}
-                          <td className="px-3 py-2.5 overflow-hidden">
+                          <td className="hidden md:table-cell px-3 py-2.5 overflow-hidden">
                             <div className="flex gap-1 flex-wrap">
                               {pagosVisibles.length > 0 ? (
                                 pagosVisibles.map((p, j) => (

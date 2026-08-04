@@ -24,9 +24,14 @@
   .tabular-nums { font-variant-numeric: tabular-nums; }
 }
 
-/* ── Responsividad global de tablas ───────────────────────────────── */
+/* ── Responsividad global de tablas (FALLBACK LEGADO) ────────────── */
 /* Cualquier contenedor overflow-hidden que tenga una tabla directa
-   se vuelve horizontalmente scrollable en móvil */
+   se vuelve horizontalmente scrollable en móvil.
+   No depender de esto en páginas nuevas o recién tocadas: agrega
+   overflow-x-auto (u overflow-auto) explícito en el propio contenedor
+   de la tabla, o usa el DataTable compartido (components/ui/data-table.tsx).
+   Quitar este bloque cuando ninguna página dependa ya de esta coincidencia
+   de clases (grep de "overflow-hidden" junto a "<table"). */
 @media (max-width: 767px) {
   .overflow-hidden:has(> table) {
     overflow-x: auto;

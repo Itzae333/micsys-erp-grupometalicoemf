@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle, Download, Unlock } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
@@ -56,6 +56,8 @@ function fmtFecha(iso: string) {
 export default function NotaDetallePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const autoAbrioCargaRef = useRef(false);
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 
@@ -154,6 +156,7 @@ export default function NotaDetallePage() {
   }
 
   useEffect(() => {
+    autoAbrioCargaRef.current = false;
     load();
     loadSolicitudes();
     if (empresa?.id && ubicacion?.id) {
@@ -162,6 +165,19 @@ export default function NotaDetallePage() {
         .catch(() => {});
     }
   }, [id, empresa?.id, ubicacion?.id]);
+
+  // Atajo de doble-click en la lista (VENDEDOR): llegar con ?carga=1 abre
+  // el diálogo de "Registrar carga" directo, sin que el usuario tenga que
+  // buscar el botón — misma condición que protege ese botón (puedeCargar).
+  useEffect(() => {
+    if (!nota || autoAbrioCargaRef.current) return;
+    if (searchParams.get('carga') !== '1') return;
+    autoAbrioCargaRef.current = true;
+    if (canCarga && ['PAGADA', 'CREDITO', 'INCOMPLETA'].includes(nota.estatus)) {
+      void openCarga();
+    }
+    router.replace(`/ventas/${id}`);
+  }, [nota, searchParams, canCarga, id, router]);
 
   // Sync drafts de edición inline cuando cambian las líneas de la nota
   useEffect(() => {
@@ -1231,7 +1247,7 @@ export default function NotaDetallePage() {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Cantidad</label>
               <Input

@@ -6,6 +6,8 @@ export interface DataTableColumn<T> {
   header: React.ReactNode;
   align?: 'left' | 'right' | 'center';
   className?: string;
+  /** Oculta esta columna (th y td) por debajo del breakpoint indicado. */
+  hideBelow?: 'sm' | 'md' | 'lg';
   render: (row: T, index: number) => React.ReactNode;
 }
 
@@ -25,6 +27,12 @@ const ALIGN_CLASS: Record<'left' | 'right' | 'center', string> = {
   left: 'text-left',
   right: 'text-right',
   center: 'text-center',
+};
+
+const HIDE_BELOW_CLASS: Record<'sm' | 'md' | 'lg', string> = {
+  sm: 'hidden sm:table-cell',
+  md: 'hidden md:table-cell',
+  lg: 'hidden lg:table-cell',
 };
 
 export function DataTable<T>({
@@ -48,6 +56,7 @@ export function DataTable<T>({
               className={cn(
                 'px-3 py-2.5 font-medium text-steel-600',
                 ALIGN_CLASS[col.align ?? 'left'],
+                col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow],
                 col.className,
               )}
             >
@@ -73,7 +82,12 @@ export function DataTable<T>({
             {columns.map((col) => (
               <td
                 key={col.key}
-                className={cn('px-3 py-2.5', ALIGN_CLASS[col.align ?? 'left'], col.className)}
+                className={cn(
+                  'px-3 py-2.5',
+                  ALIGN_CLASS[col.align ?? 'left'],
+                  col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow],
+                  col.className,
+                )}
               >
                 {col.render(row, idx)}
               </td>
