@@ -32,9 +32,9 @@ export class UpdateLineaDto {
 }
 
 export class PagoDto {
-  @ApiProperty({ enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] })
-  @IsEnum(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'])
-  metodo: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO';
+  @ApiProperty({ enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO', 'ADMINISTRATIVO'] })
+  @IsEnum(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO', 'ADMINISTRATIVO'])
+  metodo: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO' | 'ADMINISTRATIVO';
 
   @ApiProperty() @Type(() => Number) @IsNumber() @Min(0.01) monto: number;
   @ApiPropertyOptional() @IsOptional() @IsString() referencia?: string;

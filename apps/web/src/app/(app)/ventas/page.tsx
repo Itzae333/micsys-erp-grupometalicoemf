@@ -60,10 +60,11 @@ const LineaSchema = z.object({
 });
 type LineaForm = z.infer<typeof LineaSchema>;
 
-const METODOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
+const METODOS_BASE = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
 };
 
 export default function VentasPage() {
@@ -141,6 +142,7 @@ export default function VentasPage() {
   const [checkCredito, setCheckCredito] = useState(false);
   const [checkNotaPorPagar, setCheckNotaPorPagar] = useState(false);
   const [checkSinPrecio, setCheckSinPrecio] = useState(false);
+  const [movingCredito, setMovingCredito] = useState<string | null>(null);
 
   // Email / PDF
   const [dlgEmail, setDlgEmail] = useState<'ticket' | null>(null);
@@ -167,6 +169,12 @@ export default function VentasPage() {
   const canWrite = ['ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canAdmin = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const isVendedor = usuario?.rol === 'VENDEDOR';
+
+  // EMFIMIFAR pidió un método de pago extra para dinero entregado directo a
+  // un administrativo (o cobrado antes de cerrar la nota) — no aplica a las demás empresas.
+  const METODOS = empresa?.id === EMPRESA_EMFIMIFAR_ID
+    ? [...METODOS_BASE, 'ADMINISTRATIVO'] as const
+    : METODOS_BASE;
 
   // Dialog reimprimir / reenviar
   const [dlgReimprimir, setDlgReimprimir] = useState<NotaVenta | null>(null);
@@ -644,6 +652,31 @@ export default function VentasPage() {
       setDescartarError(err instanceof Error ? err.message : 'Error al descartar');
     } finally {
       setDescartando(false);
+    }
+  }
+
+  // ── Mover nota PENDIENTE a crédito manualmente ──────────────
+  // Corrección puntual: notas que quedaron "Pendiente de pago" y el negocio
+  // decide después cargarlas a la cuenta del cliente. El backend fecha el
+  // cargo con el created_at original de la nota, no con hoy.
+  async function moverACredito(nota: NotaVenta) {
+    if (movingCredito) return;
+    if (!nota.cliente_id) {
+      toast('Esta nota no tiene cliente asignado — asígnalo antes de moverla a crédito', 'error');
+      return;
+    }
+    if (!window.confirm(`¿Mover la nota #${String(nota.folio).padStart(4, '0')} a crédito? El saldo se cargará a la cuenta del cliente.`)) {
+      return;
+    }
+    setMovingCredito(nota.id);
+    try {
+      const actualizada = await api.patch<NotaVenta>(`/ventas/${nota.id}/mover-a-credito`, {});
+      patchNota(actualizada);
+      toast('Nota movida a crédito', 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error al mover a crédito', 'error');
+    } finally {
+      setMovingCredito(null);
     }
   }
 
@@ -1616,6 +1649,16 @@ export default function VentasPage() {
                       Cobrar
                     </Button>
                   )}
+                  {detalleNota.estatus === 'PENDIENTE' && canAdmin && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={movingCredito === detalleNota.id}
+                      onClick={() => void moverACredito(detalleNota)}
+                    >
+                      {movingCredito === detalleNota.id ? 'Moviendo…' : 'Mover a crédito'}
+                    </Button>
+                  )}
                   {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canWrite && (
                     <Button variant="ghost" size="sm" onClick={() => openCancelarNota(detalleNota)}>
                       <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
@@ -1811,7 +1854,9 @@ export default function VentasPage() {
             </div>
 
             {/* Checkboxes de modo */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* EMFIMIFAR dejó de usar "Nota por pagar" — ahora esos casos se manejan
+                directo con crédito, así que el checkbox no aplica para esa empresa. */}
+            <div className={cn('grid gap-3', empresa?.id === EMPRESA_EMFIMIFAR_ID ? 'grid-cols-1' : 'grid-cols-2')}>
               <label className={cn(
                 'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
                 checkCredito
@@ -1832,26 +1877,28 @@ export default function VentasPage() {
                   <p className="text-meta text-steel-500">Toda la venta se carga a la cuenta del cliente</p>
                 </div>
               </label>
-              <label className={cn(
-                'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
-                checkNotaPorPagar
-                  ? 'border-steel-600 bg-steel-50'
-                  : 'border-steel-200 hover:border-steel-300 bg-white',
-              )}>
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 accent-steel-700"
-                  checked={checkNotaPorPagar}
-                  onChange={(e) => {
-                    setCheckNotaPorPagar(e.target.checked);
-                    if (e.target.checked) setCheckCredito(false);
-                  }}
-                />
-                <div>
-                  <p className="text-body-sm font-semibold text-steel-900">Nota por pagar</p>
-                  <p className="text-meta text-steel-500">Se cobra al entregar; si no paga entra a crédito</p>
-                </div>
-              </label>
+              {empresa?.id !== EMPRESA_EMFIMIFAR_ID && (
+                <label className={cn(
+                  'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
+                  checkNotaPorPagar
+                    ? 'border-steel-600 bg-steel-50'
+                    : 'border-steel-200 hover:border-steel-300 bg-white',
+                )}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-steel-700"
+                    checked={checkNotaPorPagar}
+                    onChange={(e) => {
+                      setCheckNotaPorPagar(e.target.checked);
+                      if (e.target.checked) setCheckCredito(false);
+                    }}
+                  />
+                  <div>
+                    <p className="text-body-sm font-semibold text-steel-900">Nota por pagar</p>
+                    <p className="text-meta text-steel-500">Se cobra al entregar; si no paga entra a crédito</p>
+                  </div>
+                </label>
+              )}
             </div>
 
             {empresa?.id === EMPRESA_LAMINAS_MONTERREY_ID && (
@@ -1905,7 +1952,7 @@ export default function VentasPage() {
                       <div className="flex-1">
                         {i === 0 && <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Ref.</label>}
                         <Input
-                          placeholder="Últimos 4 / folio…"
+                          placeholder={pago.metodo === 'ADMINISTRATIVO' ? '¿Quién lo recibió?' : 'Últimos 4 / folio…'}
                           value={pago.referencia}
                           onChange={(e) => {
                             const next = [...pagos];
@@ -2218,7 +2265,7 @@ export default function VentasPage() {
                       <div className="flex-1">
                         {i === 0 && <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Ref.</label>}
                         <Input
-                          placeholder="Últimos 4 / folio…"
+                          placeholder={pago.metodo === 'ADMINISTRATIVO' ? '¿Quién lo recibió?' : 'Últimos 4 / folio…'}
                           value={pago.referencia}
                           onChange={(e) => {
                             const next = [...pagosAbono];

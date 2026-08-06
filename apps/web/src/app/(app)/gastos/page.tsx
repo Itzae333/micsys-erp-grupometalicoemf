@@ -12,6 +12,7 @@ const CATEGORIAS = ['Limpieza', 'Servicios', 'Papelería', 'Mantenimiento', 'Ent
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
 };
 const METODOS: MetodoPago[] = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'];
 

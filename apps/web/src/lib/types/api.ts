@@ -147,7 +147,7 @@ export interface Cliente {
 }
 
 export type EstatusNota = 'ABIERTA' | 'PENDIENTE' | 'PAGADA' | 'CREDITO' | 'CANCELADA' | 'REABIERTA' | 'INCOMPLETA' | 'FINALIZADA';
-export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO';
+export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO' | 'ADMINISTRATIVO';
 
 export interface NotaVentaLinea {
   id: string;

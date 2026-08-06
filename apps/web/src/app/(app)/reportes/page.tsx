@@ -64,6 +64,7 @@ const AS_CFG: Record<string, { label: string; variant: 'paid' | 'credit' | 'pend
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
 };
 
 const MOV_LABEL: Record<string, string> = {

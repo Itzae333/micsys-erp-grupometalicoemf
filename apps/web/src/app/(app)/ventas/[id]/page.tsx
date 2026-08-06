@@ -42,6 +42,7 @@ const SOLICITUD_ESTATUS_CONFIG: Record<string, { label: string; variant: 'pendin
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
 };
 const METODOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODOS_CON_EVIDENCIA = ['TARJETA', 'TRANSFERENCIA', 'DEPOSITO'];

@@ -53,6 +53,11 @@ interface AnticiposPedidoResumen {
   por_metodo: Record<string, MetodoResumen>;
   detalle: AnticipoDetalle[];
 }
+interface PagoAdministrativoDetalle { folio: number; monto: number; referencia: string | null; fecha: string; }
+interface PagosAdministrativosResumen {
+  total: number; count: number;
+  detalle: PagoAdministrativoDetalle[];
+}
 interface PorUsuarioResumen {
   usuario_id: string;
   nombre: string;
@@ -71,6 +76,7 @@ interface CorteCajaData {
   por_metodo: Record<string, MetodoResumen>;
   por_estatus: Record<string, EstatusResumen>;
   pagos_credito: PagosCreditoResumen;
+  pagos_administrativos?: PagosAdministrativosResumen;
   anticipos_pedido?: AnticiposPedidoResumen;
   notas: NotaCorte[];
   gastos: GastoCorte[];
@@ -105,6 +111,7 @@ function restarDiasHabilesMx(n: number): string {
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
   CANCELADA: 'Cancelada',
 };
 const METODO_ICON: Record<string, React.ReactNode> = {
@@ -225,6 +232,7 @@ export default function CorteCajaPage() {
             por_usuario: agruparPorUsuario ? data.pagos_credito?.por_usuario : undefined,
           },
           anticipos_pedido: data.anticipos_pedido ?? { total: 0, count: 0, por_metodo: {}, detalle: [] },
+          pagos_administrativos: data.pagos_administrativos ?? { total: 0, count: 0, detalle: [] },
           notas: data.notas,
           gastos: data.gastos,
           por_usuario: agruparPorUsuario ? data.por_usuario : undefined,
@@ -412,6 +420,7 @@ export default function CorteCajaPage() {
 
       {data && (() => {
         const pagosCredito = data.pagos_credito ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
+        const pagosAdministrativos = data.pagos_administrativos ?? { total: 0, count: 0, detalle: [] };
         const anticipos = data.anticipos_pedido ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
         const totalVentas = data.total_ventas ?? data.total_cobrado;
         const totalEntregarEfectivo = data.total_entregar_efectivo ?? (data.por_metodo?.['EFECTIVO']?.total ?? 0);
@@ -623,6 +632,44 @@ export default function CorteCajaPage() {
                     <tr className="bg-steel-900">
                       <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL ANTICIPOS</td>
                       <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(anticipos.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagos administrativos (EMFIMIFAR): dinero entregado directo a un
+              administrativo o cobrado antes — no cuenta como efectivo a entregar. */}
+          {pagosAdministrativos.count > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
+                Pagos administrativos <span className="normal-case text-steel-400">(no se cuentan como efectivo a entregar)</span>
+              </h2>
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-50 border-b border-steel-200">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Lo recibió</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Fecha</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagosAdministrativos.detalle.map((p, i) => (
+                      <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
+                        <td className="px-4 py-2.5 text-steel-700">{p.referencia || '—'}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{fmtDiaCorto(p.fecha)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(p.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-steel-900">
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL ADMINISTRATIVO</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(pagosAdministrativos.total)}</td>
                     </tr>
                   </tfoot>
                 </table>

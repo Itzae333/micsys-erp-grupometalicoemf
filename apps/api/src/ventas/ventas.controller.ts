@@ -140,6 +140,17 @@ export class VentasController {
     return this.ventas.marcarPendiente(id, ubicacionId);
   }
 
+  @Patch(':id/mover-a-credito')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Mover una nota PENDIENTE a CRÉDITO manualmente, cargando el saldo a la cuenta del cliente con la fecha original de la nota' })
+  moverACredito(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.ventas.moverACredito(id, ubicacionId, user.sub);
+  }
+
   @Patch(':id/cancelar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Cancelar nota de venta (solo si no está pagada, requiere motivo)' })

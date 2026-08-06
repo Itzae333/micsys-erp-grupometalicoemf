@@ -14,13 +14,15 @@ import { getClientesCache } from '@/lib/db/clientes-cache';
 import { searchArticulosCache, refreshArticulosCacheIfStale } from '@/lib/db/articulos-cache';
 import { enqueue } from '@/lib/db/sync-queue';
 import { addVentaPendiente, nextFolioLocal, type LineaVentaPendiente, type PagoVentaPendiente } from '@/lib/db/ventas-pendientes';
-import type { Cliente, Articulo, NotaVenta } from '@/lib/types/api';
+import type { Cliente, Articulo, NotaVenta, MetodoPago } from '@/lib/types/api';
+import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { formatPrecio } from '@/lib/utils';
 
-const METODOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
+const METODOS_BASE = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
+  ADMINISTRATIVO: 'Administrativo',
 };
 
 interface LineaCarrito {
@@ -34,7 +36,7 @@ interface LineaCarrito {
 }
 
 interface PagoRow {
-  metodo: typeof METODOS[number];
+  metodo: MetodoPago;
   monto: number;
   referencia: string;
 }
@@ -95,6 +97,11 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const esEmfimifar = empresa?.id === EMPRESA_EMFIMIFAR_ID;
+  // EMFIMIFAR pidió un método de pago extra para dinero entregado directo a
+  // un administrativo (o cobrado antes de cerrar la nota).
+  const METODOS = esEmfimifar ? [...METODOS_BASE, 'ADMINISTRATIVO'] as const : METODOS_BASE;
 
   useEffect(() => {
     if (!open || !empresa?.id || !ubicacion?.id) return;
@@ -418,7 +425,8 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         <div>
           <label className="text-body-sm font-medium text-steel-700 mb-1 block">Tipo de venta</label>
           <div className="flex gap-2">
-            {(['PAGADA', 'CREDITO', 'PENDIENTE'] as const).map((t) => (
+            {/* EMFIMIFAR dejó de usar "Pendiente" — esos casos ahora se manejan con crédito. */}
+            {(esEmfimifar ? (['PAGADA', 'CREDITO'] as const) : (['PAGADA', 'CREDITO', 'PENDIENTE'] as const)).map((t) => (
               <Button
                 key={t}
                 type="button"
@@ -460,6 +468,18 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
                     setPagos(next);
                   }}
                 />
+                {pago.metodo !== 'EFECTIVO' && (
+                  <Input
+                    className="flex-1"
+                    placeholder={pago.metodo === 'ADMINISTRATIVO' ? '¿Quién lo recibió?' : 'Últimos 4 / folio…'}
+                    value={pago.referencia}
+                    onChange={(e) => {
+                      const next = [...pagos];
+                      next[i] = { ...next[i], referencia: e.target.value };
+                      setPagos(next);
+                    }}
+                  />
+                )}
                 {pagos.length > 1 && (
                   <button
                     type="button"

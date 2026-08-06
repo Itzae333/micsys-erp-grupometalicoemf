@@ -359,6 +359,9 @@ enum MetodoPago {
   TARJETA
   TRANSFERENCIA
   DEPOSITO
+  // EMFIMIFAR: dinero entregado directo a un administrativo, o cobrado antes
+  // de cerrar la nota — no pasa por ninguna otra forma de pago del listado.
+  ADMINISTRATIVO
 }
 
 model NotaVenta {

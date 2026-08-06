@@ -259,6 +259,7 @@ export class VentasService {
     if (nota.lineas.length === 0) {
       throw new BadRequestException('La nota no tiene líneas');
     }
+    this.validarPagosAdministrativos(dto.pagos);
 
     const esReedicion = nota.estatus === 'REABIERTA';
 
@@ -481,6 +482,17 @@ export class VentasService {
     });
   }
 
+  // ADMINISTRATIVO (EMFIMIFAR): el dinero no pasa por caja — se entrega directo
+  // a un administrativo o ya se había cobrado antes — así que se exige dejar
+  // constancia de quién lo recibió en vez de dejarlo como un pago anónimo.
+  private validarPagosAdministrativos(pagos: { metodo: string; referencia?: string | null }[]): void {
+    for (const p of pagos) {
+      if (p.metodo === 'ADMINISTRATIVO' && !p.referencia?.trim()) {
+        throw new BadRequestException('Especifica quién recibió el pago administrativo');
+      }
+    }
+  }
+
   // Aplica el cargo a la cuenta del cliente cuando una nota queda (parcialmente)
   // a crédito. Compartido por `cerrar()` y `ventaRapida()`.
   private async aplicarCargoCredito(
@@ -493,17 +505,19 @@ export class VentasService {
       folio: number;
       usuarioId: string;
       totalPagado: number;
+      concepto?: string;
+      fecha?: Date;
     },
   ): Promise<void> {
-    const { ubicacionId, clienteId, monto, notaId, folio, usuarioId, totalPagado } = params;
+    const { ubicacionId, clienteId, monto, notaId, folio, usuarioId, totalPagado, fecha } = params;
 
     const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: clienteId } });
     const saldoAntes = Number(cliente.saldo_pendiente);
     const saldoDespues = saldoAntes + monto;
 
-    const concepto = totalPagado > 0
+    const concepto = params.concepto ?? (totalPagado > 0
       ? `Saldo pendiente nota #${folio} (anticipo $${totalPagado.toFixed(2)})`
-      : `Venta a crédito nota #${folio}`;
+      : `Venta a crédito nota #${folio}`);
 
     await tx.movimientoCuenta.create({
       data: {
@@ -516,6 +530,7 @@ export class VentasService {
         concepto,
         nota_id: notaId,
         usuario_id: usuarioId,
+        ...(fecha ? { created_at: fecha } : {}),
       },
     });
 
@@ -523,6 +538,51 @@ export class VentasService {
       where: { id: clienteId },
       data: { saldo_pendiente: saldoDespues },
     });
+  }
+
+  // ─── Mover nota PENDIENTE a CRÉDITO manualmente ───────────────
+  // Para notas que quedaron "Pendiente de pago" y el negocio decide, después
+  // del hecho, cargarlas a la cuenta del cliente en vez de cobrarlas en
+  // efectivo/tarjeta. El cargo se fecha el día original de la nota (no hoy)
+  // para que el estado de cuenta del cliente y los reportes por fecha queden
+  // correctos — ver conversación: había notas de días anteriores pendientes.
+  async moverACredito(notaId: string, ubicacionId: string, usuarioId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
+
+    if (nota.estatus !== 'PENDIENTE') {
+      throw new BadRequestException('Solo se pueden mover a crédito notas en estatus PENDIENTE');
+    }
+    if (!nota.cliente_id) {
+      throw new BadRequestException('La nota no tiene cliente asignado — asígnalo antes de moverla a crédito');
+    }
+
+    const total = Number(nota.total);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.aplicarCargoCredito(tx, {
+        ubicacionId,
+        clienteId: nota.cliente_id!,
+        monto: total,
+        notaId,
+        folio: nota.folio,
+        usuarioId,
+        totalPagado: 0,
+        concepto: `Venta a crédito nota #${nota.folio} (movida de pendiente el ${new Date().toLocaleDateString('es-MX')})`,
+        fecha: nota.created_at,
+      });
+
+      return tx.notaVenta.update({
+        where: { id: notaId },
+        data: {
+          estatus: 'CREDITO',
+          es_credito: true,
+          cerrada_at: nota.created_at,
+        },
+        include: NOTA_INCLUDE,
+      });
+    });
+
+    return this.serializeNota(result);
   }
 
   // Folio con lock de fila — evita que dos ventas concurrentes (p. ej. varias
@@ -591,6 +651,7 @@ export class VentasService {
     if (dto.tipo_cierre === 'CREDITO' && !dto.cliente_id) {
       throw new BadRequestException('Se requiere cliente para una venta a crédito');
     }
+    this.validarPagosAdministrativos(dto.pagos);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const folio = await this.nextFolioLocked(tx, ubicacionId);
@@ -753,6 +814,7 @@ export class VentasService {
     if (montoAbono <= 0) {
       throw new BadRequestException('El monto del abono debe ser mayor a cero');
     }
+    this.validarPagosAdministrativos(dto.pagos);
 
     const result = await this.prisma.$transaction(async (tx) => {
       for (const p of dto.pagos) {
@@ -1178,6 +1240,11 @@ export class VentasService {
     let totalCobrado = 0;
     let totalVentas = 0;
 
+    // ADMINISTRATIVO (EMFIMIFAR): dinero que no pasó por caja hoy — se reporta
+    // aparte, con quién lo recibió, y no cuenta para total_cobrado/total_neto
+    // ni para el efectivo a entregar (ver validarPagosAdministrativos).
+    const pagosAdministrativos: { folio: number; monto: number; referencia: string | null; fecha: Date }[] = [];
+
     for (const nota of notas) {
       const est = nota.estatus as string;
       if (!porEstatus[est]) porEstatus[est] = { count: 0, total: 0 };
@@ -1196,7 +1263,9 @@ export class VentasService {
       // ya se contaron en el corte de caja del día en que se cobró ese anticipo — se
       // excluyen aquí para no duplicarlos, y se resta su monto del total base de hoy
       // para que "efectivo real" (base de hoy − no-efectivo) siga siendo correcto.
-      const pagosHoy = nota.pagos.filter((p) => !p.origen_anticipo_pedido);
+      // ADMINISTRATIVO tampoco entra en "lo cobrado hoy" — se excluye igual que
+      // los anticipos replicados, y se reporta aparte más abajo.
+      const pagosHoy = nota.pagos.filter((p) => !p.origen_anticipo_pedido && p.metodo !== 'ADMINISTRATIVO');
       const montoAnticipoReplicado = nota.pagos
         .filter((p) => p.origen_anticipo_pedido)
         .reduce((s, p) => s + Number(p.monto), 0);
@@ -1206,6 +1275,16 @@ export class VentasService {
       // crédito pendiente, no dinero que faltó entregar hoy en efectivo.
       const sumPagosHoy = pagosHoy.reduce((s, p) => s + Number(p.monto), 0);
       const baseHoy = Math.min(totalEsperadoHoy, sumPagosHoy);
+
+      for (const pago of nota.pagos) {
+        if (pago.metodo !== 'ADMINISTRATIVO') continue;
+        pagosAdministrativos.push({
+          folio: nota.folio,
+          monto: Number(pago.monto),
+          referencia: pago.referencia,
+          fecha: pago.created_at,
+        });
+      }
 
       let nonCashSum = 0;
       for (const pago of pagosHoy) {
@@ -1228,6 +1307,10 @@ export class VentasService {
 
       totalCobrado = +(totalCobrado + nonCashSum + efectivoReal).toFixed(2);
     }
+
+    const totalPagosAdministrativos = +pagosAdministrativos
+      .reduce((s, p) => s + p.monto, 0)
+      .toFixed(2);
 
     const metodoAnticipos: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
@@ -1455,6 +1538,13 @@ export class VentasService {
         por_metodo: metodoPagosCreditoDisplay,
         detalle: detalleCreditoCombinado,
         por_usuario: pagosCreditoPorUsuario,
+      },
+      // EMFIMIFAR: pagos "Administrativo" del día — dinero que no pasó por caja,
+      // se muestran aparte y no se suman a total_cobrado/total_entregar_efectivo.
+      pagos_administrativos: {
+        total: totalPagosAdministrativos,
+        count: pagosAdministrativos.length,
+        detalle: pagosAdministrativos,
       },
       gastos: gastos.map((g) => ({
         id: g.id,
