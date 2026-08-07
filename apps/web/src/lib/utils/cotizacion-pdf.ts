@@ -87,7 +87,7 @@ export async function generateCotizacionPDF(
     const bg = idx % 2 === 1 ? 'background:#f8fafc;' : '';
     return `<tr>
       <td style="padding:9px 6px;text-align:center;font-size:11px;color:#94a3b8;${bg}">${idx + 1}</td>
-      <td style="padding:9px 6px;font-size:12px;color:#475569;${bg}">${desc || '—'}</td>
+      <td style="padding:9px 6px;font-size:14px;color:#0f172a;${bg}">${desc || '—'}</td>
       <td style="padding:9px 6px;text-align:right;font-size:12px;${bg}">${Number(l.cantidad).toLocaleString('es-MX')}</td>
       <td style="padding:9px 6px;text-align:right;font-size:12px;${bg}">$${fmt(Number(l.precio_unitario))}</td>
       ${hasDesc ? `<td style="padding:9px 6px;text-align:center;font-size:11px;color:#64748b;${bg}">${Number(l.descuento) > 0 ? Number(l.descuento).toFixed(0) + '%' : '—'}</td>` : ''}

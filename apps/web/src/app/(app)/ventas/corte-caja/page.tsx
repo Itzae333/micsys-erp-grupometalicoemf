@@ -424,6 +424,11 @@ export default function CorteCajaPage() {
         const anticipos = data.anticipos_pedido ?? { total: 0, count: 0, por_metodo: {}, detalle: [] };
         const totalVentas = data.total_ventas ?? data.total_cobrado;
         const totalEntregarEfectivo = data.total_entregar_efectivo ?? (data.por_metodo?.['EFECTIVO']?.total ?? 0);
+        // Separado solo para mostrar en pantalla: cuánto de ese efectivo viene de
+        // ventas del día vs. de pagos de crédito cobrados hoy — la suma de los dos
+        // siempre da total_entregar_efectivo (el dato real sigue siendo uno solo).
+        const entregarCreditoEfectivo = pagosCredito.por_metodo?.['EFECTIVO']?.total ?? 0;
+        const entregarVentasEfectivo = +(totalEntregarEfectivo - entregarCreditoEfectivo).toFixed(2);
         return (
         <>
           {/* Total de ventas / cobrado / neto */}
@@ -443,11 +448,26 @@ export default function CorteCajaPage() {
                 </p>
               )}
             </div>
-            <div className="text-right">
-              <p className="text-steel-400 text-xs uppercase tracking-wide">Total a entregar</p>
-              <p className="text-2xl font-bold text-emerald-300">{fmt(totalEntregarEfectivo)}</p>
-              <p className="text-steel-400 text-xs">en efectivo</p>
-            </div>
+            {empresa?.id === EMPRESA_EMFIMIFAR_ID ? (
+              <div className="flex items-start gap-6">
+                <div className="text-right">
+                  <p className="text-steel-400 text-xs uppercase tracking-wide">Entregar · Ventas</p>
+                  <p className="text-2xl font-bold text-emerald-300">{fmt(entregarVentasEfectivo)}</p>
+                  <p className="text-steel-400 text-xs">en efectivo</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-steel-400 text-xs uppercase tracking-wide">Entregar · Créditos</p>
+                  <p className="text-2xl font-bold text-emerald-300">{fmt(entregarCreditoEfectivo)}</p>
+                  <p className="text-steel-400 text-xs">en efectivo</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-right">
+                <p className="text-steel-400 text-xs uppercase tracking-wide">Total a entregar</p>
+                <p className="text-2xl font-bold text-emerald-300">{fmt(totalEntregarEfectivo)}</p>
+                <p className="text-steel-400 text-xs">en efectivo</p>
+              </div>
+            )}
             <Calculator className="h-10 w-10 text-steel-500 ml-4" />
           </div>
 
