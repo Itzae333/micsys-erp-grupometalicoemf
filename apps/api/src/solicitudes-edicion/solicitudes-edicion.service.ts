@@ -242,12 +242,35 @@ export class SolicitudesEdicionService {
       include: { lineas: true, pagos: true },
     });
 
+    const cargasActivas = await tx.cargaNota.findMany({
+      where: { nota_id: nota.id, anulada: false },
+      include: { lineas: { include: { linea: true } } },
+    });
+
+    // El inventario YA NO se regresa automáticamente: una "carga" representa
+    // mercancía que físicamente se entregó al cliente, así que no hay forma
+    // de saber si sigue en el almacén. Se anula la carga (para que la línea
+    // vuelva a quedar "pendiente" de entrega) y se deja el detalle de lo no
+    // revertido en la evidencia, para que un admin lo reconcilie a mano si
+    // la mercancía en verdad regresó físicamente.
+    const cargasNoRevertidas = cargasActivas.map((carga) => ({
+      carga_id: carga.id,
+      lineas: carga.lineas.map((cl) => ({
+        nota_venta_linea_id: cl.nota_venta_linea_id,
+        articulo_id: cl.linea.articulo_id,
+        clave: cl.linea.clave,
+        cantidad_cargada: Number(cl.cantidad_cargada),
+      })),
+    }));
+
     await tx.evidenciaNota.create({
       data: {
         nota_id: nota.id,
         empresa_id: empresaId,
         tipo: 'TICKET_ORIGINAL',
-        descripcion: `Snapshot antes de edición autorizada (${snapshotDescripcion})`,
+        descripcion: cargasNoRevertidas.length > 0
+          ? `Snapshot antes de edición autorizada (${snapshotDescripcion}). Requiere revisión manual de inventario si la mercancía cargada fue devuelta físicamente.`
+          : `Snapshot antes de edición autorizada (${snapshotDescripcion})`,
         data_json: {
           version: nota.version,
           total: Number(nota.total),
@@ -256,42 +279,13 @@ export class SolicitudesEdicionService {
             precio_unitario: Number(l.precio_unitario), descuento: Number(l.descuento), subtotal: Number(l.subtotal),
           })),
           pagos: nota.pagos.map((p) => ({ metodo: p.metodo, monto: Number(p.monto), referencia: p.referencia })),
+          cargas_no_revertidas: cargasNoRevertidas,
         } as any,
         subido_por_id: adminId,
       },
     });
 
-    const cargasActivas = await tx.cargaNota.findMany({
-      where: { nota_id: nota.id, anulada: false },
-      include: { lineas: { include: { linea: true } } },
-    });
-
     for (const carga of cargasActivas) {
-      for (const cl of carga.lineas) {
-        const art = await tx.articulo.findUnique({ where: { id: cl.linea.articulo_id } });
-        if (!art) continue;
-
-        const cantAntes = Number(art.existencia_1 ?? 0);
-        const cantDespues = cantAntes + Number(cl.cantidad_cargada);
-
-        await tx.movimientoInventario.create({
-          data: {
-            ubicacion_id: nota.ubicacion_id,
-            articulo_id: art.id,
-            tipo: 'ENTRADA',
-            existencia_num: 1,
-            cantidad: cl.cantidad_cargada,
-            cantidad_antes: cantAntes,
-            cantidad_despues: cantDespues,
-            concepto: `Reversión por edición autorizada — nota #${nota.folio}`,
-            referencia_id: nota.id,
-            usuario_id: adminId,
-          },
-        });
-
-        await tx.articulo.update({ where: { id: art.id }, data: { existencia_1: cantDespues } });
-      }
-
       await tx.cargaNota.update({ where: { id: carga.id }, data: { anulada: true } });
     }
 

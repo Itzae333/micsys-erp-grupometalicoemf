@@ -80,6 +80,7 @@ export default function NotaDetallePage() {
   const [lineaDesc, setLineaDesc] = useState(0);
   const [lineaError, setLineaError] = useState<string | null>(null);
   const [addingLinea, setAddingLinea] = useState(false);
+  const [lineasAccionError, setLineasAccionError] = useState<string | null>(null);
 
   // Cobrar (solo ABIERTA)
   const [dlgCobrar, setDlgCobrar] = useState(false);
@@ -237,10 +238,13 @@ export default function NotaDetallePage() {
 
   async function eliminarLinea(lineaId: string) {
     if (!nota) return;
+    setLineasAccionError(null);
     try {
       const updated = await api.delete<NotaVenta>(`/ventas/${nota.id}/lineas/${lineaId}`);
       setNota(updated);
-    } catch {}
+    } catch (err) {
+      setLineasAccionError(err instanceof Error ? err.message : 'Error al eliminar el artículo');
+    }
   }
 
   async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
@@ -252,10 +256,12 @@ export default function NotaDetallePage() {
     const origVal = field === 'cantidad' ? orig.cantidad : orig.precio_unitario;
     if (Math.abs(parsed - origVal) < 0.0001) return;
     setSavingLinea(lineaId);
+    setLineasAccionError(null);
     try {
       const updated = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${lineaId}`, { [field]: parsed });
       setNota(updated);
-    } catch {
+    } catch (err) {
+      setLineasAccionError(err instanceof Error ? err.message : 'Error al actualizar el artículo');
       setLineaDraft((prev) => ({
         ...prev,
         [lineaId]: {
@@ -820,6 +826,7 @@ export default function NotaDetallePage() {
           <div>
             <p className="text-body font-semibold text-purple-800">Edición autorizada por el administrador</p>
             <p className="text-body-sm text-purple-600">Modifica los artículos y vuelve a cobrar para generar el nuevo ticket.</p>
+            <p className="text-body-sm text-purple-600">Las cantidades que ya estaban entregadas (cargadas) no se regresaron automáticamente al inventario — si la mercancía fue devuelta físicamente, ajusta el inventario manualmente.</p>
           </div>
         </div>
       )}
@@ -924,6 +931,12 @@ export default function NotaDetallePage() {
           <p className="text-body font-semibold text-steel-900">Artículos</p>
           <p className="text-body-sm text-steel-500">{nota.lineas.length} línea{nota.lineas.length !== 1 ? 's' : ''}</p>
         </div>
+        {lineasAccionError && (
+          <div className="px-4 py-2 bg-brand-50 border-b border-brand-100 flex items-center justify-between gap-3">
+            <p className="text-body-sm text-brand-600">{lineasAccionError}</p>
+            <button onClick={() => setLineasAccionError(null)} className="text-brand-600 hover:text-brand-800 text-body-sm">✕</button>
+          </div>
+        )}
         {nota.lineas.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-body text-steel-400">Sin artículos. Agrega el primero.</p>

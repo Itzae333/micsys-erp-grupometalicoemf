@@ -237,10 +237,22 @@ export class VentasService {
 
     const linea = await this.prisma.notaVentaLinea.findFirst({
       where: { id: lineaId, nota_id: notaId },
+      include: { carga_lineas: { include: { carga: true } } },
     });
     if (!linea) throw new NotFoundException('Línea no encontrada');
 
+    const cargaActiva = linea.carga_lineas.find((cl) => !cl.carga.anulada);
+    if (cargaActiva) {
+      throw new BadRequestException(
+        'No se puede eliminar una línea con una entrega (carga) activa registrada',
+      );
+    }
+
     await this.prisma.$transaction(async (tx) => {
+      // Las cargas asociadas a esta línea ya están anuladas (si existían) —
+      // se limpian las filas huérfanas para poder borrar la línea sin
+      // chocar con la FK RESTRICT hacia carga_nota_lineas.
+      await tx.cargaNotaLinea.deleteMany({ where: { nota_venta_linea_id: lineaId } });
       await tx.notaVentaLinea.delete({ where: { id: lineaId } });
       await this.recalcNota(tx, notaId);
     });
