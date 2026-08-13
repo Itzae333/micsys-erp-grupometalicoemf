@@ -13,7 +13,7 @@ import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID, EMPRESA_LAMINAS_MONTERREY_ID } from '@/lib/empresas';
-import type { NotasVentaPage, NotaVenta, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema } from '@/lib/types/api';
+import type { NotasVentaPage, NotaVenta, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -187,6 +187,15 @@ export default function VentasPage() {
   const [abonandoError, setAbonandoError] = useState<string | null>(null);
   const [abonando, setAbonando] = useState(false);
   const [showTicketAbonar, setShowTicketAbonar] = useState(false);
+
+  // Registrar carga / entrega rápida (VENDEDOR): el vendedor no debe poder
+  // entrar al detalle completo de la venta (pagos, evidencias) — este modal
+  // se abre directo sobre la lista, sin navegar a /ventas/[id].
+  const [dlgCargaRapida, setDlgCargaRapida] = useState<NotaVenta | null>(null);
+  const [cargaPendientes, setCargaPendientes] = useState<CargaNotaPendientes | null>(null);
+  const [cargaCantidades, setCargaCantidades] = useState<Record<string, number>>({});
+  const [registrandoCarga, setRegistrandoCarga] = useState(false);
+  const [cargaError, setCargaError] = useState<string | null>(null);
 
   // Split-view lista de notas
   const [selectedNotaIdx, setSelectedNotaIdx] = useState(-1);
@@ -697,6 +706,88 @@ export default function VentasPage() {
     }
   }
 
+  // ── Registrar carga / entrega rápida (VENDEDOR) ────────────
+  async function openCargaRapida(nota: NotaVenta) {
+    setCargaError(null);
+    try {
+      const pend = await api.get<CargaNotaPendientes>(`/ventas/${nota.id}/carga`);
+      setCargaPendientes(pend);
+      const defaults: Record<string, number> = {};
+      for (const l of pend.lineas) defaults[l.id] = l.pendiente;
+      setCargaCantidades(defaults);
+      setDlgCargaRapida(nota);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error al consultar la carga', 'error');
+    }
+  }
+
+  async function printTicketCargaRapida(nota: NotaVenta, detalle: CargaNotaPendientes, cargadoAhora: Record<string, number>) {
+    const logoUrl = getTicketLogoUrl(empresa, ubicacion);
+    const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
+    const payload = {
+      tipo: 'carga',
+      logo_escpos_b64,
+      empresa: { nombre: empresa?.nombre ?? '' },
+      ubicacion: {
+        nombre: ubicacion?.nombre ?? '',
+        ...buildTicketUbicacionFiscal(ubicacion),
+      },
+      folio: String(nota.folio).padStart(4, '0'),
+      lineas: detalle.lineas.map((l) => {
+        const entregadoAhora = cargadoAhora[l.id] ?? 0;
+        return {
+          clave: l.clave,
+          descripcion: l.descripcion,
+          cargado_ahora: entregadoAhora,
+          pendiente: Math.max(0, +(l.pendiente - entregadoAhora).toFixed(3)),
+        };
+      }),
+    };
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      await fetch('http://localhost:7788/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // Bridge no disponible — no bloquear la UI
+    }
+  }
+
+  async function onRegistrarCargaRapida() {
+    if (!dlgCargaRapida || !cargaPendientes) return;
+    setRegistrandoCarga(true);
+    setCargaError(null);
+    const cantidadEnviada = { ...cargaCantidades };
+    try {
+      const lineas = cargaPendientes.lineas
+        .map((l) => ({ nota_venta_linea_id: l.id, cantidad_cargada: cantidadEnviada[l.id] ?? 0 }))
+        .filter((l) => l.cantidad_cargada > 0);
+
+      if (lineas.length === 0) {
+        setCargaError('Indica al menos una cantidad a cargar.');
+        return;
+      }
+
+      const res = await api.post<{ estatus: string; imprimir_ticket: boolean }>(`/ventas/${dlgCargaRapida.id}/carga`, { lineas });
+
+      if (res.imprimir_ticket) {
+        await printTicketCargaRapida(dlgCargaRapida, cargaPendientes, cantidadEnviada);
+      }
+
+      setDlgCargaRapida(null);
+      void loadNotas();
+    } catch (err) {
+      setCargaError(err instanceof Error ? err.message : 'Error al registrar la carga');
+    } finally {
+      setRegistrandoCarga(false);
+    }
+  }
+
   // ── Enviar ticket al print bridge ─────────────────────────
   async function printTicket(
     nota: NotaVenta,
@@ -1025,6 +1116,166 @@ export default function VentasPage() {
     ubicacion?.cp,
   ].filter(Boolean).join(', ');
 
+  // Contenido del panel de detalle — se muestra inline en desktop (a la
+  // derecha de la lista) y dentro de un modal en móvil (donde no hay
+  // espacio para partir la pantalla en dos).
+  const detalleNotaContent = (
+    <>
+      {!detalleNota && !loadingDetalle && (
+        <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-steel-200">
+          <p className="text-body-sm text-steel-400 text-center px-4">
+            Selecciona una nota para ver el detalle<br />
+            <span className="text-meta">↑↓ navegar · doble clic para editar</span>
+          </p>
+        </div>
+      )}
+
+      {loadingDetalle && (
+        <div className="h-full flex items-center justify-center">
+          <p className="text-body-sm text-steel-400">Cargando...</p>
+        </div>
+      )}
+
+      {detalleNota && !loadingDetalle && (
+        <div className="flex flex-col gap-3">
+          {/* Info nota */}
+          <div className="bg-white rounded-xl border border-steel-200 p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="text-body font-bold text-steel-900">
+                  Nota #{String(detalleNota.folio).padStart(4, '0')}
+                </p>
+                <p className="text-body-sm text-steel-500">
+                  {new Date(detalleNota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
+                  {ESTATUS_CONFIG[detalleNota.estatus]?.label}
+                </Badge>
+                <EstatusEntregaTag estatus={detalleNota.estatus} estatusEntrega={detalleNota.estatus_entrega} />
+                {detalleNota.pedido_origen && <PedidoOrigenTag pedidoOrigen={detalleNota.pedido_origen} />}
+              </div>
+            </div>
+            {detalleNota.cliente && (
+              <p className="text-body-sm text-steel-700 font-medium">
+                {detalleNota.cliente.razon_social ?? `${detalleNota.cliente.nombre} ${detalleNota.cliente.apellidos ?? ''}`.trim()}
+              </p>
+            )}
+            {detalleNota.observaciones && (
+              <p className="text-meta text-steel-400 mt-1">{detalleNota.observaciones}</p>
+            )}
+          </div>
+
+          {/* Artículos */}
+          {detalleNota.estatus === 'CANCELADA' ? (
+            <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
+              <XCircle className="h-8 w-8 text-steel-300 mx-auto mb-2" />
+              <p className="text-body-sm text-steel-400">Nota cancelada</p>
+            </div>
+          ) : detalleNota.lineas.length === 0 ? (
+            <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
+              <Receipt className="h-8 w-8 text-steel-300 mx-auto mb-2" />
+              <p className="text-body-sm text-steel-400">Sin artículos en el carrito</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+              <table className="w-full text-body-sm">
+                <thead className="bg-steel-50 border-b border-steel-200">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-steel-600">Cant</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-steel-600">Precio</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-steel-100">
+                  {detalleNota.lineas.map((l) => {
+                    const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
+                    return (
+                      <tr key={l.id}>
+                        <td className="px-4 py-2.5">
+                          <p className="font-semibold text-steel-900 leading-tight">{d.length > 0 ? d.join(' · ') : l.clave}</p>
+                          <p className="text-meta text-steel-400">{l.clave}</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_unitario)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* Acciones */}
+          <div className="flex flex-wrap gap-2">
+            {detalleNota.estatus === 'ABIERTA' && canWrite && (
+              <Button variant="secondary" size="sm" onClick={() => void openEditarNota(detalleNota)}>
+                Agregar artículos
+              </Button>
+            )}
+            {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canWrite && (
+              <Button size="sm" onClick={() => openCobrar(detalleNota)}>
+                Cobrar
+              </Button>
+            )}
+            {detalleNota.estatus === 'PENDIENTE' && canWrite && (
+              <Button size="sm" onClick={() => openCobrar(detalleNota)}>
+                Cobrar
+              </Button>
+            )}
+            {detalleNota.estatus === 'PENDIENTE' && canAdmin && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={movingCredito === detalleNota.id}
+                onClick={() => void moverACredito(detalleNota)}
+              >
+                {movingCredito === detalleNota.id ? 'Moviendo…' : 'Mover a crédito'}
+              </Button>
+            )}
+            {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canWrite && (
+              <Button variant="ghost" size="sm" onClick={() => openCancelarNota(detalleNota)}>
+                <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
+                Cancelar
+              </Button>
+            )}
+            {detalleNota.estatus === 'CREDITO' && canWrite && (
+              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 border-amber-500" onClick={() => openAbonar(detalleNota)}>
+                Abonar
+              </Button>
+            )}
+            {['PAGADA', 'CREDITO'].includes(detalleNota.estatus) && !isVendedor && (
+              <Button variant="secondary" size="sm" onClick={() => router.push(`/ventas/${detalleNota.id}`)}>
+                Ver detalle
+              </Button>
+            )}
+            {isVendedor
+              && ESTATUS_CON_ENTREGA_APLICABLE.includes(detalleNota.estatus)
+              && detalleNota.estatus_entrega !== 'COMPLETA' && (
+              <Button variant="secondary" size="sm" onClick={() => void openCargaRapida(detalleNota)}>
+                Registrar carga
+              </Button>
+            )}
+            {['PAGADA', 'CREDITO', 'PENDIENTE'].includes(detalleNota.estatus) && canAdmin && (
+              <Button variant="secondary" size="sm" onClick={() => setDlgReimprimir(detalleNota)}>
+                🖨 Reimprimir
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="h-full">
       {/* ── Split-view: editar nota de venta ─────────────── */}
@@ -1321,7 +1572,7 @@ export default function VentasPage() {
         <div className="flex flex-col md:flex-row flex-1 min-h-0">
 
           {/* ── Izquierda: lista de notas ─────────────────── */}
-          <div className="flex flex-col md:w-[50%] min-h-0 border-b md:border-b-0 md:border-r border-steel-200 h-[50%] md:h-auto">
+          <div className="flex flex-col flex-1 md:flex-initial md:w-[50%] min-h-0 border-b md:border-b-0 md:border-r border-steel-200 md:h-auto">
 
             {/* Filtros */}
             <div className="px-4 py-2.5 bg-steel-50 border-b border-steel-100 flex-shrink-0 space-y-1.5">
@@ -1452,11 +1703,17 @@ export default function VentasPage() {
                           onClick={() => void seleccionarNotaIdx(i)}
                           onDoubleClick={() => {
                             if (nota.estatus === 'ABIERTA') { void openEditarNota(nota); return; }
-                            const entregaPendiente = nota.estatus_entrega !== 'COMPLETA';
-                            const irARegistrarCarga = isVendedor
-                              && ESTATUS_CON_ENTREGA_APLICABLE.includes(nota.estatus)
-                              && entregaPendiente;
-                            router.push(irARegistrarCarga ? `/ventas/${nota.id}?carga=1` : `/ventas/${nota.id}`);
+                            if (isVendedor) {
+                              // El vendedor no debe poder entrar al detalle completo de
+                              // la venta (pagos, evidencias) — a lo mucho, registrar la
+                              // carga/entrega si aún hay algo pendiente.
+                              const entregaPendiente = nota.estatus_entrega !== 'COMPLETA';
+                              if (ESTATUS_CON_ENTREGA_APLICABLE.includes(nota.estatus) && entregaPendiente) {
+                                void openCargaRapida(nota);
+                              }
+                              return;
+                            }
+                            router.push(`/ventas/${nota.id}`);
                           }}
                           className={cn(
                             'cursor-pointer transition-colors',
@@ -1536,158 +1793,26 @@ export default function VentasPage() {
             </div>
           </div>
 
-          {/* ── Derecha: detalle de la nota ────────────────── */}
-          <div className="flex-1 overflow-y-auto bg-steel-50 p-4 min-h-[200px] md:min-h-0">
-            {!detalleNota && !loadingDetalle && (
-              <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-steel-200">
-                <p className="text-body-sm text-steel-400 text-center px-4">
-                  Selecciona una nota para ver el detalle<br />
-                  <span className="text-meta">↑↓ navegar · doble clic para editar</span>
-                </p>
-              </div>
-            )}
-
-            {loadingDetalle && (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-body-sm text-steel-400">Cargando...</p>
-              </div>
-            )}
-
-            {detalleNota && !loadingDetalle && (
-              <div className="flex flex-col gap-3">
-                {/* Info nota */}
-                <div className="bg-white rounded-xl border border-steel-200 p-4">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-body font-bold text-steel-900">
-                        Nota #{String(detalleNota.folio).padStart(4, '0')}
-                      </p>
-                      <p className="text-body-sm text-steel-500">
-                        {new Date(detalleNota.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge variant={ESTATUS_CONFIG[detalleNota.estatus]?.variant ?? 'default'}>
-                        {ESTATUS_CONFIG[detalleNota.estatus]?.label}
-                      </Badge>
-                      <EstatusEntregaTag estatus={detalleNota.estatus} estatusEntrega={detalleNota.estatus_entrega} />
-                      {detalleNota.pedido_origen && <PedidoOrigenTag pedidoOrigen={detalleNota.pedido_origen} />}
-                    </div>
-                  </div>
-                  {detalleNota.cliente && (
-                    <p className="text-body-sm text-steel-700 font-medium">
-                      {detalleNota.cliente.razon_social ?? `${detalleNota.cliente.nombre} ${detalleNota.cliente.apellidos ?? ''}`.trim()}
-                    </p>
-                  )}
-                  {detalleNota.observaciones && (
-                    <p className="text-meta text-steel-400 mt-1">{detalleNota.observaciones}</p>
-                  )}
-                </div>
-
-                {/* Artículos */}
-                {detalleNota.estatus === 'CANCELADA' ? (
-                  <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
-                    <XCircle className="h-8 w-8 text-steel-300 mx-auto mb-2" />
-                    <p className="text-body-sm text-steel-400">Nota cancelada</p>
-                  </div>
-                ) : detalleNota.lineas.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-dashed border-steel-200 p-6 text-center">
-                    <Receipt className="h-8 w-8 text-steel-300 mx-auto mb-2" />
-                    <p className="text-body-sm text-steel-400">Sin artículos en el carrito</p>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
-                    <table className="w-full text-body-sm">
-                      <thead className="bg-steel-50 border-b border-steel-200">
-                        <tr>
-                          <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-steel-600">Cant</th>
-                          <th className="text-right px-3 py-2.5 font-medium text-steel-600">Precio</th>
-                          <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-steel-100">
-                        {detalleNota.lineas.map((l) => {
-                          const d = [l.articulo?.descripcion_1, l.articulo?.descripcion_2, l.articulo?.descripcion_3, l.articulo?.descripcion_4, l.articulo?.descripcion_5].filter((x): x is string => !!x);
-                          return (
-                            <tr key={l.id}>
-                              <td className="px-4 py-2.5">
-                                <p className="font-semibold text-steel-900 leading-tight">{d.length > 0 ? d.join(' · ') : l.clave}</p>
-                                <p className="text-meta text-steel-400">{l.clave}</p>
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
-                              <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_unitario)}</td>
-                              <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="border-t-2 border-steel-200 bg-steel-50">
-                        <tr>
-                          <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
-                          <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-
-                {/* Acciones */}
-                <div className="flex flex-wrap gap-2">
-                  {detalleNota.estatus === 'ABIERTA' && canWrite && (
-                    <Button variant="secondary" size="sm" onClick={() => void openEditarNota(detalleNota)}>
-                      Agregar artículos
-                    </Button>
-                  )}
-                  {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canWrite && (
-                    <Button size="sm" onClick={() => openCobrar(detalleNota)}>
-                      Cobrar
-                    </Button>
-                  )}
-                  {detalleNota.estatus === 'PENDIENTE' && canWrite && (
-                    <Button size="sm" onClick={() => openCobrar(detalleNota)}>
-                      Cobrar
-                    </Button>
-                  )}
-                  {detalleNota.estatus === 'PENDIENTE' && canAdmin && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={movingCredito === detalleNota.id}
-                      onClick={() => void moverACredito(detalleNota)}
-                    >
-                      {movingCredito === detalleNota.id ? 'Moviendo…' : 'Mover a crédito'}
-                    </Button>
-                  )}
-                  {['ABIERTA', 'PENDIENTE'].includes(detalleNota.estatus) && canWrite && (
-                    <Button variant="ghost" size="sm" onClick={() => openCancelarNota(detalleNota)}>
-                      <XCircle className="h-4 w-4 mr-1.5 text-brand-600" />
-                      Cancelar
-                    </Button>
-                  )}
-                  {detalleNota.estatus === 'CREDITO' && canWrite && (
-                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 border-amber-500" onClick={() => openAbonar(detalleNota)}>
-                      Abonar
-                    </Button>
-                  )}
-                  {['PAGADA', 'CREDITO'].includes(detalleNota.estatus) && (
-                    <Button variant="secondary" size="sm" onClick={() => router.push(`/ventas/${detalleNota.id}`)}>
-                      Ver detalle
-                    </Button>
-                  )}
-                  {['PAGADA', 'CREDITO', 'PENDIENTE'].includes(detalleNota.estatus) && canAdmin && (
-                    <Button variant="secondary" size="sm" onClick={() => setDlgReimprimir(detalleNota)}>
-                      🖨 Reimprimir
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
+          {/* ── Derecha: detalle de la nota (oculto en móvil, se ve en modal) ── */}
+          <div className="hidden md:block flex-1 overflow-y-auto bg-steel-50 p-4 md:min-h-0">
+            {detalleNotaContent}
           </div>
 
         </div>
       </div>
       )}
+
+      {/* ── Modal de detalle de nota — solo móvil ─────────────── */}
+      <div className="md:hidden">
+        <Dialog
+          open={selectedNotaIdx !== -1 && (detalleNota !== null || loadingDetalle)}
+          onClose={() => { setSelectedNotaIdx(-1); setDetalleNota(null); }}
+          title={detalleNota ? `Nota #${String(detalleNota.folio).padStart(4, '0')}` : 'Detalle de la nota'}
+          size="lg"
+        >
+          {detalleNotaContent}
+        </Dialog>
+      </div>
 
       {/* ── Dialog: venta rápida (offline) ────────────────────── */}
       <VentaRapidaDialog
@@ -2508,6 +2633,56 @@ export default function VentasPage() {
             <Button variant="ghost" className="w-full text-steel-400" onClick={() => setDlgReimprimir(null)}>
               Cancelar
             </Button>
+          </div>
+        )}
+      </Dialog>
+
+      {/* ── Dialog: registrar carga / entrega rápida (VENDEDOR) ─── */}
+      <Dialog
+        open={!!dlgCargaRapida}
+        onClose={() => setDlgCargaRapida(null)}
+        title="Registrar carga / entrega"
+        size="md"
+      >
+        {dlgCargaRapida && cargaPendientes && (
+          <div className="space-y-4">
+            <p className="text-body-sm text-steel-500">
+              Indica cuánto se entrega en este momento. Por defecto se propone el total pendiente.
+            </p>
+            <div className="space-y-3">
+              {cargaPendientes.lineas.map((l) => (
+                <div key={l.id} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
+                    <p className="text-meta text-steel-400">{l.clave}</p>
+                    <p className="text-meta text-steel-500">
+                      Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
+                    </p>
+                  </div>
+                  <div className="w-28">
+                    <Input
+                      type="number" step="0.001" min="0" max={l.pendiente}
+                      value={cargaCantidades[l.id] ?? 0}
+                      disabled={l.pendiente <= 0}
+                      onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {cargaError && (
+              <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+                <p className="text-body-sm text-brand-600">{cargaError}</p>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setDlgCargaRapida(null)}>Cancelar</Button>
+              <Button type="button" loading={registrandoCarga} onClick={onRegistrarCargaRapida}>
+                Registrar carga
+              </Button>
+            </DialogFooter>
           </div>
         )}
       </Dialog>
