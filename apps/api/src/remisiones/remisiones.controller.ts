@@ -37,6 +37,7 @@ export class RemisionesController {
   listar(
     @Headers('x-empresa-id')   empresaId: string,
     @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
     @Query('tipo')    tipo?:    string,
     @Query('estatus') estatus?: string,
     @Query('page')    page?:    string,
@@ -48,6 +49,7 @@ export class RemisionesController {
       {
         estatus,
         ubicacionId,
+        rol: user.rol,
         page:  page  ? Number(page)                 : 1,
         limit: limit ? Math.min(Number(limit), 100) : 50,
       },

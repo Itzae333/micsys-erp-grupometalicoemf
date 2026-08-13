@@ -12,11 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { getClientesCache } from '@/lib/db/clientes-cache';
 import { searchArticulosCache, refreshArticulosCacheIfStale } from '@/lib/db/articulos-cache';
+import { getConfigColumnasSchema } from '@/lib/db/config-columnas-cache';
 import { enqueue } from '@/lib/db/sync-queue';
 import { addVentaPendiente, nextFolioLocal, type LineaVentaPendiente, type PagoVentaPendiente } from '@/lib/db/ventas-pendientes';
-import type { Cliente, Articulo, NotaVenta, MetodoPago } from '@/lib/types/api';
+import type { Cliente, Articulo, NotaVenta, MetodoPago, ConfigColumnasSchema } from '@/lib/types/api';
 import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
-import { formatPrecio } from '@/lib/utils';
+import { formatPrecio, precioMostradorNumero } from '@/lib/utils';
 
 const METODOS_BASE = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL: Record<string, string> = {
@@ -85,6 +86,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState('');
+  const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
 
   const [artQ, setArtQ] = useState('');
   const [artResultados, setArtResultados] = useState<Articulo[]>([]);
@@ -106,6 +108,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   useEffect(() => {
     if (!open || !empresa?.id || !ubicacion?.id) return;
     getClientesCache(empresa.id, ubicacion.id).then(setClientes);
+    getConfigColumnasSchema(empresa.id, ubicacion.id).then(setSchema);
     // Refresca el catálogo en segundo plano — no bloquea el formulario si falla.
     refreshArticulosCacheIfStale(empresa.id, ubicacion.id).catch(() => {});
   }, [open, empresa?.id, ubicacion?.id]);
@@ -134,13 +137,18 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
 
   function agregarArticulo(art: Articulo) {
     const descripcion = descripcionCompleta(art);
+    // Igual que en Ventas normal: usa el precio asignado al cliente
+    // seleccionado, o el de mostrador (Público) si no hay cliente.
+    const precioNum = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
+    const campo = `precio_${precioNum}` as keyof Articulo;
+    const precio_unitario = (art[campo] as number | null) ?? 0;
     setLineas((prev) => [...prev, {
       key: `${art.id}-${Date.now()}`,
       articulo_id: art.id,
       clave: art.clave,
       descripcion,
       cantidad: 1,
-      precio_unitario: art.precio_1 ?? 0,
+      precio_unitario,
       descuento: 0,
     }]);
     setArtQ('');
@@ -349,6 +357,11 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
               <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
             ))}
           </Select>
+          {clienteSeleccionado?.precio_num && schema && (
+            <p className="text-meta text-brand-600 mt-1">
+              Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}
+            </p>
+          )}
         </div>
 
         {/* Búsqueda de artículos */}

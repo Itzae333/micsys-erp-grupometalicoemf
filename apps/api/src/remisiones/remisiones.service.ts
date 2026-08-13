@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
-import type { Prisma } from '@grupometalicoemf/database';
+import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
 
 const REM_INCLUDE = {
@@ -52,10 +52,16 @@ export class RemisionesService {
   async listar(
     empresaId: string,
     tipo: 'salida' | 'entrada' | 'todas',
-    query: { estatus?: string; ubicacionId?: string; page?: number; limit?: number } = {},
+    query: { estatus?: string; ubicacionId?: string; rol?: RolUsuario; page?: number; limit?: number } = {},
   ) {
-    const { estatus, ubicacionId, page = 1, limit = 50 } = query;
+    const { estatus, ubicacionId, rol, page = 1, limit = 50 } = query;
     const skip = (page - 1) * limit;
+
+    // Solo SUPER_USUARIO/ADMIN administran toda la empresa — el resto de
+    // roles está limitado a su propia ubicación (regla de guard empresa+
+    // ubicación), así que "todas" para ellos significa "todas las de mi
+    // ubicación", nunca las de otras ubicaciones de la empresa.
+    const esAdmin = rol === 'SUPER_USUARIO' || rol === 'ADMIN';
 
     const where: Prisma.RemisionWhereInput = {};
     if (tipo === 'salida') {
@@ -64,8 +70,13 @@ export class RemisionesService {
     } else if (tipo === 'entrada') {
       where.empresa_destino_id = empresaId;
       if (ubicacionId) where.ub_destino_id = ubicacionId;
-    } else {
+    } else if (esAdmin || !ubicacionId) {
       where.OR = [{ empresa_origen_id: empresaId }, { empresa_destino_id: empresaId }];
+    } else {
+      where.OR = [
+        { empresa_origen_id: empresaId, ub_origen_id: ubicacionId },
+        { empresa_destino_id: empresaId, ub_destino_id: ubicacionId },
+      ];
     }
     if (estatus) where.estatus = estatus as any;
 

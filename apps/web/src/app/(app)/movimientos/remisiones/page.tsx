@@ -81,6 +81,10 @@ export default function RemisionesPage() {
   const [printError, setPrintError] = useState<string | null>(null);
 
   const canCreate = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  // "Todas" muestra remisiones de todas las ubicaciones de la empresa —
+  // solo tiene sentido para quien administra toda la empresa, no para un
+  // encargado/almacenista/vendedor limitado a su propia ubicación.
+  const tabs = TABS.filter((t) => t.key !== 'todas' || ['SUPER_USUARIO', 'ADMIN'].includes(usuario?.rol ?? ''));
 
   // Reimprime el ticket de la remisión de salida sin salir del listado. Se pide
   // el detalle porque el ticket necesita los datos fiscales del origen y las
@@ -136,7 +140,7 @@ export default function RemisionesPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-steel-200">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
