@@ -146,6 +146,7 @@ model Usuario {
   remisiones_recibidas    Remision[]                  @relation("RemisionReceptor")
   cargas_nota             CargaNota[]
   gastos                  Gasto[]
+  pagos_cobrados          Pago[]
   notas_canceladas        NotaVenta[]                 @relation("NotaCanceladaPor")
   cotizaciones_canceladas NotaCotizacion[]            @relation("CotizacionCanceladaPor")
 
@@ -524,7 +525,15 @@ model Pago {
   // nota resultante quede marcada como pagada en su totalidad.
   origen_anticipo_pedido Boolean @default(false)
 
-  nota NotaVenta @relation(fields: [nota_id], references: [id])
+  // Quién registró el cobro (VentasService.cerrar/abonar) — puede ser distinto
+  // de nota.usuario_id cuando un usuario abre la nota y otro la cobra después
+  // (Metálicos Lyeva quiere el corte de caja y el ticket a nombre de quien
+  // cobró, no de quien la levantó). Nullable: pagos previos a este campo, y
+  // los que replican un anticipo de pedido, no llevan usuario.
+  usuario_id String?
+
+  nota    NotaVenta @relation(fields: [nota_id], references: [id])
+  usuario Usuario?  @relation(fields: [usuario_id], references: [id])
 
   @@map("pagos")
 }

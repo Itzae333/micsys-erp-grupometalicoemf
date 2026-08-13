@@ -821,9 +821,18 @@ export default function VentasPage() {
         cliente: nota.cliente
           ? (nota.cliente.razon_social ?? `${nota.cliente.nombre} ${nota.cliente.apellidos ?? ''}`.trim())
           : null,
-        // Metálicos Lyeva pidió que el ticket muestre quién hizo la venta.
-        usuario: empresa?.id === EMPRESA_METALICOS_LYEVA_ID && nota.usuario
-          ? `${nota.usuario.nombre} ${nota.usuario.apellidos ?? ''}`.trim()
+        // Metálicos Lyeva pidió que el ticket muestre quién cobró la venta —
+        // no necesariamente quien la levantó/abrió (puede haberla dejado
+        // pendiente y cobrarla otro usuario después). Se toma el pago más
+        // reciente con usuario registrado: en un cierre normal es quien
+        // cerró la nota; en un abono es quien acaba de recibirlo. Si no hay
+        // ninguno (datos previos a este campo), se cae al creador de la nota.
+        usuario: empresa?.id === EMPRESA_METALICOS_LYEVA_ID
+          ? (() => {
+              const pagosConUsuario = (nota.pagos ?? []).filter((p) => p.usuario);
+              const cobrador = pagosConUsuario[pagosConUsuario.length - 1]?.usuario ?? nota.usuario;
+              return cobrador ? `${cobrador.nombre} ${cobrador.apellidos ?? ''}`.trim() : null;
+            })()
           : null,
       },
       // En un abono a una nota ya cerrada no se repite el detalle de productos

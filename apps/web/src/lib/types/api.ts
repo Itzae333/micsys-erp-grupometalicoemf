@@ -173,6 +173,9 @@ export interface Pago {
   monto: number;
   referencia: string | null;
   created_at: string;
+  /** Quién registró el cobro — puede diferir de NotaVenta.usuario cuando otro cobra una nota que alguien más dejó abierta. */
+  usuario_id: string | null;
+  usuario: { id: string; nombre: string; apellidos: string } | null;
 }
 
 export type TipoEvidencia = 'TICKET_ORIGINAL' | 'COMPROBANTE_PAGO' | 'IMAGEN' | 'TICKET_REEDITADO';

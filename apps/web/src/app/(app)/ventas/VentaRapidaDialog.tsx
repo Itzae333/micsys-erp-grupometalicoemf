@@ -328,6 +328,8 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         monto: p.monto,
         referencia: p.referencia ?? null,
         created_at: new Date().toISOString(),
+        usuario_id: usuario.id,
+        usuario: { id: usuario.id, nombre: usuario.nombre, apellidos: usuario.apellidos },
       })),
       evidencias: [],
       created_at: new Date().toISOString(),

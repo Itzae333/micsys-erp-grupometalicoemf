@@ -25,7 +25,10 @@ const NOTA_INCLUDE = {
     },
     orderBy: { created_at: 'asc' as const },
   },
-  pagos: { orderBy: { created_at: 'asc' as const } },
+  // `usuario` de cada pago: quien lo registró (VentasService.cerrar/abonar),
+  // puede diferir de nota.usuario cuando otro cobra una nota que alguien más
+  // dejó abierta (a petición de Metálicos Lyeva, para el ticket y el corte).
+  pagos: { orderBy: { created_at: 'asc' as const }, include: { usuario: { select: { id: true, nombre: true, apellidos: true } } } },
   evidencias: {
     orderBy: { created_at: 'asc' as const },
     include: { subido_por: { select: { id: true, nombre: true, apellidos: true } } },
@@ -332,6 +335,9 @@ export class VentasService {
             metodo: p.metodo,
             monto: p.monto,
             referencia: p.referencia ?? null,
+            // Quién cobra — puede ser distinto de quien levantó la nota (ver
+            // usuario_id en el modelo Pago).
+            usuario_id: usuarioId,
             // En una reedición el pago corrige el cobro original: debe quedar
             // fechado el día de la venta, no el día de la corrección.
             ...(esReedicion ? { created_at: nota.created_at } : {}),
@@ -831,7 +837,7 @@ export class VentasService {
     const result = await this.prisma.$transaction(async (tx) => {
       for (const p of dto.pagos) {
         await tx.pago.create({
-          data: { nota_id: notaId, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null },
+          data: { nota_id: notaId, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null, usuario_id: usuarioId },
         });
       }
 
@@ -1196,7 +1202,11 @@ export class VentasService {
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
           usuario: { select: { id: true, nombre: true, apellidos: true } },
-          pagos: true,
+          // Se incluye quién registró cada pago (VentasService.cerrar/abonar) —
+          // puede ser distinto de `usuario` (quien levantó la nota). Ordenados
+          // por fecha: el primero es quien la cerró originalmente, uno
+          // posterior sería un abono a crédito ya cobrado por alguien más.
+          pagos: { orderBy: { created_at: 'asc' }, include: { usuario: { select: { id: true, nombre: true, apellidos: true } } } },
           // Si la nota nació de liquidar un pedido, se marca con el folio y la
           // fecha del primer anticipo — para que se note a simple vista que
           // parte de ese dinero ya se reportó en un corte anterior.
@@ -1514,14 +1524,22 @@ export class VentasService {
       };
     });
 
-    // Agrupado por usuario (vendedor) — lo usa Metálicos Lyeva para su corte de
-    // caja personalizado (front + ticket impreso); las demás empresas ignoran
-    // este campo. Se calcula siempre porque es barato (no hace queries extra) y
+    // Agrupado por usuario — lo usa Metálicos Lyeva para su corte de caja
+    // personalizado (front + ticket impreso); las demás empresas ignoran este
+    // campo. Se calcula siempre porque es barato (no hace queries extra) y
     // este método no conoce la empresa, solo la ubicación.
+    //
+    // Se agrupa por QUIEN COBRÓ, no por quien levantó/abrió la nota — un
+    // vendedor puede dejar la nota abierta y otro cobrarla después; a
+    // Metálicos Lyeva le interesa quién tuvo el dinero en caja. El primer pago
+    // (ordenado por fecha) es el de VentasService.cerrar(), que es quien la
+    // cobró originalmente — se cae a `n.usuario` (creador) solo si la nota no
+    // tiene pagos con usuario registrado (datos previos a este campo).
     const porUsuarioMap = new Map<string, { usuario_id: string; nombre: string; notas: typeof notasMapeadas; total_efectivo: number }>();
     notas.forEach((n, i) => {
-      const usuarioId = n.usuario?.id ?? 'sin-usuario';
-      const nombre = n.usuario ? `${n.usuario.nombre} ${n.usuario.apellidos ?? ''}`.trim() : 'Sin usuario';
+      const cobrador = n.pagos.find((p) => p.usuario)?.usuario ?? n.usuario;
+      const usuarioId = cobrador?.id ?? 'sin-usuario';
+      const nombre = cobrador ? `${cobrador.nombre} ${cobrador.apellidos ?? ''}`.trim() : 'Sin usuario';
       if (!porUsuarioMap.has(usuarioId)) {
         porUsuarioMap.set(usuarioId, { usuario_id: usuarioId, nombre, notas: [], total_efectivo: 0 });
       }

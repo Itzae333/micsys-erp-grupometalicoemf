@@ -149,6 +149,7 @@ export class ClientesService {
             metodo: dto.metodo as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'DEPOSITO',
             monto: montoPago,
             referencia: dto.referencia ?? null,
+            usuario_id: usuarioId,
           },
         });
 
