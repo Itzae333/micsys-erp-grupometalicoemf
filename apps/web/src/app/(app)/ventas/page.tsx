@@ -1668,6 +1668,7 @@ export default function VentasPage() {
                       <th className="px-4 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Folio</th>
                       <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
                       <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
+                      <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Entrega</th>
                       <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
                       <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
                     </tr>
@@ -1739,8 +1740,15 @@ export default function VentasPage() {
                             <div className="flex flex-col gap-1 items-start">
                               <Badge variant={cfg?.variant ?? 'default'}>{cfg?.label}</Badge>
                               {nota.pedido_origen && <PedidoOrigenTag pedidoOrigen={nota.pedido_origen} />}
-                              <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
+                              {/* En pantallas chicas no hay columna aparte para la entrega — se apila aquí */}
+                              <div className="md:hidden">
+                                <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
+                              </div>
                             </div>
+                          </td>
+                          {/* Estatus de entrega — columna aparte del estatus de pago */}
+                          <td className="hidden md:table-cell px-3 py-2.5">
+                            <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                           </td>
                           {/* Métodos de pago — mismo desglose que el corte de caja */}
                           <td className="hidden md:table-cell px-3 py-2.5 overflow-hidden">
