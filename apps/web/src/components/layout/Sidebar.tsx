@@ -64,7 +64,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/pedidos',
     label: 'Pedidos',
     icon: <ClipboardList className="h-4 w-4" />,
-    roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    roles: ['ADMIN', 'ENCARGADO'],
     ocultarParaTipos: ['FABRICA'],
   },
   {
@@ -102,14 +102,14 @@ const NAV_ITEMS: NavItem[] = [
     href: '/ventas/corte-caja',
     label: 'Corte de Caja',
     icon: <Calculator className="h-4 w-4" />,
-    roles: ['ADMIN', 'ENCARGADO'],
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
     ocultarParaTipos: ['FABRICA'],
   },
   {
     href: '/gastos',
     label: 'Gastos',
     icon: <Receipt className="h-4 w-4" />,
-    roles: ['ADMIN', 'ENCARGADO', 'VENDEDOR'],
+    roles: ['ADMIN', 'ENCARGADO'],
     ocultarParaTipos: ['FABRICA'],
   },
   {

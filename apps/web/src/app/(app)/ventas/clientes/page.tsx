@@ -32,7 +32,7 @@ const ClienteSchema = z.object({
 type ClienteForm = z.infer<typeof ClienteSchema>;
 
 export default function ClientesVentasPage() {
-  useBlockRoles(['SUPER_USUARIO']);
+  useBlockRoles(['SUPER_USUARIO', 'VENDEDOR']);
   const router = useRouter();
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();

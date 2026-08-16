@@ -100,6 +100,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const isVendedor = usuario?.rol === 'VENDEDOR';
   const esEmfimifar = empresa?.id === EMPRESA_EMFIMIFAR_ID;
   // EMFIMIFAR pidió un método de pago extra para dinero entregado directo a
   // un administrativo (o cobrado antes de cerrar la nota).
@@ -352,19 +353,28 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
     <Dialog open={open} onClose={onClose} title="Venta rápida" description="Funciona sin conexión — ideal para cobrar aunque no haya internet" size="lg">
       <div className="space-y-4">
         {/* Cliente */}
-        <div>
-          <label className="text-body-sm font-medium text-steel-700 mb-1 block">Cliente (opcional para contado)</label>
-          <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="Público en general">
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
-            ))}
-          </Select>
-          {clienteSeleccionado?.precio_num && schema && (
-            <p className="text-meta text-brand-600 mt-1">
-              Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}
+        {isVendedor ? (
+          <div>
+            <label className="text-body-sm font-medium text-steel-700 mb-1 block">Cliente</label>
+            <p className="text-body-sm text-steel-500 bg-steel-50 border border-steel-200 rounded-md px-3 py-2">
+              Mostrador (venta sin cliente)
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-body-sm font-medium text-steel-700 mb-1 block">Cliente (opcional para contado)</label>
+            <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="Público en general">
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
+              ))}
+            </Select>
+            {clienteSeleccionado?.precio_num && schema && (
+              <p className="text-meta text-brand-600 mt-1">
+                Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Búsqueda de artículos */}
         <div className="relative">

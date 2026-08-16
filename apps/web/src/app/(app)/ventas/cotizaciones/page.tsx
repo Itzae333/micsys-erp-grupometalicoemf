@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import type {
   NotasCotizacionPage, NotaCotizacion, Cliente, Articulo, ArticulosPage, ConfigColumnasSchema,
 } from '@/lib/types/api';
@@ -39,6 +40,7 @@ const NuevaCotizacionSchema = z.object({
 type NuevaCotizacionForm = z.infer<typeof NuevaCotizacionSchema>;
 
 export default function CotizacionesPage() {
+  useBlockRoles(['VENDEDOR']);
   const router = useRouter();
   const toast = useToast();
   const { usuario } = useAuthStore();

@@ -53,7 +53,7 @@ function AutoCrearPedido({ empresa, onCrear }: { empresa: { id: string } | null;
 }
 
 export default function PedidosPage() {
-  useBlockRoles(['SUPER_USUARIO']);
+  useBlockRoles(['SUPER_USUARIO', 'VENDEDOR']);
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 

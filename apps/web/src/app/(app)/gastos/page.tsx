@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Receipt, Trash2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import type { Gasto, MetodoPago } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function GastosPage() {
+  useBlockRoles(['VENDEDOR']);
   const { usuario } = useAuthStore();
   const canVerListado = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 

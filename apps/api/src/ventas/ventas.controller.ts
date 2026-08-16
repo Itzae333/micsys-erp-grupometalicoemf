@@ -77,7 +77,7 @@ export class VentasController {
   }
 
   @Post('rapida')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Crear y cerrar una venta completa en una sola operación atómica (usado por el flujo offline)' })
   ventaRapida(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -122,7 +122,7 @@ export class VentasController {
   }
 
   @Post(':id/cerrar')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Cerrar/cobrar nota de venta con pagos' })
   cerrar(
     @Headers('x-ubicacion-id') ubicacionId: string,

@@ -1231,12 +1231,12 @@ export default function VentasPage() {
                 Agregar artículos
               </Button>
             )}
-            {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canWrite && (
+            {detalleNota.estatus === 'ABIERTA' && detalleNota.lineas.length > 0 && canAdmin && (
               <Button size="sm" onClick={() => openCobrar(detalleNota)}>
                 Cobrar
               </Button>
             )}
-            {detalleNota.estatus === 'PENDIENTE' && canWrite && (
+            {detalleNota.estatus === 'PENDIENTE' && canAdmin && (
               <Button size="sm" onClick={() => openCobrar(detalleNota)}>
                 Cobrar
               </Button>
@@ -1314,7 +1314,7 @@ export default function VentasPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {notaActiva.lineas.length > 0 && (
+              {canAdmin && notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
                   Cobrar — {formatPrecio(totalPreview)}
                 </Button>
@@ -1527,13 +1527,23 @@ export default function VentasPage() {
                   </span>
                 </div>
                 <div className="px-4 pb-4">
-                  <Button
-                    className="w-full"
-                    disabled={notaActiva.lineas.length === 0}
-                    onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
-                  >
-                    Cobrar {formatPrecio(totalPreview)}
-                  </Button>
+                  {canAdmin ? (
+                    <Button
+                      className="w-full"
+                      disabled={notaActiva.lineas.length === 0}
+                      onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
+                    >
+                      Cobrar {formatPrecio(totalPreview)}
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      disabled={notaActiva.lineas.length === 0}
+                      onClick={() => { setDlgLinea(false); setNotaActiva(null); void loadNotas(); void refreshDetalleNota(); }}
+                    >
+                      Guardar y enviar a caja — folio #{String(notaActiva.folio).padStart(4, '0')}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1552,7 +1562,7 @@ export default function VentasPage() {
             <h1 className="text-display-md font-bold text-steel-900">Notas de Venta</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {usuario?.rol !== 'SUPER_USUARIO' && (
+            {usuario?.rol !== 'SUPER_USUARIO' && !isVendedor && (
               <Button variant="secondary" onClick={() => router.push('/ventas/clientes')}>
                 <Users className="h-4 w-4 mr-1.5" />
                 Clientes
@@ -1560,14 +1570,18 @@ export default function VentasPage() {
             )}
             {canWrite && (
               <>
-                <Button variant="secondary" onClick={() => router.push('/ventas/cotizaciones')}>
-                  <FileText className="h-4 w-4 mr-1.5" />
-                  Cotización
-                </Button>
-                <Button variant="secondary" onClick={() => setDlgVentaRapida(true)}>
-                  <Zap className="h-4 w-4 mr-1.5" />
-                  Venta rápida
-                </Button>
+                {!isVendedor && (
+                  <Button variant="secondary" onClick={() => router.push('/ventas/cotizaciones')}>
+                    <FileText className="h-4 w-4 mr-1.5" />
+                    Cotización
+                  </Button>
+                )}
+                {!isVendedor && (
+                  <Button variant="secondary" onClick={() => setDlgVentaRapida(true)}>
+                    <Zap className="h-4 w-4 mr-1.5" />
+                    Venta rápida
+                  </Button>
+                )}
                 <Button onClick={() => openDlgNota()}>
                   <Plus className="h-4 w-4 mr-1.5" />
                   Nueva venta
@@ -1678,8 +1692,12 @@ export default function VentasPage() {
                       <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Cliente</th>
                       <th className="px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Estatus</th>
                       <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Entrega</th>
-                      <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
-                      <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
+                      {!isVendedor && (
+                        <th className="hidden md:table-cell px-3 py-2 text-left text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Métodos</th>
+                      )}
+                      {!isVendedor && (
+                        <th className="px-4 py-2 text-right text-[10px] font-medium text-steel-500 uppercase tracking-[1.5px]">Total</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-steel-100">
@@ -1760,24 +1778,28 @@ export default function VentasPage() {
                             <EstatusEntregaTag estatus={nota.estatus} estatusEntrega={nota.estatus_entrega} />
                           </td>
                           {/* Métodos de pago — mismo desglose que el corte de caja */}
-                          <td className="hidden md:table-cell px-3 py-2.5 overflow-hidden">
-                            <div className="flex gap-1 flex-wrap">
-                              {pagosVisibles.length > 0 ? (
-                                pagosVisibles.map((p, j) => (
-                                  <span key={j} className="text-[10px] bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                    {METODO_LABEL[p.metodo] ?? p.metodo} {formatPrecio(p.monto)}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-meta text-steel-400">—</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                            <span className="font-semibold text-steel-900">
-                              {formatPrecio(nota.estatus === 'CANCELADA' ? 0 : nota.total)}
-                            </span>
-                          </td>
+                          {!isVendedor && (
+                            <td className="hidden md:table-cell px-3 py-2.5 overflow-hidden">
+                              <div className="flex gap-1 flex-wrap">
+                                {pagosVisibles.length > 0 ? (
+                                  pagosVisibles.map((p, j) => (
+                                    <span key={j} className="text-[10px] bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                      {METODO_LABEL[p.metodo] ?? p.metodo} {formatPrecio(p.monto)}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-meta text-steel-400">—</span>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                          {!isVendedor && (
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                              <span className="font-semibold text-steel-900">
+                                {formatPrecio(nota.estatus === 'CANCELADA' ? 0 : nota.total)}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -1847,6 +1869,14 @@ export default function VentasPage() {
         size="sm"
       >
         <form onSubmit={notaForm.handleSubmit(onCrearNota)} className="space-y-4">
+          {isVendedor ? (
+            <div>
+              <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Cliente</label>
+              <p className="text-body-sm text-steel-500 bg-steel-50 border border-steel-200 rounded-md px-3 py-2">
+                Mostrador (venta sin cliente)
+              </p>
+            </div>
+          ) : (
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
               Cliente <span className="text-steel-400 font-normal">(opcional)</span>
@@ -1904,6 +1934,7 @@ export default function VentasPage() {
               </p>
             )}
           </div>
+          )}
           <div>
             <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Observaciones</label>
             <Input placeholder="Notas internas…" {...notaForm.register('observaciones')} />

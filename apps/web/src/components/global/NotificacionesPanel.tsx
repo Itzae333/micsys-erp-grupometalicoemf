@@ -95,9 +95,9 @@ export function NotificacionesPanel() {
 
       {/* Panel */}
       {open && (
-        <div className="absolute left-full top-0 ml-2 w-80 bg-white rounded-xl shadow-xl border border-steel-200 z-50 overflow-hidden">
+        <div className="absolute left-full bottom-0 ml-2 w-80 max-h-[80vh] flex flex-col bg-white rounded-xl shadow-xl border border-steel-200 z-50 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-steel-100">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-steel-100 flex-shrink-0">
             <span className="text-body-sm font-semibold text-steel-900">
               Notificaciones {total > 0 && <span className="text-red-500">({total})</span>}
             </span>
@@ -121,7 +121,7 @@ export function NotificacionesPanel() {
           </div>
 
           {/* Contenido */}
-          <div className="max-h-96 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {loading && !data ? (
               <div className="p-6 text-center text-body-sm text-steel-400">Cargando…</div>
             ) : !data || data.alertas.length === 0 ? (
