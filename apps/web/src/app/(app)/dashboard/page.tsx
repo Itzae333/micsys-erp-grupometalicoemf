@@ -6,6 +6,7 @@ import { api } from '@/lib/api/client';
 import { StatCard } from '@/components/ui/stat-card';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
+import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import type {
   DashboardData,
   DashboardEncargadoData,
@@ -48,6 +49,7 @@ const fmtDia = (iso: string) => {
 };
 
 export default function DashboardPage() {
+  useBlockRoles(['VENDEDOR'], '/ventas');
   const { usuario } = useAuthStore();
   const { ubicacion } = useContextoStore();
   const isSuperUsuario = usuario?.rol === 'SUPER_USUARIO';

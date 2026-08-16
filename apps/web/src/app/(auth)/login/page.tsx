@@ -98,6 +98,13 @@ function LoginPageContent() {
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({ resolver: zodResolver(LoginSchema) });
 
+  // El vendedor solo trabaja en Ventas — no tiene Dashboard en el menú, así
+  // que lo mandamos directo ahí en vez de a /dashboard (que igual lo
+  // rebotaría, pero mostrando un parpadeo de esa pantalla primero).
+  function destinoPorDefecto(): string {
+    return useAuthStore.getState().usuario?.rol === 'VENDEDOR' ? '/ventas' : '/dashboard';
+  }
+
   function goToDestination(me: MeResponse) {
     if (me.empresa && me.ubicaciones.length > 0) {
       setContexto(
@@ -120,12 +127,12 @@ function LoginPageContent() {
           telefono: me.ubicaciones[0].ubicacion.telefono,
         },
       );
-      router.push(redirectTo ?? '/dashboard');
+      router.push(redirectTo ?? destinoPorDefecto());
     } else if (me.empresa) {
       // Sin ubicaciones asignadas → ir al selector de contexto
       router.push('/seleccionar-contexto');
     } else {
-      router.push(redirectTo ?? '/dashboard');
+      router.push(redirectTo ?? destinoPorDefecto());
     }
   }
 
@@ -207,7 +214,7 @@ function LoginPageContent() {
         return;
       }
       setAuth(offlineCandidate.usuario, offlineCandidate.accessToken);
-      router.push(redirectTo ?? '/dashboard');
+      router.push(redirectTo ?? destinoPorDefecto());
     } finally {
       setVerificandoOffline(false);
     }

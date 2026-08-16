@@ -1195,7 +1195,9 @@ export default function VentasPage() {
                     <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
                     <th className="text-right px-3 py-2.5 font-medium text-steel-600">Cant</th>
                     <th className="text-right px-3 py-2.5 font-medium text-steel-600">Precio</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
+                    {!isVendedor && (
+                      <th className="text-right px-4 py-2.5 font-medium text-steel-600">Sub</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-steel-100">
@@ -1209,17 +1211,21 @@ export default function VentasPage() {
                         </td>
                         <td className="px-3 py-2.5 text-right text-steel-700">{l.cantidad}</td>
                         <td className="px-3 py-2.5 text-right text-steel-700">{formatPrecio(l.precio_unitario)}</td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
+                        {!isVendedor && (
+                          <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{formatPrecio(l.subtotal)}</td>
+                        )}
                       </tr>
                     );
                   })}
                 </tbody>
-                <tfoot className="border-t-2 border-steel-200 bg-steel-50">
-                  <tr>
-                    <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
-                    <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
-                  </tr>
-                </tfoot>
+                {!isVendedor && (
+                  <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
+                      <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
@@ -1257,7 +1263,7 @@ export default function VentasPage() {
                 Cancelar
               </Button>
             )}
-            {detalleNota.estatus === 'CREDITO' && canWrite && (
+            {detalleNota.estatus === 'CREDITO' && canAdmin && (
               <Button size="sm" className="bg-amber-500 hover:bg-amber-600 border-amber-500" onClick={() => openAbonar(detalleNota)}>
                 Abonar
               </Button>

@@ -70,7 +70,7 @@ export default function SeleccionarContextoPage() {
         cp: ub.cp,
       },
     );
-    router.replace('/dashboard');
+    router.replace(usuario?.rol === 'VENDEDOR' ? '/ventas' : '/dashboard');
   }
 
   return (

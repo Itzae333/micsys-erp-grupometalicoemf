@@ -164,7 +164,7 @@ export class VentasController {
   }
 
   @Post(':id/abonar')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Registrar abono en una nota con estatus CRÉDITO' })
   abonar(
     @Headers('x-ubicacion-id') ubicacionId: string,
