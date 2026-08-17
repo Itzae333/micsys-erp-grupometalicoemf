@@ -63,7 +63,7 @@ export class RemisionesController {
   }
 
   @Post()
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Crear remisión en BORRADOR' })
   crear(
     @Body() dto: CreateRemisionDto,
@@ -73,7 +73,7 @@ export class RemisionesController {
   }
 
   @Patch(':id/enviar')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
   @ApiOperation({ summary: 'Enviar remisión → EN_TRANSITO (descuenta origen)' })
   enviar(
     @Param('id') id: string,

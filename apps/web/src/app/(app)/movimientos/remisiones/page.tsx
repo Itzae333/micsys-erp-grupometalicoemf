@@ -80,7 +80,7 @@ export default function RemisionesPage() {
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
-  const canCreate = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canCreate = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   // "Todas" muestra remisiones de todas las ubicaciones de la empresa —
   // solo tiene sentido para quien administra toda la empresa, no para un
   // encargado/almacenista/vendedor limitado a su propia ubicación.
