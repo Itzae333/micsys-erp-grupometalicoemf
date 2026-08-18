@@ -31,7 +31,7 @@ interface GastoCorte {
   id: string; concepto: string; categoria: string; monto: number;
   metodo_pago: string; usuario: string; created_at: string;
 }
-interface PagoCreditoDetalle { folio: number; metodo: string; monto: number; fecha: string; }
+interface PagoCreditoDetalle { folio: number; metodo: string; monto: number; cambio: number; total: number; fecha: string; }
 interface PagoCreditoPorUsuario {
   usuario_id: string;
   nombre: string;
@@ -582,21 +582,31 @@ export default function CorteCajaPage() {
                       <tr className="bg-steel-50 border-b border-steel-200">
                         <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Folio</th>
                         <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Cambio</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {pagosCredito.detalle.map((p, i) => (
                         <tr key={`${p.folio}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
                           <td className="px-4 py-2.5 font-mono font-semibold text-steel-700">#{String(p.folio).padStart(4, '0')}</td>
-                          <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[p.metodo] ?? p.metodo}</td>
-                          <td className="px-4 py-2.5 text-right font-semibold text-emerald-600">{fmt(p.monto)}</td>
+                          <td className="px-4 py-2.5 text-steel-500">
+                            <span className="text-xs bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded">
+                              {METODO_LABEL[p.metodo] ?? p.metodo} {fmt(p.monto)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs text-steel-400">
+                            {p.cambio > 0 ? (
+                              <span className="text-amber-600 font-medium">{fmt(p.cambio)}</span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-steel-900">{fmt(p.total)}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="bg-steel-900">
-                        <td colSpan={2} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
+                        <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL PAGOS DE CREDITO</td>
                         <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(pagosCredito.total)}</td>
                       </tr>
                     </tfoot>

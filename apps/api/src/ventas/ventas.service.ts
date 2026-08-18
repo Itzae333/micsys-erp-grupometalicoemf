@@ -10,6 +10,18 @@ import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, Cancela
 import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 import { inicioDiaMx, finDiaMx, restarDiasHabilesMx } from '../common/utils/fecha-mx';
 
+// Fila del desglose de "Pagos de crédito" en el corte de caja: monto tal cual
+// se recibió (bruto), cambio aparte y total de la nota — misma estructura que
+// "Notas de Venta" (ver VentasService.getCorteCaja).
+export interface DetalleCredito {
+  folio: number;
+  metodo: string;
+  monto: number;
+  cambio: number;
+  total: number;
+  fecha: Date;
+}
+
 const NOTA_INCLUDE = {
   cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, limite_credito: true, saldo_pendiente: true, precio_num: true } },
   usuario: { select: { id: true, nombre: true, apellidos: true } },
@@ -1239,7 +1251,7 @@ export class VentasService {
       this.prisma.pago.findMany({
         where: wherePagosCredito,
         orderBy: { created_at: 'asc' },
-        include: { nota: { select: { folio: true } } },
+        include: { nota: { select: { folio: true, total: true } } },
       }),
       this.prisma.movimientoCuenta.findMany({
         where: whereMovimientosAbono,
@@ -1409,19 +1421,39 @@ export class VentasService {
       });
     }
 
+    // El detalle que se muestra en el corte debe verse igual que en "Notas de
+    // Venta": el monto de cada método tal cual se recibió (bruto), el cambio
+    // aparte, y el total de la nota — no un solo número ya neteado. Los
+    // totales agregados (metodoPagosCredito/total_entregar_efectivo) sí se
+    // siguen quedando en neto, porque de eso depende cuánto efectivo debe
+    // haber en caja.
+
     const abonoRealPorNota = new Map<string, number>();
     for (const mov of movimientosAbono) {
       if (!mov.nota_id) continue;
       abonoRealPorNota.set(mov.nota_id, +((abonoRealPorNota.get(mov.nota_id) ?? 0) + Number(mov.monto)).toFixed(2));
     }
 
-    const pagosCreditoPorNota = new Map<string, { folio: number; metodo: string; monto: number; fecha: Date }[]>();
+    const pagosCreditoPorNota = new Map<string, { folio: number; metodo: string; monto: number; fecha: Date; total: number }[]>();
     for (const p of pagosCredito) {
       if (!pagosCreditoPorNota.has(p.nota_id)) pagosCreditoPorNota.set(p.nota_id, []);
-      pagosCreditoPorNota.get(p.nota_id)!.push({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at });
+      pagosCreditoPorNota.get(p.nota_id)!.push({
+        folio: p.nota.folio,
+        metodo: p.metodo as string,
+        monto: Number(p.monto),
+        fecha: p.created_at,
+        total: Number(p.nota.total),
+      });
     }
 
-    const pagosCreditoNetos: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
+    const metodoPagosCredito: Record<string, { count: number; total: number }> = {
+      EFECTIVO:     { count: 0, total: 0 },
+      TARJETA:      { count: 0, total: 0 },
+      TRANSFERENCIA:{ count: 0, total: 0 },
+      DEPOSITO:     { count: 0, total: 0 },
+    };
+    let totalPagosCredito = 0;
+    const detalleCreditoAntiguo: DetalleCredito[] = [];
     for (const [notaId, grupo] of pagosCreditoPorNota) {
       const nonCash = grupo.filter((p) => p.metodo !== 'EFECTIVO').reduce((s, p) => s + p.monto, 0);
       const hasEfectivo = grupo.some((p) => p.metodo === 'EFECTIVO');
@@ -1434,22 +1466,18 @@ export class VentasService {
         : abonoReal !== undefined
         ? Math.max(0, +(abonoReal - nonCash).toFixed(2))
         : grupo.filter((p) => p.metodo === 'EFECTIVO').reduce((s, p) => s + p.monto, 0);
-      pagosCreditoNetos.push(...repartirEfectivoNeto(grupo, efectivoNeto));
-    }
+      const netos = repartirEfectivoNeto(grupo, efectivoNeto);
+      grupo.forEach((bruto, i) => {
+        const neto = netos[i].monto;
+        const cambio = +(bruto.monto - neto).toFixed(2);
+        detalleCreditoAntiguo.push({ folio: bruto.folio, metodo: bruto.metodo, monto: bruto.monto, cambio, total: bruto.total, fecha: bruto.fecha });
 
-    const metodoPagosCredito: Record<string, { count: number; total: number }> = {
-      EFECTIVO:     { count: 0, total: 0 },
-      TARJETA:      { count: 0, total: 0 },
-      TRANSFERENCIA:{ count: 0, total: 0 },
-      DEPOSITO:     { count: 0, total: 0 },
-    };
-    let totalPagosCredito = 0;
-    for (const pago of pagosCreditoNetos) {
-      const m = pago.metodo;
-      if (!metodoPagosCredito[m]) metodoPagosCredito[m] = { count: 0, total: 0 };
-      metodoPagosCredito[m].count++;
-      metodoPagosCredito[m].total = +(metodoPagosCredito[m].total + pago.monto).toFixed(2);
-      totalPagosCredito = +(totalPagosCredito + pago.monto).toFixed(2);
+        const m = bruto.metodo;
+        if (!metodoPagosCredito[m]) metodoPagosCredito[m] = { count: 0, total: 0 };
+        metodoPagosCredito[m].count++;
+        metodoPagosCredito[m].total = +(metodoPagosCredito[m].total + neto).toFixed(2);
+        totalPagosCredito = +(totalPagosCredito + neto).toFixed(2);
+      });
     }
 
     // A petición del negocio: si una nota queda a CREDITO el mismo día de la
@@ -1462,16 +1490,18 @@ export class VentasService {
     // abajo): no se suma a `metodoPagosCredito`/`totalPagosCredito`, que se
     // siguen usando sin cambios para total_entregar_efectivo, porque ese
     // dinero ya quedó contado en `metodos` vía el loop principal de notas.
-    const detalleCreditoMismoDia: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
+    const detalleCreditoMismoDia: DetalleCredito[] = [];
     for (const nota of notas) {
       if (nota.estatus !== 'CREDITO') continue;
+      const notaTotal = Number(nota.total);
       const pagosNota = nota.pagos
         .filter((p) => !p.origen_anticipo_pedido)
         .map((p) => ({ metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at }));
       const netos = repartirEfectivoNeto(pagosNota, efectivoRealPorNota.get(nota.id) ?? 0);
-      for (const p of netos) {
-        detalleCreditoMismoDia.push({ folio: nota.folio, metodo: p.metodo, monto: p.monto, fecha: p.fecha });
-      }
+      pagosNota.forEach((bruto, i) => {
+        const cambio = +(bruto.monto - netos[i].monto).toFixed(2);
+        detalleCreditoMismoDia.push({ folio: nota.folio, metodo: bruto.metodo, monto: bruto.monto, cambio, total: notaTotal, fecha: bruto.fecha });
+      });
     }
 
     const metodoPagosCreditoDisplay: Record<string, { count: number; total: number }> = {};
@@ -1480,14 +1510,15 @@ export class VentasService {
     }
     let totalPagosCreditoDisplay = totalPagosCredito;
     for (const item of detalleCreditoMismoDia) {
+      const netoItem = +(item.monto - item.cambio).toFixed(2);
       if (!metodoPagosCreditoDisplay[item.metodo]) metodoPagosCreditoDisplay[item.metodo] = { count: 0, total: 0 };
       metodoPagosCreditoDisplay[item.metodo].count++;
-      metodoPagosCreditoDisplay[item.metodo].total = +(metodoPagosCreditoDisplay[item.metodo].total + item.monto).toFixed(2);
-      totalPagosCreditoDisplay = +(totalPagosCreditoDisplay + item.monto).toFixed(2);
+      metodoPagosCreditoDisplay[item.metodo].total = +(metodoPagosCreditoDisplay[item.metodo].total + netoItem).toFixed(2);
+      totalPagosCreditoDisplay = +(totalPagosCreditoDisplay + netoItem).toFixed(2);
     }
 
     const detalleCreditoCombinado = [
-      ...pagosCreditoNetos,
+      ...detalleCreditoAntiguo,
       ...detalleCreditoMismoDia,
     ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
 
@@ -1555,12 +1586,7 @@ export class VentasService {
       // total de la nota — si no, una nota a crédito con pago parcial en
       // efectivo se mostraría como si se hubiera cobrado el total completo.
       const baseHoy = Math.min(totalEsperadoHoy, sumTodos);
-
-      const nonCash = pagosHoy
-        .filter((p) => p.metodo !== 'EFECTIVO')
-        .reduce((s, p) => s + Number(p.monto), 0);
       const cambio = Math.max(0, +(sumTodos - baseHoy).toFixed(2));
-      const efectivoReal = Math.max(0, +(baseHoy - nonCash).toFixed(2));
 
       return {
         id: n.id,
@@ -1572,9 +1598,15 @@ export class VentasService {
         cliente: n.cliente
           ? { nombre: [n.cliente.nombre, n.cliente.apellidos].filter(Boolean).join(' ') || n.cliente.razon_social || 'MOSTRADOR' }
           : { nombre: 'MOSTRADOR' },
+        // A petición del negocio: se muestra el monto tal cual se recibió
+        // (bruto) — igual que en "Pagos de crédito" — porque el cambio ya se
+        // ve aparte en el campo `cambio` de la nota; netear aquí también
+        // duplicaría la resta. El efectivo neto real (para reconciliación de
+        // caja) sigue viviendo en `metodos`/`total_entregar_efectivo` y en
+        // `efectivoRealPorNota` (ver `porUsuarioMap` más abajo), no aquí.
         pagos: pagosHoy.map((p) => ({
           metodo: p.metodo,
-          monto: p.metodo === 'EFECTIVO' ? efectivoReal : Number(p.monto),
+          monto: Number(p.monto),
         })),
         pedido_origen: n.pedido_origen
           ? { folio: n.pedido_origen.folio, primer_anticipo: n.pedido_origen.anticipos[0]?.created_at ?? null }
@@ -1603,7 +1635,11 @@ export class VentasService {
       }
       const grupo = porUsuarioMap.get(usuarioId)!;
       grupo.notas.push(notasMapeadas[i]);
-      const efectivoNota = notasMapeadas[i].pagos.find((p) => p.metodo === 'EFECTIVO')?.monto ?? 0;
+      // `pagos[].monto` ahora es el bruto recibido (para que se vea igual que
+      // en "Pagos de crédito") — el neto real para reconciliación de caja
+      // sigue en `efectivoRealPorNota`, calculado una sola vez en el loop
+      // principal de notas.
+      const efectivoNota = efectivoRealPorNota.get(n.id) ?? 0;
       grupo.total_efectivo = +(grupo.total_efectivo + efectivoNota).toFixed(2);
     });
     const porUsuario = Array.from(porUsuarioMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
