@@ -525,7 +525,11 @@ function buildEscPosBuffer(ticket) {
       } else {
         for (const p of ticket.pagos_credito.detalle) {
           const folioStr = 'N' + String(p.folio).padStart(5, '0');
-          push(dotRow(folioStr, '$' + formatMoney(Number(p.monto)) + '  ' + norm(p.metodo ?? '')));
+          // p.monto es el bruto recibido (para que coincida con el desglose en
+          // pantalla) — lo que de verdad quedó en caja de esta línea es
+          // monto - cambio devuelto (ver VentasService.getCorteCaja).
+          const neto = Number(p.monto) - Number(p.cambio ?? 0);
+          push(dotRow(folioStr, '$' + formatMoney(neto) + '  ' + norm(p.metodo ?? '')));
         }
         push(sep('-'));
       }
