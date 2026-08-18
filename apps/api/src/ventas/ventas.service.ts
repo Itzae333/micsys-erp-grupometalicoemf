@@ -1387,11 +1387,15 @@ export class VentasService {
     // devuelve cambio en mano — igual que en una venta normal. `pago.monto`
     // siempre guarda el bruto entregado (ver VentasService.abonar), así que
     // sumarlo tal cual infla el "efectivo a entregar" con dinero que ya salió
-    // de caja como cambio. Postgres resuelve now() una sola vez por
-    // transacción: los `Pago` y el `MovimientoCuenta` de un mismo abonar()
-    // comparten el mismo created_at, así que (nota_id + created_at) los junta
-    // en el mismo "evento" para poder netear contra `abonoReal` (lo que de
-    // verdad se aplicó a la deuda, ya capado en abonar()).
+    // de caja como cambio.
+    //
+    // Se netea por NOTA (no por evento/timestamp exacto): probado en datos
+    // reales que el Pago y el MovimientoCuenta de una misma llamada a
+    // abonar() NO comparten created_at exacto (difieren varios ms), así que
+    // no se puede usar como llave de correlación. Sumar `abonoReal` (ya
+    // capado individualmente por abonar() a lo que en verdad se debía) contra
+    // el total no-efectivo de la nota en el rango sí es correcto en agregado,
+    // sin importar cuántos abonos separados haya habido.
     function repartirEfectivoNeto<T extends { metodo: string; monto: number }>(
       pagosGrupo: T[],
       efectivoNeto: number,
@@ -1405,25 +1409,23 @@ export class VentasService {
       });
     }
 
-    const abonoRealPorEvento = new Map<string, number>();
+    const abonoRealPorNota = new Map<string, number>();
     for (const mov of movimientosAbono) {
       if (!mov.nota_id) continue;
-      const key = `${mov.nota_id}|${mov.created_at.getTime()}`;
-      abonoRealPorEvento.set(key, +((abonoRealPorEvento.get(key) ?? 0) + Number(mov.monto)).toFixed(2));
+      abonoRealPorNota.set(mov.nota_id, +((abonoRealPorNota.get(mov.nota_id) ?? 0) + Number(mov.monto)).toFixed(2));
     }
 
-    const pagosCreditoPorEvento = new Map<string, { folio: number; metodo: string; monto: number; fecha: Date }[]>();
+    const pagosCreditoPorNota = new Map<string, { folio: number; metodo: string; monto: number; fecha: Date }[]>();
     for (const p of pagosCredito) {
-      const key = `${p.nota_id}|${p.created_at.getTime()}`;
-      if (!pagosCreditoPorEvento.has(key)) pagosCreditoPorEvento.set(key, []);
-      pagosCreditoPorEvento.get(key)!.push({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at });
+      if (!pagosCreditoPorNota.has(p.nota_id)) pagosCreditoPorNota.set(p.nota_id, []);
+      pagosCreditoPorNota.get(p.nota_id)!.push({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at });
     }
 
     const pagosCreditoNetos: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
-    for (const [key, grupo] of pagosCreditoPorEvento) {
+    for (const [notaId, grupo] of pagosCreditoPorNota) {
       const nonCash = grupo.filter((p) => p.metodo !== 'EFECTIVO').reduce((s, p) => s + p.monto, 0);
       const hasEfectivo = grupo.some((p) => p.metodo === 'EFECTIVO');
-      const abonoReal = abonoRealPorEvento.get(key);
+      const abonoReal = abonoRealPorNota.get(notaId);
       // Si por lo que sea no hay MovimientoCuenta correlacionado (dato previo
       // a este campo, o abono sin cliente), se cae al monto bruto para no
       // perder el registro — mejor mostrar de más que perder el pago.
@@ -1431,7 +1433,7 @@ export class VentasService {
         ? 0
         : abonoReal !== undefined
         ? Math.max(0, +(abonoReal - nonCash).toFixed(2))
-        : grupo.find((p) => p.metodo === 'EFECTIVO')!.monto;
+        : grupo.filter((p) => p.metodo === 'EFECTIVO').reduce((s, p) => s + p.monto, 0);
       pagosCreditoNetos.push(...repartirEfectivoNeto(grupo, efectivoNeto));
     }
 
