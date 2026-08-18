@@ -275,7 +275,7 @@ export default function NotaDetallePage() {
   }
 
   async function onCobrar() {
-    if (!nota) return;
+    if (!nota || cobrando) return;
     setCobrando(true);
     setCobrandoError(null);
     try {

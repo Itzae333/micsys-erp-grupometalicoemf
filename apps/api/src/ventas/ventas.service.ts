@@ -1267,6 +1267,10 @@ export class VentasService {
     // ni para el efectivo a entregar (ver validarPagosAdministrativos).
     const pagosAdministrativos: { folio: number; monto: number; referencia: string | null; fecha: Date }[] = [];
 
+    // Efectivo neto (ya sin el cambio devuelto) por nota — se reutiliza más
+    // abajo para netear el desglose de "pagos de crédito" del mismo día.
+    const efectivoRealPorNota = new Map<string, number>();
+
     for (const nota of notas) {
       const est = nota.estatus as string;
       if (!porEstatus[est]) porEstatus[est] = { count: 0, total: 0 };
@@ -1321,6 +1325,7 @@ export class VentasService {
 
       const hasEfectivo = pagosHoy.some((p) => p.metodo === 'EFECTIVO');
       const efectivoReal = hasEfectivo ? Math.max(0, +(baseHoy - nonCashSum).toFixed(2)) : 0;
+      efectivoRealPorNota.set(nota.id, efectivoReal);
 
       if (hasEfectivo) {
         metodos['EFECTIVO'].count++;
@@ -1378,6 +1383,58 @@ export class VentasService {
     }
     const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
 
+    // Cuando un abono se paga con más efectivo del que hacía falta, se
+    // devuelve cambio en mano — igual que en una venta normal. `pago.monto`
+    // siempre guarda el bruto entregado (ver VentasService.abonar), así que
+    // sumarlo tal cual infla el "efectivo a entregar" con dinero que ya salió
+    // de caja como cambio. Postgres resuelve now() una sola vez por
+    // transacción: los `Pago` y el `MovimientoCuenta` de un mismo abonar()
+    // comparten el mismo created_at, así que (nota_id + created_at) los junta
+    // en el mismo "evento" para poder netear contra `abonoReal` (lo que de
+    // verdad se aplicó a la deuda, ya capado en abonar()).
+    function repartirEfectivoNeto<T extends { metodo: string; monto: number }>(
+      pagosGrupo: T[],
+      efectivoNeto: number,
+    ): T[] {
+      let restante = efectivoNeto;
+      return pagosGrupo.map((p) => {
+        if (p.metodo !== 'EFECTIVO') return p;
+        const asignado = Math.max(0, Math.min(p.monto, restante));
+        restante = +(restante - asignado).toFixed(2);
+        return { ...p, monto: asignado };
+      });
+    }
+
+    const abonoRealPorEvento = new Map<string, number>();
+    for (const mov of movimientosAbono) {
+      if (!mov.nota_id) continue;
+      const key = `${mov.nota_id}|${mov.created_at.getTime()}`;
+      abonoRealPorEvento.set(key, +((abonoRealPorEvento.get(key) ?? 0) + Number(mov.monto)).toFixed(2));
+    }
+
+    const pagosCreditoPorEvento = new Map<string, { folio: number; metodo: string; monto: number; fecha: Date }[]>();
+    for (const p of pagosCredito) {
+      const key = `${p.nota_id}|${p.created_at.getTime()}`;
+      if (!pagosCreditoPorEvento.has(key)) pagosCreditoPorEvento.set(key, []);
+      pagosCreditoPorEvento.get(key)!.push({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at });
+    }
+
+    const pagosCreditoNetos: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
+    for (const [key, grupo] of pagosCreditoPorEvento) {
+      const nonCash = grupo.filter((p) => p.metodo !== 'EFECTIVO').reduce((s, p) => s + p.monto, 0);
+      const hasEfectivo = grupo.some((p) => p.metodo === 'EFECTIVO');
+      const abonoReal = abonoRealPorEvento.get(key);
+      // Si por lo que sea no hay MovimientoCuenta correlacionado (dato previo
+      // a este campo, o abono sin cliente), se cae al monto bruto para no
+      // perder el registro — mejor mostrar de más que perder el pago.
+      const efectivoNeto = !hasEfectivo
+        ? 0
+        : abonoReal !== undefined
+        ? Math.max(0, +(abonoReal - nonCash).toFixed(2))
+        : grupo.find((p) => p.metodo === 'EFECTIVO')!.monto;
+      pagosCreditoNetos.push(...repartirEfectivoNeto(grupo, efectivoNeto));
+    }
+
     const metodoPagosCredito: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
       TARJETA:      { count: 0, total: 0 },
@@ -1385,34 +1442,33 @@ export class VentasService {
       DEPOSITO:     { count: 0, total: 0 },
     };
     let totalPagosCredito = 0;
-    for (const pago of pagosCredito) {
-      const m = pago.metodo as string;
-      const monto = Number(pago.monto);
+    for (const pago of pagosCreditoNetos) {
+      const m = pago.metodo;
       if (!metodoPagosCredito[m]) metodoPagosCredito[m] = { count: 0, total: 0 };
       metodoPagosCredito[m].count++;
-      metodoPagosCredito[m].total = +(metodoPagosCredito[m].total + monto).toFixed(2);
-      totalPagosCredito = +(totalPagosCredito + monto).toFixed(2);
+      metodoPagosCredito[m].total = +(metodoPagosCredito[m].total + pago.monto).toFixed(2);
+      totalPagosCredito = +(totalPagosCredito + pago.monto).toFixed(2);
     }
 
     // A petición del negocio: si una nota queda a CREDITO el mismo día de la
     // venta y ese mismo día se le hicieron abonos (varios depósitos, etc.),
     // esos pagos también se muestran en el apartado "Pagos de crédito" del
-    // corte — aunque la nota no venga de un día anterior. Esto es solo para
-    // el desglose de ESTE apartado (metodoPagosCreditoDisplay/detalle de
+    // corte — aunque la nota no venga de un día anterior. El efectivo se
+    // netea con `efectivoRealPorNota` (mismo cálculo que ya usa `metodos` más
+    // arriba) para no volver a inflarse con el cambio devuelto. Esto es solo
+    // para el desglose de ESTE apartado (metodoPagosCreditoDisplay/detalle de
     // abajo): no se suma a `metodoPagosCredito`/`totalPagosCredito`, que se
     // siguen usando sin cambios para total_entregar_efectivo, porque ese
     // dinero ya quedó contado en `metodos` vía el loop principal de notas.
     const detalleCreditoMismoDia: { folio: number; metodo: string; monto: number; fecha: Date }[] = [];
     for (const nota of notas) {
       if (nota.estatus !== 'CREDITO') continue;
-      for (const pago of nota.pagos) {
-        if (pago.origen_anticipo_pedido) continue;
-        detalleCreditoMismoDia.push({
-          folio: nota.folio,
-          metodo: pago.metodo as string,
-          monto: Number(pago.monto),
-          fecha: pago.created_at,
-        });
+      const pagosNota = nota.pagos
+        .filter((p) => !p.origen_anticipo_pedido)
+        .map((p) => ({ metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at }));
+      const netos = repartirEfectivoNeto(pagosNota, efectivoRealPorNota.get(nota.id) ?? 0);
+      for (const p of netos) {
+        detalleCreditoMismoDia.push({ folio: nota.folio, metodo: p.metodo, monto: p.monto, fecha: p.fecha });
       }
     }
 
@@ -1429,7 +1485,7 @@ export class VentasService {
     }
 
     const detalleCreditoCombinado = [
-      ...pagosCredito.map((p) => ({ folio: p.nota.folio, metodo: p.metodo as string, monto: Number(p.monto), fecha: p.created_at })),
+      ...pagosCreditoNetos,
       ...detalleCreditoMismoDia,
     ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
 

@@ -920,7 +920,7 @@ export default function VentasPage() {
   }
 
   async function onAbonar() {
-    if (!dlgAbonar) return;
+    if (!dlgAbonar || abonando) return;
     setAbonando(true);
     setAbonandoError(null);
     try {
@@ -981,7 +981,7 @@ export default function VentasPage() {
   }
 
   async function onCobrar() {
-    if (!notaActiva) return;
+    if (!notaActiva || cobrando) return;
     setCobrando(true);
     setCobrandoError(null);
 
