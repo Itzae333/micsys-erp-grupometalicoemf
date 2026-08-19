@@ -71,6 +71,7 @@ interface CorteCajaData {
   total_cobrado: number;
   total_gastos: number;
   total_gastos_efectivo: number;
+  total_gastos_efectivo_credito?: number;
   total_neto: number;
   total_entregar_efectivo: number;
   por_metodo: Record<string, MetodoResumen>;
@@ -220,6 +221,7 @@ export default function CorteCajaPage() {
           total_cobrado: data.total_cobrado,
           total_gastos: data.total_gastos,
           total_gastos_efectivo: data.total_gastos_efectivo ?? data.total_gastos,
+          total_gastos_efectivo_credito: data.total_gastos_efectivo_credito ?? 0,
           total_neto: data.total_neto,
           total_entregar_efectivo: data.total_entregar_efectivo ?? data.por_metodo?.['EFECTIVO']?.total ?? 0,
           // EMFIMIFAR pidió que el ticket resalte el efectivo arriba en vez de "Total
@@ -427,7 +429,11 @@ export default function CorteCajaPage() {
         // Separado solo para mostrar en pantalla: cuánto de ese efectivo viene de
         // ventas del día vs. de pagos de crédito cobrados hoy — la suma de los dos
         // siempre da total_entregar_efectivo (el dato real sigue siendo uno solo).
-        const entregarCreditoEfectivo = pagosCredito.por_metodo?.['EFECTIVO']?.total ?? 0;
+        // Los gastos categoría "Entrega Efectivo Pagos de Credito" (EMFIMIFAR) se
+        // descuentan aquí, del bloque de créditos, en vez del de ventas.
+        const entregarCreditoEfectivo = +(
+          (pagosCredito.por_metodo?.['EFECTIVO']?.total ?? 0) - (data.total_gastos_efectivo_credito ?? 0)
+        ).toFixed(2);
         const entregarVentasEfectivo = +(totalEntregarEfectivo - entregarCreditoEfectivo).toFixed(2);
         return (
         <>

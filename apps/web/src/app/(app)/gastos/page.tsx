@@ -4,12 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { Receipt, Trash2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
+import { useContextoStore } from '@/lib/store/contexto.store';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import type { Gasto, MetodoPago } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 
-const CATEGORIAS = ['Limpieza', 'Servicios', 'Papelería', 'Mantenimiento', 'Entrega de Efectivo', 'Otro'];
+const CATEGORIAS_BASE = ['Limpieza', 'Servicios', 'Papelería', 'Mantenimiento', 'Entrega de Efectivo', 'Otro'];
+// EMFIMIFAR: efectivo entregado que en realidad viene de pagos de crédito cobrados hoy
+// (no de las ventas del día) — descuenta del bloque "Entregar Créditos" del corte de
+// caja en vez del de "Entregar Ventas" (ver VentasService.getCorteCaja).
+const CATEGORIA_ENTREGA_CREDITO = 'Entrega Efectivo Pagos de Credito';
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta',
   TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito',
@@ -23,9 +29,14 @@ const TODAY = new Date().toISOString().slice(0, 10);
 export default function GastosPage() {
   useBlockRoles(['VENDEDOR']);
   const { usuario } = useAuthStore();
+  const { empresa } = useContextoStore();
   const canVerListado = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
-  const [categoria, setCategoria] = useState(CATEGORIAS[0]);
+  const categorias = empresa?.id === EMPRESA_EMFIMIFAR_ID
+    ? [...CATEGORIAS_BASE.slice(0, -1), CATEGORIA_ENTREGA_CREDITO, 'Otro']
+    : CATEGORIAS_BASE;
+
+  const [categoria, setCategoria] = useState(CATEGORIAS_BASE[0]);
   const [categoriaOtro, setCategoriaOtro] = useState('');
   const [concepto, setConcepto] = useState('');
   const [monto, setMonto] = useState(0);
@@ -111,7 +122,7 @@ export default function GastosPage() {
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
             >
-              {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+              {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>

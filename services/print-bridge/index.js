@@ -451,10 +451,22 @@ function buildEscPosBuffer(ticket) {
       }
       push(dotRow((indent ? '  ' : '') + folioStr, '$' + formatMoney(Number(n.total)) + (mLabel ? '  ' + mLabel : '')));
       if (desglosarMultipago && esMultipago) {
+        // n.pagos trae el efectivo bruto (tal cual se recibió); el cambio se
+        // devuelve en efectivo, así que aquí sí hay que netearlo para que la
+        // suma de las líneas impresas cuadre con n.total (en pantalla no hace
+        // falta porque el cambio se muestra en su propia columna).
+        let cambioRestante = Number(n.cambio ?? 0);
         for (const p of n.pagos) {
           if (!(Number(p.monto) > 0)) continue;
+          let monto = Number(p.monto);
+          if (p.metodo === 'EFECTIVO' && cambioRestante > 0) {
+            const descuento = Math.min(monto, cambioRestante);
+            monto -= descuento;
+            cambioRestante -= descuento;
+            if (!(monto > 0)) continue;
+          }
           const metodoLbl = norm(METODO_LABELS[p.metodo] ?? p.metodo ?? '');
-          push(dotRow((indent ? '    - ' : '  - ') + metodoLbl, '$' + formatMoney(Number(p.monto))));
+          push(dotRow((indent ? '    - ' : '  - ') + metodoLbl, '$' + formatMoney(monto)));
         }
       }
     };
@@ -505,12 +517,16 @@ function buildEscPosBuffer(ticket) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('PAGOS DE CREDITO'), CMD.BOLD_OFF);
       push(sep('-'));
-      for (const m of METODOS) {
-        const res = ticket.pagos_credito.por_metodo?.[m] ?? { count: 0, total: 0 };
-        if (res.count === 0) continue;
-        push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
+      if (!ticket.resaltar_efectivo) {
+        // EMFIMIFAR: el desglose por método (Efectivo (3)...) es redundante con
+        // los montos que ya aparecen en el detalle de abajo — se omite ahí.
+        for (const m of METODOS) {
+          const res = ticket.pagos_credito.por_metodo?.[m] ?? { count: 0, total: 0 };
+          if (res.count === 0) continue;
+          push(dotRow('  ' + norm(METODO_LABELS[m] ?? m) + ' (' + res.count + ')', '$' + formatMoney(Number(res.total))));
+        }
+        push(sep('-'));
       }
-      push(sep('-'));
       if (ticket.pagos_credito.por_usuario && ticket.pagos_credito.por_usuario.length > 0) {
         // Metálicos Lyeva: agrupado por quién cobró el abono.
         for (const grupo of ticket.pagos_credito.por_usuario) {
@@ -632,7 +648,23 @@ function buildEscPosBuffer(ticket) {
 
     push(sep('='));
     push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
-    push(dotRow('A ENTREGAR (EFECTIVO)', '$' + formatMoney(Number(ticket.total_entregar_efectivo ?? 0))));
+    if (ticket.resaltar_efectivo) {
+      // EMFIMIFAR: igual que en pantalla, se separa cuánto de ese efectivo
+      // viene de ventas del día vs. de pagos de crédito cobrados hoy — la suma
+      // de los dos da total_entregar_efectivo (el dato real sigue siendo uno solo).
+      const totalEntregarEfectivo = Number(ticket.total_entregar_efectivo ?? 0);
+      // Los gastos categoría "Entrega Efectivo Pagos de Credito" se descuentan aquí,
+      // del bloque de créditos, en vez del de ventas (ver ventas.service.ts).
+      const entregarCreditoEfectivo = +(
+        Number(ticket.pagos_credito?.por_metodo?.EFECTIVO?.total ?? 0) -
+        Number(ticket.total_gastos_efectivo_credito ?? 0)
+      ).toFixed(2);
+      const entregarVentasEfectivo = +(totalEntregarEfectivo - entregarCreditoEfectivo).toFixed(2);
+      push(dotRow('ENTREGAR VENTAS (EFECTIVO)', '$' + formatMoney(entregarVentasEfectivo)));
+      push(dotRow('ENTREGAR CREDITOS (EFECTIVO)', '$' + formatMoney(entregarCreditoEfectivo)));
+    } else {
+      push(dotRow('A ENTREGAR (EFECTIVO)', '$' + formatMoney(Number(ticket.total_entregar_efectivo ?? 0))));
+    }
     push(CMD.NORMAL, CMD.BOLD_OFF);
 
     push(sep('='));

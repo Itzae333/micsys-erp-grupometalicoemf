@@ -1384,13 +1384,22 @@ export class VentasService {
     }
 
     // por_metodo queda como cobro bruto de ventas del día (sin gastos ni créditos mezclados).
+    // EMFIMIFAR: los gastos de esta categoría son efectivo que salió de lo cobrado en
+    // pagos de crédito (no de las ventas del día) — se acumulan aparte para que el
+    // split "Entregar Ventas / Entregar Créditos" en pantalla y ticket descuente este
+    // gasto del bloque de créditos en vez del de ventas (ver total_gastos_efectivo_credito).
+    const CATEGORIA_GASTO_ENTREGA_CREDITO = 'Entrega Efectivo Pagos de Credito';
     let totalGastos = 0;
     let totalGastosEfectivo = 0;
+    let totalGastosEfectivoCredito = 0;
     for (const g of gastos) {
       const monto = Number(g.monto);
       totalGastos = +(totalGastos + monto).toFixed(2);
       if (g.metodo_pago === 'EFECTIVO') {
         totalGastosEfectivo = +(totalGastosEfectivo + monto).toFixed(2);
+        if (g.categoria === CATEGORIA_GASTO_ENTREGA_CREDITO) {
+          totalGastosEfectivoCredito = +(totalGastosEfectivoCredito + monto).toFixed(2);
+        }
       }
     }
     const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
@@ -1652,6 +1661,7 @@ export class VentasService {
       total_cobrado: totalCobrado,
       total_gastos: totalGastos,
       total_gastos_efectivo: totalGastosEfectivo,
+      total_gastos_efectivo_credito: totalGastosEfectivoCredito,
       total_neto: totalNeto,
       total_entregar_efectivo: totalEntregarEfectivo,
       por_metodo: metodos,
