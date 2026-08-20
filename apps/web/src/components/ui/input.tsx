@@ -7,8 +7,12 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, error, onWheel, ...props }, ref) => {
+    // display:contents — el input hereda las clases de tamaño/flex que le pasen
+    // (w-16, flex-1, etc.) directamente, en vez de que este div las absorba y
+    // deje sin espacio a los hermanos flex del input (ver bug: descripción en
+    // $0 ancho dentro de filas flex angostas, como el carrito de Venta rápida).
     return (
-      <div className="w-full">
+      <div className="contents">
         <input
           type={type}
           // En Chrome/Edge, si el mouse queda sobre un <input type="number"> enfocado
