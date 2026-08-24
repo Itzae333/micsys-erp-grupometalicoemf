@@ -567,15 +567,42 @@ function buildEscPosBuffer(ticket) {
     }
 
     // ── Gastos del período ────────────────────────────────
-    if (ticket.gastos && ticket.gastos.length > 0) {
+    // EMFIMIFAR: "Entrega Efectivo Pagos de Credito" no es gasto operativo
+    // real, sino efectivo que salió de caja como pago de crédito — a petición
+    // suya va en su propia lista y total, separado de "GASTOS". "Entrega de
+    // Efectivo" (sin "Pagos de Credito") sí se queda en la lista normal porque
+    // afecta las ventas del día. Mismo nombre que CATEGORIA_ENTREGA_CREDITO en
+    // gastos/page.tsx.
+    const CATEGORIA_GASTO_PAGO_CREDITO = 'Entrega Efectivo Pagos de Credito';
+    const todosGastos = ticket.gastos ?? [];
+    const gastosOperativos = ticket.resaltar_efectivo
+      ? todosGastos.filter((g) => g.categoria !== CATEGORIA_GASTO_PAGO_CREDITO)
+      : todosGastos;
+    const gastosEntrega = ticket.resaltar_efectivo
+      ? todosGastos.filter((g) => g.categoria === CATEGORIA_GASTO_PAGO_CREDITO)
+      : [];
+    const totalGastosOperativos = gastosOperativos.reduce((s, g) => s + Number(g.monto), 0);
+    const totalGastosEntrega = gastosEntrega.reduce((s, g) => s + Number(g.monto), 0);
+
+    if (gastosOperativos.length > 0) {
       push(sep('='));
       push(CMD.BOLD_ON, ln('GASTOS'), CMD.BOLD_OFF);
       push(sep('-'));
-      for (const g of ticket.gastos) {
+      for (const g of gastosOperativos) {
         push(dotRow(norm(g.concepto ?? ''), '$' + formatMoney(Number(g.monto))));
       }
       push(sep('-'));
-      push(CMD.BOLD_ON, dotRow('TOTAL GASTOS', '$' + formatMoney(Number(ticket.total_gastos ?? 0))), CMD.BOLD_OFF);
+      push(CMD.BOLD_ON, dotRow('TOTAL GASTOS', '$' + formatMoney(totalGastosOperativos)), CMD.BOLD_OFF);
+    }
+    if (gastosEntrega.length > 0) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('PAGOS DE CREDITO (EFECTIVO)'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const g of gastosEntrega) {
+        push(dotRow(norm(g.concepto ?? ''), '$' + formatMoney(Number(g.monto))));
+      }
+      push(sep('-'));
+      push(CMD.BOLD_ON, dotRow('TOTAL GASTOS PAGO CREDITO', '$' + formatMoney(totalGastosEntrega)), CMD.BOLD_OFF);
     }
 
     // ── Totales ──────────────────────────────────────────
@@ -614,9 +641,10 @@ function buildEscPosBuffer(ticket) {
         push(dotRow('TOTAL PAGOS DE CREDITO', '$' + formatMoney(Number(ticket.pagos_credito.total))));
       }
 
-      if (Number(ticket.total_gastos ?? 0) > 0) {
+      if (totalGastosOperativos > 0 || totalGastosEntrega > 0) {
         push(sep('-'));
-        push(dotRow('TOTAL GASTOS', '-$' + formatMoney(Number(ticket.total_gastos))));
+        if (totalGastosOperativos > 0) push(dotRow('TOTAL GASTOS', '-$' + formatMoney(totalGastosOperativos)));
+        if (totalGastosEntrega > 0) push(dotRow('TOTAL GASTOS PAGO CREDITO', '-$' + formatMoney(totalGastosEntrega)));
       }
     } else {
       push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);

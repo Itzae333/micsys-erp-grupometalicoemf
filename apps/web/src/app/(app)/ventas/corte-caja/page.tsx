@@ -121,6 +121,14 @@ const METODO_ICON: Record<string, React.ReactNode> = {
   TRANSFERENCIA: <Building2  className="h-4 w-4 text-purple-600" />,
   DEPOSITO:      <Package    className="h-4 w-4 text-amber-600" />,
 };
+// EMFIMIFAR: esta categoría de gasto no es gasto operativo real, sino
+// efectivo que salió de caja como pago de crédito — a petición suya se
+// muestra en su propia tabla y total, separado de "Gastos del período".
+// "Entrega de Efectivo" (sin "Pagos de Credito") sí se queda en la tabla
+// normal porque afecta las ventas del día. Mismo nombre literal que en
+// apps/web/src/app/(app)/gastos/page.tsx (CATEGORIA_ENTREGA_CREDITO).
+const CATEGORIA_GASTO_PAGO_CREDITO = 'Entrega Efectivo Pagos de Credito';
+
 const ESTATUS_BADGE: Record<string, string> = {
   PAGADA:    'bg-green-100 text-green-800',
   CREDITO:   'bg-amber-100 text-amber-800',
@@ -435,6 +443,17 @@ export default function CorteCajaPage() {
           (pagosCredito.por_metodo?.['EFECTIVO']?.total ?? 0) - (data.total_gastos_efectivo_credito ?? 0)
         ).toFixed(2);
         const entregarVentasEfectivo = +(totalEntregarEfectivo - entregarCreditoEfectivo).toFixed(2);
+        // EMFIMIFAR: separa gastos operativos reales de entregas de efectivo /
+        // pagos de crédito, cada uno con su propia tabla y total en pantalla.
+        const esEmfimifar = empresa?.id === EMPRESA_EMFIMIFAR_ID;
+        const gastosOperativos = esEmfimifar
+          ? data.gastos.filter((g) => g.categoria !== CATEGORIA_GASTO_PAGO_CREDITO)
+          : data.gastos;
+        const gastosEntrega = esEmfimifar
+          ? data.gastos.filter((g) => g.categoria === CATEGORIA_GASTO_PAGO_CREDITO)
+          : [];
+        const totalGastosOperativos = +gastosOperativos.reduce((s, g) => s + g.monto, 0).toFixed(2);
+        const totalGastosEntrega = +gastosEntrega.reduce((s, g) => s + g.monto, 0).toFixed(2);
         return (
         <>
           {/* Total de ventas / cobrado / neto */}
@@ -714,7 +733,7 @@ export default function CorteCajaPage() {
           )}
 
           {/* Gastos del día */}
-          {data.gastos.length > 0 && (
+          {gastosOperativos.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
                 Gastos del período
@@ -731,7 +750,7 @@ export default function CorteCajaPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.gastos.map((g, i) => (
+                    {gastosOperativos.map((g, i) => (
                       <tr key={g.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
                         <td className="px-4 py-2.5 text-steel-700">{g.concepto}</td>
                         <td className="px-4 py-2.5 text-steel-500">{g.categoria}</td>
@@ -744,7 +763,47 @@ export default function CorteCajaPage() {
                   <tfoot>
                     <tr className="bg-steel-900">
                       <td colSpan={4} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL GASTOS</td>
-                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(data.total_gastos)}</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(totalGastosOperativos)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagos de crédito entregados en efectivo (EMFIMIFAR): no son gasto
+              operativo, se muestran aparte con su propio total. */}
+          {gastosEntrega.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-steel-500 uppercase tracking-wide mb-3">
+                Pagos de crédito (entrega de efectivo)
+              </h2>
+              <div className="bg-white rounded-xl border border-steel-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-50 border-b border-steel-200">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Concepto</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Categoría</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Método</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Usuario</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-steel-500 uppercase">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gastosEntrega.map((g, i) => (
+                      <tr key={g.id} className={i % 2 === 0 ? 'bg-white' : 'bg-steel-50/40'}>
+                        <td className="px-4 py-2.5 text-steel-700">{g.concepto}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{g.categoria}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{METODO_LABEL[g.metodo_pago] ?? g.metodo_pago}</td>
+                        <td className="px-4 py-2.5 text-steel-500">{g.usuario}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-red-600">− {fmt(g.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-steel-900">
+                      <td colSpan={4} className="px-4 py-3 text-right text-sm font-bold text-white">TOTAL GASTOS PAGO CREDITO</td>
+                      <td className="px-4 py-3 text-right text-base font-bold text-white">{fmt(totalGastosEntrega)}</td>
                     </tr>
                   </tfoot>
                 </table>
