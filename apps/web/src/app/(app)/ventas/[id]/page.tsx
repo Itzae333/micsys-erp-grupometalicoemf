@@ -242,7 +242,8 @@ export default function NotaDetallePage() {
   async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
     if (!nota) return;
     const parsed = field === 'cantidad' ? parseFloat(rawValue) : parseFloat(rawValue);
-    if (isNaN(parsed) || parsed <= 0) return;
+    const min = field === 'cantidad' ? 0.001 : 0;
+    if (isNaN(parsed) || parsed < min) return;
     const orig = nota.lineas.find((l) => l.id === lineaId);
     if (!orig) return;
     const origVal = field === 'cantidad' ? orig.cantidad : orig.precio_unitario;

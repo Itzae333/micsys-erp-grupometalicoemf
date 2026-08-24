@@ -321,7 +321,7 @@ export function Sidebar() {
                 {usuario?.rol?.toLowerCase().replace('_', ' ') ?? ''}
               </p>
             </div>
-            <NotificacionesPanel />
+            {(['SUPER_USUARIO', 'ADMIN'] as RolUsuario[]).includes(usuario?.rol as RolUsuario) && <NotificacionesPanel />}
             <button
               onClick={handleLogout}
               className="text-steel-500 hover:text-white transition-colors"

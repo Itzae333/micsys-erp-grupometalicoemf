@@ -592,7 +592,8 @@ export default function VentasPage() {
   async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
     if (!notaActiva) return;
     const parsed = field === 'cantidad' ? parseInt(rawValue, 10) : parseFloat(rawValue);
-    if (isNaN(parsed) || parsed <= 0) return;
+    const min = field === 'cantidad' ? 0.001 : 0;
+    if (isNaN(parsed) || parsed < min) return;
     const orig = notaActiva.lineas.find((l) => l.id === lineaId);
     if (!orig) return;
     const origVal = field === 'cantidad' ? orig.cantidad : orig.precio_unitario;
@@ -815,7 +816,13 @@ export default function VentasPage() {
       },
       nota: {
         folio: opts?.folioOverride ?? String(nota.folio).padStart(4, '0'),
-        fecha: new Date(nota.created_at).toLocaleDateString('es-MX', {
+        // En un abono, el ticket debe fechar el día del pago, no el de la
+        // venta original — se toma el created_at del pago recién registrado.
+        fecha: new Date(
+          soloAbono
+            ? (nota.pagos?.[nota.pagos.length - 1]?.created_at ?? new Date().toISOString())
+            : nota.created_at
+        ).toLocaleDateString('es-MX', {
           day: '2-digit', month: 'short', year: 'numeric',
         }),
         cliente: nota.cliente
