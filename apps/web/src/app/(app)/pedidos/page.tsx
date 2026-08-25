@@ -848,8 +848,10 @@ export default function PedidosPage() {
                       setArtSugeridos([]);
                     }}
                   >
-                    <span className="font-mono font-medium">{a.clave}</span>
-                    {a.descripcion_1 && <span className="text-steel-500 ml-2">{a.descripcion_1}</span>}
+                    {(() => {
+                      const descs = [a.descripcion_1, a.descripcion_2, a.descripcion_3, a.descripcion_4, a.descripcion_5].filter(Boolean);
+                      return <span className="font-medium">{descs.length > 0 ? descs.join(' · ') : a.clave}</span>;
+                    })()}
                   </button>
                 ))}
               </div>
