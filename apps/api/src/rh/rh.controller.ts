@@ -200,7 +200,7 @@ export class RhController {
   }
 
   @Patch('produccion/:id/avance')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'JEFE_MANUFACTURA', 'ALMACENISTA')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'JEFE_MANUFACTURA', 'ALMACENISTA', 'VENDEDOR')
   @ApiOperation({ summary: 'Registrar avance de producción (dispara Entrada F5)' })
   registrarAvance(
     @Headers('x-empresa-id') empresaId: string,

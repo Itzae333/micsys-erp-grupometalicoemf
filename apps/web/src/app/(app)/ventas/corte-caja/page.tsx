@@ -467,7 +467,7 @@ export default function CorteCajaPage() {
               </p>
               {data.total_gastos > 0 && (
                 <p className="text-xs mt-2">
-                  <span className="text-red-300">− {fmt(data.total_gastos)} gastos</span>
+                  <span className="text-red-300">− {fmt(totalGastosOperativos)} gastos</span>
                   {' '}=&nbsp;
                   <span className="text-emerald-300 font-semibold">{fmt(data.total_neto)} neto</span>
                 </p>

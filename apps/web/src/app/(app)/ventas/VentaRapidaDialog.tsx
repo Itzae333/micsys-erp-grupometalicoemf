@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Search, Trash2, Zap } from 'lucide-react';
+import { Search, Trash2, Zap, Eye, Download, MessageCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
@@ -18,6 +18,8 @@ import { addVentaPendiente, nextFolioLocal, type LineaVentaPendiente, type PagoV
 import type { Cliente, Articulo, NotaVenta, MetodoPago, ConfigColumnasSchema } from '@/lib/types/api';
 import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { formatPrecio, precioMostradorNumero } from '@/lib/utils';
+import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
+import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 
 const METODOS_BASE = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL: Record<string, string> = {
@@ -98,6 +100,8 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewSending, setPreviewSending] = useState<'pdf' | 'whatsapp' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isVendedor = usuario?.rol === 'VENDEDOR';
@@ -168,6 +172,59 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   const totalPagado = tipoCierre !== 'PENDIENTE' ? pagos.reduce((s, p) => s + (p.monto || 0), 0) : 0;
   const cambio = tipoCierre === 'PAGADA' ? Math.max(0, +(totalPagado - subtotal).toFixed(2)) : 0;
   const clienteSeleccionado = clientes.find((c) => c.id === clienteId) ?? null;
+
+  // Nota "fantasma" en memoria, solo para poder mandar/descargar una vista
+  // previa del ticket antes de guardar la venta — nunca se persiste. Se manda
+  // siempre con pagos: [] y estatus PENDIENTE para que el PDF no muestre forma
+  // de pago (todavía no se cobró nada, es solo para que el cliente confirme).
+  function buildNotaPreview(): NotaVenta {
+    const ahora = new Date().toISOString();
+    return {
+      id: 'preview', folio: 0, empresa_id: empresa?.id ?? '', ubicacion_id: ubicacion?.id ?? '',
+      usuario_id: usuario?.id ?? '', cliente_id: clienteId || null,
+      cliente: clienteSeleccionado ? {
+        id: clienteSeleccionado.id, nombre: clienteSeleccionado.nombre, apellidos: clienteSeleccionado.apellidos,
+        razon_social: clienteSeleccionado.razon_social, email: clienteSeleccionado.email, telefono: clienteSeleccionado.telefono,
+        limite_credito: clienteSeleccionado.limite_credito, saldo_pendiente: clienteSeleccionado.saldo_pendiente,
+        precio_num: clienteSeleccionado.precio_num,
+      } : null,
+      usuario: usuario ? { id: usuario.id, nombre: usuario.nombre, apellidos: usuario.apellidos } : null,
+      estatus: 'PENDIENTE', estatus_entrega: null, version: 1,
+      subtotal, descuento: 0, total: subtotal, es_credito: false, credito_previo: 0,
+      fecha_vencimiento: null, observaciones: observaciones || null,
+      motivo_cancelacion: null, motivo_cancelacion_comentario: null, cancelado_por_id: null, cancelado_at: null,
+      lineas: lineas.map((l, i) => ({
+        id: `preview-linea-${i}`, nota_id: 'preview', articulo_id: l.articulo_id,
+        articulo: { id: l.articulo_id, clave: l.clave, descripcion_1: l.descripcion, descripcion_2: null, descripcion_3: null, descripcion_4: null, descripcion_5: null },
+        clave: l.clave, cantidad: l.cantidad, precio_unitario: l.precio_unitario,
+        descuento: l.descuento, subtotal: calcSubtotal(l.cantidad, l.precio_unitario, l.descuento), created_at: ahora,
+      })),
+      pagos: [], evidencias: [], created_at: ahora, updated_at: ahora, cerrada_at: null, pedido_origen: null,
+    };
+  }
+
+  async function descargarPreview() {
+    setPreviewSending('pdf');
+    try {
+      await generateComprobantePDF(buildNotaPreview(), empresa, ubicacion);
+    } finally {
+      setPreviewSending(null);
+    }
+  }
+
+  async function enviarPreviewWhatsApp() {
+    setPreviewSending('whatsapp');
+    try {
+      const nota = buildNotaPreview();
+      const nombreCliente = clienteSeleccionado ? clienteLabel(clienteSeleccionado) : 'cliente';
+      const mensaje = `Hola ${nombreCliente}, aquí tu vista previa de compra — total ${formatPrecio(subtotal)}. Pendiente de confirmar y cobrar.`;
+      const link = buildWhatsAppClientLink(clienteSeleccionado?.telefono, mensaje) ?? buildWhatsAppGroupLink(mensaje);
+      await generateComprobantePDF(nota, empresa, ubicacion);
+      window.open(link, '_blank');
+    } finally {
+      setPreviewSending(null);
+    }
+  }
 
   async function onSubmit() {
     if (submitting) return;
@@ -533,6 +590,47 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         </div>
         {tipoCierre === 'PAGADA' && cambio > 0 && (
           <p className="text-body-sm text-amber-700">Cambio: {formatPrecio(cambio)}</p>
+        )}
+
+        {/* Vista previa del ticket — antes de guardar/cobrar, para mandarle al
+            cliente qué está comprando. Siempre sin forma de pago (todavía no se
+            cobra nada acá, es solo para que confirme). */}
+        {lineas.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowPreview((v) => !v)}
+              className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-steel-800 transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {showPreview ? 'Ocultar vista previa' : 'Vista previa'}
+            </button>
+            {showPreview && (
+              <div className="mt-2 space-y-2">
+                <p className="text-caption text-steel-400">
+                  Aún no se ha cobrado nada — esto es solo para que el cliente confirme qué va a comprar.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button" variant="secondary" size="sm"
+                    onClick={descargarPreview}
+                    loading={previewSending === 'pdf'}
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Descargar
+                  </Button>
+                  <Button
+                    type="button" variant="secondary" size="sm"
+                    onClick={enviarPreviewWhatsApp}
+                    loading={previewSending === 'whatsapp'}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+                    WhatsApp
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {error && (

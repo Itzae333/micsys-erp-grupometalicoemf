@@ -71,7 +71,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/inventario',
     label: 'Inventario',
     icon: <Package className="h-4 w-4" />,
-    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA', 'JEFE_MANUFACTURA'],
+    roles: ['ADMIN', 'ENCARGADO', 'ALMACENISTA', 'JEFE_MANUFACTURA', 'VENDEDOR'],
   },
   {
     href: '/movimientos',

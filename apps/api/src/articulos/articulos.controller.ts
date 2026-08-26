@@ -79,7 +79,7 @@ export class ArticulosController {
   }
 
   @Patch(':id/existencias')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
   @ApiOperation({ summary: 'Actualizar existencias de artículo' })
   updateExistencias(
     @Headers('x-ubicacion-id') ubicacionId: string,

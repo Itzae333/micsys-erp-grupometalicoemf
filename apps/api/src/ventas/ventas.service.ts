@@ -1392,9 +1392,18 @@ export class VentasService {
     let totalGastos = 0;
     let totalGastosEfectivo = 0;
     let totalGastosEfectivoCredito = 0;
+    // Gastos de esta categoría, en CUALQUIER método de pago — a diferencia de
+    // totalGastosEfectivoCredito (que solo filtra EFECTIVO, para la
+    // reconciliación de "entregar efectivo"), este se usa para que total_neto
+    // no reste dinero que en realidad salió de pagos de crédito cobrados hoy,
+    // no de las ventas del día.
+    let totalGastosCredito = 0;
     for (const g of gastos) {
       const monto = Number(g.monto);
       totalGastos = +(totalGastos + monto).toFixed(2);
+      if (g.categoria === CATEGORIA_GASTO_ENTREGA_CREDITO) {
+        totalGastosCredito = +(totalGastosCredito + monto).toFixed(2);
+      }
       if (g.metodo_pago === 'EFECTIVO') {
         totalGastosEfectivo = +(totalGastosEfectivo + monto).toFixed(2);
         if (g.categoria === CATEGORIA_GASTO_ENTREGA_CREDITO) {
@@ -1402,7 +1411,10 @@ export class VentasService {
         }
       }
     }
-    const totalNeto = +(totalCobrado - totalGastos).toFixed(2);
+    // total_cobrado es estrictamente ventas del día (sin créditos mezclados,
+    // ver comentario arriba) — se resta solo el gasto operativo real, no el
+    // que en realidad vino de pagos de crédito cobrados hoy.
+    const totalNeto = +(totalCobrado - (totalGastos - totalGastosCredito)).toFixed(2);
 
     // Cuando un abono se paga con más efectivo del que hacía falta, se
     // devuelve cambio en mano — igual que en una venta normal. `pago.monto`

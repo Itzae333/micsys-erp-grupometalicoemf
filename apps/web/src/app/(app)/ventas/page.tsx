@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap, Download, MessageCircle } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { emfDb } from '@/lib/db/emf-db';
 import { VentaRapidaDialog } from './VentaRapidaDialog';
@@ -27,7 +27,7 @@ import { cn, formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
-import { buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
 import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
 import { EstatusEntregaTag, ESTATUS_CON_ENTREGA_APLICABLE } from '@/components/ventas/EstatusEntregaTag';
 
@@ -131,6 +131,7 @@ export default function VentasPage() {
   // Ticket preview
   const [showTicket, setShowTicket] = useState(false);
   const [showTicketCobrar, setShowTicketCobrar] = useState(false);
+  const [previewSendingCobrar, setPreviewSendingCobrar] = useState<'pdf' | 'whatsapp' | null>(null);
 
   // Dialog cobrar
   const [dlgCobrar, setDlgCobrar] = useState(false);
@@ -972,6 +973,35 @@ export default function VentasPage() {
       setAbonandoError(err instanceof Error ? err.message : 'Error al registrar abono');
     } finally {
       setAbonando(false);
+    }
+  }
+
+  // ── Vista previa antes de cobrar (descargar / WhatsApp) ─────
+  // Siempre con pagos: [] — todavía no se cobró nada, es solo para que el
+  // cliente confirme qué está comprando antes de que el cajero cierre la nota.
+  async function descargarPreviewCobrar() {
+    if (!notaActiva) return;
+    setPreviewSendingCobrar('pdf');
+    try {
+      await generateComprobantePDF({ ...notaActiva, pagos: [] }, empresa, ubicacion);
+    } finally {
+      setPreviewSendingCobrar(null);
+    }
+  }
+
+  async function enviarPreviewWhatsAppCobrar() {
+    if (!notaActiva) return;
+    setPreviewSendingCobrar('whatsapp');
+    try {
+      const nombreCliente = notaActiva.cliente
+        ? (notaActiva.cliente.razon_social ?? `${notaActiva.cliente.nombre} ${notaActiva.cliente.apellidos ?? ''}`.trim())
+        : 'cliente';
+      const mensaje = `Hola ${nombreCliente}, aquí tu vista previa de compra #${String(notaActiva.folio).padStart(4, '0')} — total ${formatPrecio(notaActiva.total)}. Pendiente de confirmar y cobrar.`;
+      const link = buildWhatsAppClientLink(notaActiva.cliente?.telefono, mensaje) ?? buildWhatsAppGroupLink(mensaje);
+      await generateComprobantePDF({ ...notaActiva, pagos: [] }, empresa, ubicacion);
+      window.open(link, '_blank');
+    } finally {
+      setPreviewSendingCobrar(null);
     }
   }
 
@@ -2213,13 +2243,33 @@ export default function VentasPage() {
 
             {/* Ticket preview en cobrar */}
             <div>
-              <button
-                type="button"
-                onClick={() => setShowTicketCobrar((v) => !v)}
-                className="text-body-sm text-steel-500 hover:text-steel-800 transition-colors underline-offset-2 hover:underline"
-              >
-                {showTicketCobrar ? 'Ocultar ticket' : 'Ver ticket'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTicketCobrar((v) => !v)}
+                  className="text-body-sm text-steel-500 hover:text-steel-800 transition-colors underline-offset-2 hover:underline"
+                >
+                  {showTicketCobrar ? 'Ocultar ticket' : 'Ver ticket'}
+                </button>
+                {/* Mandar vista previa antes de cobrar — nunca lleva forma de
+                    pago, todavía no se ha cobrado nada. */}
+                <button
+                  type="button"
+                  onClick={descargarPreviewCobrar}
+                  disabled={previewSendingCobrar !== null}
+                  className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 transition-colors disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" /> Descargar
+                </button>
+                <button
+                  type="button"
+                  onClick={enviarPreviewWhatsAppCobrar}
+                  disabled={previewSendingCobrar !== null}
+                  className="flex items-center gap-1 text-body-sm text-steel-500 hover:text-steel-800 transition-colors disabled:opacity-50"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                </button>
+              </div>
               {showTicketCobrar && (
                 <div className="mt-2 border border-steel-200 rounded-xl overflow-hidden bg-white text-[11px] font-mono">
                   {/* Cabecera: logo + nombre empresa + sucursal */}

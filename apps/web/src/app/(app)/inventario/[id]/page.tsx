@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { api } from '@/lib/api/client';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { useAuthStore } from '@/lib/store/auth.store';
-import type { Articulo, ConfigColumnasSchema, Proveedor } from '@/lib/types/api';
+import type { Articulo, ConfigColumnasSchema, Proveedor, OrdenProduccion } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -70,6 +70,17 @@ export default function ArticuloDetailPage() {
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
   const canEditPrecios = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  // El Vendedor no tiene canWrite (no edita info/precios ni da de alta), pero sí
+  // puede ajustar existencia — mismo endpoint que ya usa Almacenista.
+  const canEditExistencia = canWrite || usuario?.rol === 'VENDEDOR';
+  // La producción (avance de OP) solo existe en ubicaciones que fabrican.
+  const muestraProduccion = usuario?.rol === 'VENDEDOR'
+    && (ubicacion?.tipo === 'MATRIZ' || ubicacion?.tipo === 'FABRICA');
+
+  const [ordenesProduccion, setOrdenesProduccion] = useState<OrdenProduccion[]>([]);
+  const [avances, setAvances] = useState<Record<string, string>>({});
+  const [avanceError, setAvanceError] = useState<string | null>(null);
+  const [avanceSubmittingId, setAvanceSubmittingId] = useState<string | null>(null);
 
   const infoForm = useForm<z.infer<typeof InfoSchema>>({ resolver: zodResolver(InfoSchema) });
   const preciosForm = useForm<z.infer<typeof PreciosSchema>>({ resolver: zodResolver(PreciosSchema) });
@@ -95,6 +106,32 @@ export default function ArticuloDetailPage() {
   }
 
   useEffect(() => { load(); }, [id, empresa?.id, ubicacion?.id]);
+
+  async function loadOrdenes() {
+    const page = await api.get<{ data: OrdenProduccion[] }>(`/rh/produccion?articuloId=${id}`);
+    setOrdenesProduccion(page.data.filter((op) => op.estatus === 'ABIERTA' || op.estatus === 'EN_PROCESO'));
+  }
+
+  useEffect(() => {
+    if (!muestraProduccion) return;
+    loadOrdenes();
+  }, [id, muestraProduccion]);
+
+  async function registrarAvance(op: OrdenProduccion) {
+    const cantidad = Number(avances[op.id]);
+    if (!cantidad || cantidad <= 0) return;
+    setAvanceError(null);
+    setAvanceSubmittingId(op.id);
+    try {
+      await api.patch(`/rh/produccion/${op.id}/avance`, { cantidad });
+      setAvances((prev) => ({ ...prev, [op.id]: '' }));
+      await Promise.all([load(), loadOrdenes()]);
+    } catch (err) {
+      setAvanceError(err instanceof Error ? err.message : 'Error al registrar avance');
+    } finally {
+      setAvanceSubmittingId(null);
+    }
+  }
 
   function openInfo() {
     if (!articulo) return;
@@ -303,7 +340,7 @@ export default function ArticuloDetailPage() {
         <div className="bg-white border border-steel-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-body font-semibold text-steel-900">Existencias</h2>
-            {canWrite && (
+            {canEditExistencia && (
               <button
                 onClick={openExistencias}
                 className="text-body-sm text-brand-600 hover:text-brand-700 font-medium"
@@ -330,6 +367,51 @@ export default function ArticuloDetailPage() {
             </dl>
           )}
         </div>
+
+        {/* Producción — solo Vendedor, y solo en ubicaciones que fabrican */}
+        {muestraProduccion && (
+          <div className="bg-white border border-steel-200 rounded-xl p-5 md:col-span-2">
+            <h2 className="text-body font-semibold text-steel-900 mb-4">Producción</h2>
+            {ordenesProduccion.length === 0 ? (
+              <p className="text-body-sm text-steel-400">
+                No hay órdenes de producción abiertas para este artículo.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {ordenesProduccion.map((op) => {
+                  const objetivo = Number(op.cantidad_objetivo);
+                  const producida = Number(op.cantidad_producida);
+                  const faltante = Math.max(0, objetivo - producida);
+                  return (
+                    <div key={op.id} className="flex items-center gap-3 border border-steel-100 rounded-lg px-3 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-body-sm font-medium text-steel-900">OP #{op.folio}</p>
+                        <p className="text-caption text-steel-500">
+                          {producida.toFixed(0)} / {objetivo.toFixed(0)} · faltan {faltante.toFixed(0)}
+                        </p>
+                      </div>
+                      <Input
+                        type="number" min={1} step="1"
+                        className="w-24 h-8 text-right"
+                        placeholder="Cantidad"
+                        value={avances[op.id] ?? ''}
+                        onChange={(e) => setAvances((prev) => ({ ...prev, [op.id]: e.target.value }))}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => registrarAvance(op)}
+                        loading={avanceSubmittingId === op.id}
+                      >
+                        Registrar avance
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {avanceError && <p className="text-body-sm text-brand-600 mt-3">{avanceError}</p>}
+          </div>
+        )}
 
         {/* Info */}
         <div className="bg-white border border-steel-200 rounded-xl p-5 md:col-span-2">
