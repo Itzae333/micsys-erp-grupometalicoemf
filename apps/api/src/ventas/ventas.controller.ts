@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { VentasService } from './ventas.service';
-import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto } from './dto/ventas.dto';
+import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto, UpdateIvaDto } from './dto/ventas.dto';
 import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
 import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -119,6 +119,17 @@ export class VentasController {
     @Param('lineaId') lineaId: string,
   ) {
     return this.ventas.removeLinea(id, lineaId, ubicacionId);
+  }
+
+  @Patch(':id/iva')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Aplicar o quitar IVA (16%) a una nota abierta' })
+  updateIva(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateIvaDto,
+  ) {
+    return this.ventas.updateIva(id, dto.aplica_iva, ubicacionId);
   }
 
   @Post(':id/cerrar')

@@ -20,6 +20,7 @@ import { EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { formatPrecio, precioMostradorNumero } from '@/lib/utils';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { calcularIva } from '@/lib/utils/iva';
 
 const METODOS_BASE = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO'] as const;
 const METODO_LABEL: Record<string, string> = {
@@ -97,6 +98,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   const [tipoCierre, setTipoCierre] = useState<'PAGADA' | 'CREDITO' | 'PENDIENTE'>('PAGADA');
   const [pagos, setPagos] = useState<PagoRow[]>([{ metodo: 'EFECTIVO', monto: 0, referencia: '' }]);
   const [observaciones, setObservaciones] = useState('');
+  const [aplicaIva, setAplicaIva] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +129,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
     setTipoCierre('PAGADA');
     setPagos([{ metodo: 'EFECTIVO', monto: 0, referencia: '' }]);
     setObservaciones('');
+    setAplicaIva(false);
     setError(null);
   }, [open]);
 
@@ -169,8 +172,10 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
   }
 
   const subtotal = +lineas.reduce((s, l) => s + calcSubtotal(l.cantidad, l.precio_unitario, l.descuento), 0).toFixed(2);
+  const iva = calcularIva(subtotal, aplicaIva);
+  const total = +(subtotal + iva).toFixed(2);
   const totalPagado = tipoCierre !== 'PENDIENTE' ? pagos.reduce((s, p) => s + (p.monto || 0), 0) : 0;
-  const cambio = tipoCierre === 'PAGADA' ? Math.max(0, +(totalPagado - subtotal).toFixed(2)) : 0;
+  const cambio = tipoCierre === 'PAGADA' ? Math.max(0, +(totalPagado - total).toFixed(2)) : 0;
   const clienteSeleccionado = clientes.find((c) => c.id === clienteId) ?? null;
 
   // Nota "fantasma" en memoria, solo para poder mandar/descargar una vista
@@ -190,7 +195,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       } : null,
       usuario: usuario ? { id: usuario.id, nombre: usuario.nombre, apellidos: usuario.apellidos } : null,
       estatus: 'PENDIENTE', estatus_entrega: null, version: 1,
-      subtotal, descuento: 0, total: subtotal, es_credito: false, credito_previo: 0,
+      subtotal, descuento: 0, aplica_iva: aplicaIva, iva, total, es_credito: false, credito_previo: 0,
       fecha_vencimiento: null, observaciones: observaciones || null,
       motivo_cancelacion: null, motivo_cancelacion_comentario: null, cancelado_por_id: null, cancelado_at: null,
       lineas: lineas.map((l, i) => ({
@@ -217,7 +222,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
     try {
       const nota = buildNotaPreview();
       const nombreCliente = clienteSeleccionado ? clienteLabel(clienteSeleccionado) : 'cliente';
-      const mensaje = `Hola ${nombreCliente}, aquí tu vista previa de compra — total ${formatPrecio(subtotal)}. Pendiente de confirmar y cobrar.`;
+      const mensaje = `Hola ${nombreCliente}, aquí tu vista previa de compra — total ${formatPrecio(total)}. Pendiente de confirmar y cobrar.`;
       const link = buildWhatsAppClientLink(clienteSeleccionado?.telefono, mensaje) ?? buildWhatsAppGroupLink(mensaje);
       await generateComprobantePDF(nota, empresa, ubicacion);
       window.open(link, '_blank');
@@ -253,6 +258,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       })),
       tipo_cierre: tipoCierre,
       pagos: pagosDto,
+      aplica_iva: aplicaIva,
       client_ref: clientRef,
     };
 
@@ -279,6 +285,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       lineas: { articulo_id: string; cantidad: number; precio_unitario: number; descuento?: number }[];
       tipo_cierre: 'PAGADA' | 'CREDITO' | 'PENDIENTE';
       pagos: { metodo: string; monto: number; referencia?: string }[];
+      aplica_iva: boolean;
       client_ref: string;
     },
     clientRef: string,
@@ -323,7 +330,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       clienteNombre,
       lineas: lineasPendiente,
       subtotal,
-      total: subtotal,
+      total,
       tipoCierre: dto.tipo_cierre,
       pagos: pagosPendiente,
       syncQueueId: queueId,
@@ -355,7 +362,9 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       version: 1,
       subtotal,
       descuento: 0,
-      total: subtotal,
+      aplica_iva: dto.aplica_iva,
+      iva,
+      total,
       es_credito: dto.tipo_cierre === 'CREDITO',
       credito_previo: 0,
       fecha_vencimiento: null,
@@ -463,6 +472,17 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
             </div>
           )}
         </div>
+
+        {/* IVA — no todos los clientes lo requieren, por eso es opcional por venta */}
+        <label className="flex items-center gap-2 text-body-sm text-steel-700 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-steel-300 text-brand-600 focus:ring-brand-600"
+            checked={aplicaIva}
+            onChange={(e) => setAplicaIva(e.target.checked)}
+          />
+          Aplicar IVA (16%)
+        </label>
 
         {/* Carrito */}
         {lineas.length > 0 && (
@@ -584,9 +604,23 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         )}
 
         {/* Totales */}
-        <div className="bg-steel-50 rounded-lg p-3 flex items-center justify-between">
-          <span className="text-body-sm text-steel-500">Total</span>
-          <span className="text-title font-bold text-steel-900">{formatPrecio(subtotal)}</span>
+        <div className="bg-steel-50 rounded-lg p-3 space-y-1">
+          {aplicaIva && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-steel-500">Subtotal</span>
+                <span className="text-body-sm text-steel-700">{formatPrecio(subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-steel-500">IVA (16%)</span>
+                <span className="text-body-sm text-steel-700">{formatPrecio(iva)}</span>
+              </div>
+            </>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-body-sm text-steel-500">Total</span>
+            <span className="text-title font-bold text-steel-900">{formatPrecio(total)}</span>
+          </div>
         </div>
         {tipoCierre === 'PAGADA' && cambio > 0 && (
           <p className="text-body-sm text-amber-700">Cambio: {formatPrecio(cambio)}</p>

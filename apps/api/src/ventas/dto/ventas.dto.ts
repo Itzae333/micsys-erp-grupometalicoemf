@@ -95,9 +95,18 @@ export class VentaRapidaDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString() fecha_vencimiento?: string;
 
+  @ApiPropertyOptional({ description: 'Aplicar IVA (16% fijo) a esta venta' })
+  @IsOptional() @IsBoolean() aplica_iva?: boolean;
+
   @ApiProperty({ description: 'UUID generado en el cliente — clave de idempotencia para reintentos de la cola offline' })
   @IsString()
   client_ref: string;
+}
+
+export class UpdateIvaDto {
+  @ApiProperty({ description: 'Aplicar IVA (16% fijo) a esta venta' })
+  @IsBoolean()
+  aplica_iva: boolean;
 }
 
 export class AbonarNotaDto {

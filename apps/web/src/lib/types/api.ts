@@ -208,6 +208,8 @@ export interface NotaVenta {
   version: number;
   subtotal: number;
   descuento: number;
+  aplica_iva: boolean;
+  iva: number;
   total: number;
   es_credito: boolean;
   /** Cargo de crédito aún no revertido de esta misma nota (solo > 0 cuando estatus es REABIERTA y ya estaba a crédito). */

@@ -388,7 +388,7 @@ export default function NotaDetallePage() {
         precio: l.precio_unitario,
         subtotal: l.subtotal,
       })),
-      totales: { subtotal: nota.subtotal, total: nota.total },
+      totales: { subtotal: nota.subtotal, iva: nota.iva, total: nota.total },
       pagos: nota.pagos.map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
       cambio: cambioCalc,
       tipo_cierre: tipoCierre,
@@ -1013,9 +1013,23 @@ export default function NotaDetallePage() {
             </tbody>
           </table>
         )}
-        <div className="border-t border-steel-200 px-4 py-3 bg-steel-50 flex items-center justify-between">
-          <span className="text-body-sm text-steel-500">Total</span>
-          <span className="text-display-sm font-bold text-steel-900">{formatPrecio(nota.total)}</span>
+        <div className="border-t border-steel-200 bg-steel-50">
+          {nota.iva > 0 && (
+            <div className="px-4 pt-2 space-y-0.5">
+              <div className="flex items-center justify-between text-caption text-steel-500">
+                <span>Subtotal</span>
+                <span>{formatPrecio(nota.subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-caption text-steel-500">
+                <span>IVA (16%)</span>
+                <span>{formatPrecio(nota.iva)}</span>
+              </div>
+            </div>
+          )}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-body-sm text-steel-500">Total</span>
+            <span className="text-display-sm font-bold text-steel-900">{formatPrecio(nota.total)}</span>
+          </div>
         </div>
       </div>
       )}

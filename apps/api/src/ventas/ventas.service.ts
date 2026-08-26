@@ -10,6 +10,9 @@ import type { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, Cancela
 import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 import { inicioDiaMx, finDiaMx, restarDiasHabilesMx } from '../common/utils/fecha-mx';
 
+// IVA opcional por venta — tasa fija, no todos los clientes lo requieren.
+const IVA_TASA = 0.16;
+
 // Fila del desglose de "Pagos de crédito" en el corte de caja: monto tal cual
 // se recibió (bruto), cambio aparte y total de la nota — misma estructura que
 // "Notas de Venta" (ver VentasService.getCorteCaja).
@@ -275,6 +278,20 @@ export class VentasService {
     return this.findOne(notaId, ubicacionId);
   }
 
+  async updateIva(notaId: string, aplicaIva: boolean, ubicacionId: string) {
+    const nota = await this.findOneRaw(notaId, ubicacionId);
+    if (!['ABIERTA', 'REABIERTA'].includes(nota.estatus)) {
+      throw new ForbiddenException('Solo se puede cambiar el IVA de notas ABIERTA o REABIERTA');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.notaVenta.update({ where: { id: notaId }, data: { aplica_iva: aplicaIva } });
+      await this.recalcNota(tx, notaId);
+    });
+
+    return this.findOne(notaId, ubicacionId);
+  }
+
   // ─── Cerrar / Cobrar ─────────────────────────────────────────
 
   async cerrar(notaId: string, dto: CerrarNotaDto, ubicacionId: string, usuarioId: string) {
@@ -504,11 +521,15 @@ export class VentasService {
   }
 
   private async recalcNota(tx: Prisma.TransactionClient, notaId: string) {
-    const lineas = await tx.notaVentaLinea.findMany({ where: { nota_id: notaId } });
+    const [lineas, nota] = await Promise.all([
+      tx.notaVentaLinea.findMany({ where: { nota_id: notaId } }),
+      tx.notaVenta.findUniqueOrThrow({ where: { id: notaId }, select: { aplica_iva: true } }),
+    ]);
     const subtotal = lineas.reduce((s, l) => s + Number(l.subtotal), 0);
+    const iva = nota.aplica_iva ? +(subtotal * IVA_TASA).toFixed(2) : 0;
     await tx.notaVenta.update({
       where: { id: notaId },
-      data: { subtotal, total: subtotal },
+      data: { subtotal, iva, total: subtotal + iva },
     });
   }
 
@@ -722,17 +743,19 @@ export class VentasService {
         });
       }
       subtotal = +subtotal.toFixed(2);
+      const iva = dto.aplica_iva ? +(subtotal * IVA_TASA).toFixed(2) : 0;
+      const total = +(subtotal + iva).toFixed(2);
 
       if (dto.tipo_cierre === 'PENDIENTE') {
         return tx.notaVenta.update({
           where: { id: nota.id },
-          data: { subtotal, total: subtotal, estatus: 'PENDIENTE' },
+          data: { subtotal, aplica_iva: !!dto.aplica_iva, iva, total, estatus: 'PENDIENTE' },
           include: NOTA_INCLUDE,
         });
       }
 
       const totalPagado = dto.pagos.reduce((s, p) => s + p.monto, 0);
-      const diferencia = +Math.max(0, subtotal - totalPagado).toFixed(2);
+      const diferencia = +Math.max(0, total - totalPagado).toFixed(2);
       const esCredito = dto.tipo_cierre === 'CREDITO' || diferencia > 0;
 
       if (esCredito && !dto.cliente_id) {
@@ -774,7 +797,9 @@ export class VentasService {
         where: { id: nota.id },
         data: {
           subtotal,
-          total: subtotal,
+          aplica_iva: !!dto.aplica_iva,
+          iva,
+          total,
           estatus: esCredito ? 'CREDITO' : 'PAGADA',
           es_credito: esCredito,
           fecha_vencimiento: dto.fecha_vencimiento ? new Date(dto.fecha_vencimiento) : null,
@@ -792,6 +817,7 @@ export class VentasService {
       ...nota,
       subtotal: Number(nota.subtotal),
       descuento: Number(nota.descuento),
+      iva: Number(nota.iva),
       total: Number(nota.total),
       credito_previo: creditoPrevio,
       cliente: nota.cliente ? {

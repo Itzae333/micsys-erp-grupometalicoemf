@@ -827,6 +827,13 @@ function buildEscPosBuffer(ticket) {
   push(sep('='));
 
   if (!ticket.sin_precios) {
+    // ── IVA (opcional — no todos los clientes lo requieren) ──
+    const ivaMonto = Number(ticket.totales?.iva ?? 0);
+    if (ivaMonto > 0) {
+      push(row('SUBTOTAL', '$' + formatMoney(Number(ticket.totales?.subtotal ?? 0))));
+      push(row('IVA (16%)', '$' + formatMoney(ivaMonto)));
+    }
+
     // ── Total ──────────────────────────────────────────────
     push(CMD.BOLD_ON, CMD.DOUBLE_HEIGHT);
     push(row('TOTAL', '$' + formatMoney(Number(ticket.totales?.total ?? 0))));

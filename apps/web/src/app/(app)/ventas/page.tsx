@@ -28,6 +28,7 @@ import { resolveLogoUrl } from '@/components/brand/Logo';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { generateComprobantePDF } from '@/lib/utils/comprobante-pdf';
 import { buildWhatsAppClientLink, buildWhatsAppGroupLink } from '@/lib/utils/whatsapp';
+import { calcularIva } from '@/lib/utils/iva';
 import { PedidoOrigenTag } from '@/components/ventas/PedidoOrigenTag';
 import { EstatusEntregaTag, ESTATUS_CON_ENTREGA_APLICABLE } from '@/components/ventas/EstatusEntregaTag';
 
@@ -128,6 +129,7 @@ export default function VentasPage() {
   // Inline editing del carrito
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
+  const [savingIva, setSavingIva] = useState(false);
   // Ticket preview
   const [showTicket, setShowTicket] = useState(false);
   const [showTicketCobrar, setShowTicketCobrar] = useState(false);
@@ -628,6 +630,19 @@ export default function VentasPage() {
     }
   }
 
+  // No todos los clientes requieren IVA — se decide por venta, editable
+  // mientras la nota siga abierta.
+  async function toggleIva(aplicaIva: boolean) {
+    if (!notaActiva || savingIva) return;
+    setSavingIva(true);
+    try {
+      const updated = await api.patch<NotaVenta>(`/ventas/${notaActiva.id}/iva`, { aplica_iva: aplicaIva });
+      setNotaActiva(updated);
+    } finally {
+      setSavingIva(false);
+    }
+  }
+
   // ── Cancelar nota abierta (conserva folio) ──
   function openCancelarNota(nota: NotaVenta) {
     setNotaActiva(nota);
@@ -858,7 +873,7 @@ export default function VentasPage() {
         subtotal: l.subtotal,
       })),
       saldo_anterior: opts?.saldoAnterior ?? null,
-      totales: { subtotal: nota.subtotal, total: nota.total },
+      totales: { subtotal: nota.subtotal, iva: nota.iva, total: nota.total },
       pagos: pagosList
         .filter((p) => p.monto > 0)
         .map((p) => ({ metodo: METODO_LABEL[p.metodo] ?? p.metodo, monto: p.monto })),
@@ -1135,6 +1150,8 @@ export default function VentasPage() {
   }
 
   const totalPreview = (notaActiva?.lineas ?? []).reduce((s, l) => s + subtotalPreviewLinea(l), 0);
+  const ivaPreview = calcularIva(totalPreview, notaActiva?.aplica_iva ?? false);
+  const totalConIvaPreview = totalPreview + ivaPreview;
 
   function getFechaDesde(filtro: string): string | undefined {
     const now = new Date();
@@ -1257,6 +1274,18 @@ export default function VentasPage() {
                 </tbody>
                 {!isVendedor && (
                   <tfoot className="border-t-2 border-steel-200 bg-steel-50">
+                    {detalleNota.iva > 0 && (
+                      <>
+                        <tr>
+                          <td colSpan={3} className="px-4 py-1 text-right text-steel-500">Subtotal</td>
+                          <td className="px-4 py-1 text-right text-steel-500">{formatPrecio(detalleNota.subtotal)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="px-4 py-1 text-right text-steel-500">IVA (16%)</td>
+                          <td className="px-4 py-1 text-right text-steel-500">{formatPrecio(detalleNota.iva)}</td>
+                        </tr>
+                      </>
+                    )}
                     <tr>
                       <td colSpan={3} className="px-4 py-2.5 text-right font-semibold text-steel-900">Total</td>
                       <td className="px-4 py-2.5 text-right font-bold text-steel-900">{formatPrecio(detalleNota.total)}</td>
@@ -1359,7 +1388,7 @@ export default function VentasPage() {
             <div className="flex items-center gap-2 flex-shrink-0">
               {canAdmin && notaActiva.lineas.length > 0 && (
                 <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
-                  Cobrar — {formatPrecio(totalPreview)}
+                  Cobrar — {formatPrecio(totalConIvaPreview)}
                 </Button>
               )}
             </div>
@@ -1466,6 +1495,17 @@ export default function VentasPage() {
 
             {/* ── Carrito (abajo en móvil, derecha en desktop) ─── */}
             <div className="flex-1 flex flex-col min-h-0 min-h-[200px]">
+              {/* IVA — no todos los clientes lo requieren, por eso es opcional por venta */}
+              <label className="flex items-center gap-2 px-3 py-2 bg-white border-b border-steel-100 flex-shrink-0 text-body-sm text-steel-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-steel-300 text-brand-600 focus:ring-brand-600"
+                  checked={notaActiva.aplica_iva}
+                  disabled={savingIva}
+                  onChange={(e) => void toggleIva(e.target.checked)}
+                />
+                Aplicar IVA (16%)
+              </label>
               {/* Buscador carrito */}
               {notaActiva.lineas.length > 0 && (
                 <div className="px-3 py-2 bg-steel-50 border-b border-steel-100 flex-shrink-0">
@@ -1559,6 +1599,18 @@ export default function VentasPage() {
 
               {/* Footer carrito */}
               <div className="border-t border-steel-200 bg-steel-50 flex-shrink-0">
+                {notaActiva.aplica_iva && (
+                  <div className="px-4 pt-2 space-y-0.5">
+                    <div className="flex items-center justify-between text-caption text-steel-500">
+                      <span>Subtotal</span>
+                      <span>{formatPrecio(totalPreview)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-caption text-steel-500">
+                      <span>IVA (16%)</span>
+                      <span>{formatPrecio(ivaPreview)}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="px-4 py-3 flex items-center justify-between">
                   <span className="text-body-sm text-steel-500">
                     {cartQ
@@ -1566,7 +1618,7 @@ export default function VentasPage() {
                       : `${notaActiva.lineas.length} artículo${notaActiva.lineas.length !== 1 ? 's' : ''}`}
                   </span>
                   <span className="text-display-sm font-bold text-steel-900">
-                    {formatPrecio(totalPreview)}
+                    {formatPrecio(totalConIvaPreview)}
                   </span>
                 </div>
                 <div className="px-4 pb-4">
@@ -1576,7 +1628,7 @@ export default function VentasPage() {
                       disabled={notaActiva.lineas.length === 0}
                       onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
                     >
-                      Cobrar {formatPrecio(totalPreview)}
+                      Cobrar {formatPrecio(totalConIvaPreview)}
                     </Button>
                   ) : (
                     <Button
@@ -2055,6 +2107,12 @@ export default function VentasPage() {
                 </span>
                 <span className="text-body-sm text-steel-500">Subtotal {formatPrecio(notaActiva.subtotal)}</span>
               </div>
+              {notaActiva.iva > 0 && (
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-body-sm text-steel-500">IVA (16%)</span>
+                  <span className="text-body-sm text-steel-500">{formatPrecio(notaActiva.iva)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-body font-semibold text-steel-900">Total a cobrar</span>
                 <span className="text-display-sm font-bold text-steel-900">{formatPrecio(notaActiva.total)}</span>
@@ -2329,6 +2387,18 @@ export default function VentasPage() {
                       })}
                     </tbody>
                   </table>
+                  {notaActiva.iva > 0 && (
+                    <>
+                      <div className="px-4 py-1 border-t border-dashed border-steel-200 flex justify-between text-steel-500">
+                        <span>SUBTOTAL</span>
+                        <span>{formatPrecio(notaActiva.subtotal)}</span>
+                      </div>
+                      <div className="px-4 py-1 flex justify-between text-steel-500">
+                        <span>IVA (16%)</span>
+                        <span>{formatPrecio(notaActiva.iva)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="px-4 py-2 border-t border-dashed border-steel-300 flex justify-between font-bold text-[13px] text-steel-900">
                     <span>TOTAL</span>
                     <span>{formatPrecio(notaActiva.total)}</span>

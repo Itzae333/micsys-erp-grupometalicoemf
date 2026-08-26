@@ -383,6 +383,10 @@ model NotaVenta {
   version   Int         @default(1)
   subtotal  Decimal     @db.Decimal(12, 2)
   descuento Decimal     @default(0) @db.Decimal(12, 2)
+  // IVA opcional por venta (16% fijo) — no todos los clientes lo requieren.
+  // total = subtotal + iva (descuento de cabecera no se usa en ningún flujo).
+  aplica_iva Boolean    @default(false)
+  iva        Decimal    @default(0) @db.Decimal(12, 2)
   total     Decimal     @db.Decimal(12, 2)
 
   es_credito        Boolean   @default(false)

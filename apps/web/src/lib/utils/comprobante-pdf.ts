@@ -98,6 +98,9 @@ export async function generateComprobantePDF(
   const descuentoRow = !sinPrecios && Number(nota.descuento) > 0
     ? `<tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">Descuento</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#dc2626;">-$${fmt(Number(nota.descuento))}</td></tr>`
     : '';
+  const ivaRow = !sinPrecios && Number(nota.iva) > 0
+    ? `<tr><td colspan="3" style="padding:5px 8px;text-align:right;font-size:12px;color:#64748b;">IVA (16%)</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#64748b;">$${fmt(Number(nota.iva))}</td></tr>`
+    : '';
 
   const totalPagado = nota.pagos.reduce((s, p) => s + Number(p.monto), 0);
   const saldoPendiente = Math.max(0, +(Number(nota.total) - totalPagado).toFixed(2));
@@ -179,6 +182,7 @@ export async function generateComprobantePDF(
       <tfoot>
         ${subtotalRow}
         ${descuentoRow}
+        ${ivaRow}
         ${pagoRows}
         ${creditoRow}
         ${totalRowHtml}
