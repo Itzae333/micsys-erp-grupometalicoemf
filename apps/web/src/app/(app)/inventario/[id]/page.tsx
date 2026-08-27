@@ -93,7 +93,7 @@ export default function ArticuloDetailPage() {
     try {
       const [art, s, provs] = await Promise.all([
         api.get<Articulo>(`/articulos/${id}`),
-        api.get<ConfigColumnasSchema>(`/config-columnas/${empresa.id}/${ubicacion.id}`),
+        api.get<ConfigColumnasSchema>(`/config-columnas/${empresa.id}/${ubicacion.id}/schema`),
         api.get<{ data: Proveedor[] }>('/proveedores'),
       ]);
       setArticulo(art);
