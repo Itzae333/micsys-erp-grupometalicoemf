@@ -70,11 +70,12 @@ export default function ArticuloDetailPage() {
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
   const canEditPrecios = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const isVendedor = usuario?.rol === 'VENDEDOR';
   // El Vendedor no tiene canWrite (no edita info/precios ni da de alta), pero sí
   // puede ajustar existencia — mismo endpoint que ya usa Almacenista.
-  const canEditExistencia = canWrite || usuario?.rol === 'VENDEDOR';
+  const canEditExistencia = canWrite || isVendedor;
   // La producción (avance de OP) solo existe en ubicaciones que fabrican.
-  const muestraProduccion = usuario?.rol === 'VENDEDOR'
+  const muestraProduccion = isVendedor
     && (ubicacion?.tipo === 'MATRIZ' || ubicacion?.tipo === 'FABRICA');
 
   const [ordenesProduccion, setOrdenesProduccion] = useState<OrdenProduccion[]>([]);
@@ -304,40 +305,42 @@ export default function ArticuloDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Precios */}
-        <div className="bg-white border border-steel-200 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-body font-semibold text-steel-900">Precios</h2>
-            {canEditPrecios && (
-              <button
-                onClick={openPrecios}
-                className="text-body-sm text-brand-600 hover:text-brand-700 font-medium"
-              >
-                Editar
-              </button>
+        {/* Precios — el Vendedor no debe ver ningún precio */}
+        {!isVendedor && (
+          <div className="bg-white border border-steel-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-body font-semibold text-steel-900">Precios</h2>
+              {canEditPrecios && (
+                <button
+                  onClick={openPrecios}
+                  className="text-body-sm text-brand-600 hover:text-brand-700 font-medium"
+                >
+                  Editar
+                </button>
+              )}
+            </div>
+            {activePrices.length === 0 ? (
+              <p className="text-body-sm text-steel-400">Sin columnas de precio configuradas.</p>
+            ) : (
+              <dl className="space-y-2.5">
+                {activePrices.map((p) => {
+                  const val = articulo[`precio_${p.numero}` as keyof Articulo] as number | null;
+                  return (
+                    <div key={p.numero} className="flex items-center justify-between">
+                      <dt className="text-body-sm text-steel-600">{p.label}</dt>
+                      <dd className="text-body font-semibold text-steel-900 tabular-nums">
+                        {val !== null && val !== undefined ? formatPrecio(val) : '—'}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
             )}
           </div>
-          {activePrices.length === 0 ? (
-            <p className="text-body-sm text-steel-400">Sin columnas de precio configuradas.</p>
-          ) : (
-            <dl className="space-y-2.5">
-              {activePrices.map((p) => {
-                const val = articulo[`precio_${p.numero}` as keyof Articulo] as number | null;
-                return (
-                  <div key={p.numero} className="flex items-center justify-between">
-                    <dt className="text-body-sm text-steel-600">{p.label}</dt>
-                    <dd className="text-body font-semibold text-steel-900 tabular-nums">
-                      {val !== null && val !== undefined ? formatPrecio(val) : '—'}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          )}
-        </div>
+        )}
 
         {/* Existencias */}
-        <div className="bg-white border border-steel-200 rounded-xl p-5">
+        <div className={`bg-white border border-steel-200 rounded-xl p-5${isVendedor ? ' md:col-span-2' : ''}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-body font-semibold text-steel-900">Existencias</h2>
             {canEditExistencia && (

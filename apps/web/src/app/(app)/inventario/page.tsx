@@ -228,9 +228,12 @@ export default function InventarioPage() {
     }
   }
 
+  // El Vendedor no debe ver ningún precio en Inventario (solo existencia).
+  const isVendedor = usuario?.rol === 'VENDEDOR';
+
   // Orden de precio_1..10, no el orden de despliegue configurable (ese es para
   // la pantalla de Configuración → Precios, aquí siempre va por número).
-  const activePrices = (schema?.precios.filter((p) => p.activa) ?? [])
+  const activePrices = isVendedor ? [] : (schema?.precios.filter((p) => p.activa) ?? [])
     .sort((a, b) => a.numero - b.numero);
   const activeExistencias = schema?.existencias.filter((e) => e.activa) ?? [];
   const activeDescripciones = schema?.descripciones.filter((d) => d.activa) ?? [];
