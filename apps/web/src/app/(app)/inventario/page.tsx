@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { cn, formatPrecio } from '@/lib/utils';
+import { VendedorArticuloModal } from './VendedorArticuloModal';
 
 const ArticuloSchema = z.object({
   clave: z.string().min(1, 'Requerido').max(40),
@@ -79,6 +80,7 @@ export default function InventarioPage() {
   const [deleteTarget, setDeleteTarget] = useState<Articulo | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [vendedorModalArt, setVendedorModalArt] = useState<Articulo | null>(null);
   const claveEditada = useRef(false);
 
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
@@ -344,7 +346,10 @@ export default function InventarioPage() {
                     'bg-white hover:bg-steel-50 transition-colors cursor-pointer',
                     !art.activo && 'opacity-50',
                   )}
-                  onDoubleClick={() => canWrite ? openEdit(art) : router.push(`/inventario/${art.id}`)}
+                  onDoubleClick={() => {
+                    if (isVendedor) { setVendedorModalArt(art); return; }
+                    canWrite ? openEdit(art) : router.push(`/inventario/${art.id}`);
+                  }}
                 >
                   <td className="hidden" />
                   {activeDescripciones.map((d) => (
@@ -461,6 +466,17 @@ export default function InventarioPage() {
           </div>
         </div>
       )}
+
+      {/* Modal simplificado para Vendedor: existencia + agregar desde producción */}
+      <VendedorArticuloModal
+        articulo={vendedorModalArt}
+        schema={schema}
+        onClose={() => setVendedorModalArt(null)}
+        onUpdated={(actualizado) => {
+          setVendedorModalArt(actualizado);
+          loadArticulos();
+        }}
+      />
 
       {/* Dialog crear/editar */}
       <Dialog
