@@ -873,18 +873,12 @@ export class VentasService {
     this.validarPagosAdministrativos(dto.pagos);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      for (const p of dto.pagos) {
-        await tx.pago.create({
-          data: { nota_id: notaId, metodo: p.metodo, monto: p.monto, referencia: p.referencia ?? null, usuario_id: usuarioId },
-        });
-      }
-
       const cliente = await tx.cliente.findUniqueOrThrow({ where: { id: nota.cliente_id! } });
       const saldoAntes = Number(cliente.saldo_pendiente);
       const abonoReal = Math.min(montoAbono, saldoNota);
       const saldoDespues = Math.max(0, +(saldoAntes - abonoReal).toFixed(2));
 
-      await tx.movimientoCuenta.create({
+      const movimiento = await tx.movimientoCuenta.create({
         data: {
           ubicacion_id: ubicacionId,
           cliente_id: nota.cliente_id!,
@@ -897,6 +891,22 @@ export class VentasService {
           usuario_id: usuarioId,
         },
       });
+
+      // Trazabilidad 1-a-N pago->movimiento (varios métodos en un mismo abono
+      // comparten el movimiento) — permite a SolicitudesAbonoService identificar
+      // con certeza qué movimiento revertir/ajustar si el abono se registró mal.
+      for (const p of dto.pagos) {
+        await tx.pago.create({
+          data: {
+            nota_id: notaId,
+            metodo: p.metodo,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+            usuario_id: usuarioId,
+            movimiento_cuenta_id: movimiento.id,
+          },
+        });
+      }
 
       await tx.cliente.update({
         where: { id: nota.cliente_id! },

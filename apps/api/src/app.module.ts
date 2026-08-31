@@ -28,6 +28,7 @@ import { RemisionesModule } from './remisiones/remisiones.module';
 import { PedidosModule } from './pedidos/pedidos.module';
 import { CargasNotaModule } from './cargas-nota/cargas-nota.module';
 import { SolicitudesEdicionModule } from './solicitudes-edicion/solicitudes-edicion.module';
+import { SolicitudesAbonoModule } from './solicitudes-abono/solicitudes-abono.module';
 import { MailModule } from './mail/mail.module';
 import { GastosModule } from './gastos/gastos.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
@@ -61,6 +62,7 @@ import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
     CargasNotaModule,
     MailModule,
     SolicitudesEdicionModule,
+    SolicitudesAbonoModule,
     GastosModule,
     CotizacionesModule,
   ],

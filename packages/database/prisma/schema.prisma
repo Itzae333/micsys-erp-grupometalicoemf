@@ -36,6 +36,7 @@ model Empresa {
   registros_asistencia RegistroAsistencia[]
   ordenes_produccion   OrdenProduccion[]
   solicitudes_edicion  SolicitudEdicionNota[]
+  solicitudes_abono    SolicitudEdicionAbono[]
   evidencias_nota      EvidenciaNota[]
   legacy_ventas        LegacyVenta[]
   remisiones_origen    Remision[]                @relation("RemisionOrigenEmpresa")
@@ -123,32 +124,34 @@ model Usuario {
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
 
-  empresa                 Empresa                     @relation(fields: [empresa_id], references: [id])
-  ubicaciones             UsuarioUbicacion[]
-  refresh_tokens          RefreshToken[]
-  notas_venta             NotaVenta[]
-  notas_cotizacion        NotaCotizacion[]
-  movimientos_cuenta      MovimientoCuenta[]
-  movimientos_inventario  MovimientoInventario[]
-  ordenes_compra          OrdenCompra[]
-  movimientos_proveedor   MovimientoCuentaProveedor[]
-  registros_asistencia    RegistroAsistencia[]
-  ordenes_produccion      OrdenProduccion[]
-  solicitudes_enviadas    SolicitudEdicionNota[]      @relation("SolicitudSolicitante")
-  solicitudes_aprobadas   SolicitudEdicionNota[]      @relation("SolicitudAprobador")
-  evidencias_subidas      EvidenciaNota[]
-  pedidos_creados         Pedido[]
-  anticipos_pedido        AnticiposPedido[]
-  evidencias_pedido       EvidenciaPedido[]
-  empleado                Empleado?
-  remisiones_creadas      Remision[]                  @relation("RemisionCreador")
-  remisiones_enviadas     Remision[]                  @relation("RemisionEnviador")
-  remisiones_recibidas    Remision[]                  @relation("RemisionReceptor")
-  cargas_nota             CargaNota[]
-  gastos                  Gasto[]
-  pagos_cobrados          Pago[]
-  notas_canceladas        NotaVenta[]                 @relation("NotaCanceladaPor")
-  cotizaciones_canceladas NotaCotizacion[]            @relation("CotizacionCanceladaPor")
+  empresa                     Empresa                     @relation(fields: [empresa_id], references: [id])
+  ubicaciones                 UsuarioUbicacion[]
+  refresh_tokens              RefreshToken[]
+  notas_venta                 NotaVenta[]
+  notas_cotizacion            NotaCotizacion[]
+  movimientos_cuenta          MovimientoCuenta[]
+  movimientos_inventario      MovimientoInventario[]
+  ordenes_compra              OrdenCompra[]
+  movimientos_proveedor       MovimientoCuentaProveedor[]
+  registros_asistencia        RegistroAsistencia[]
+  ordenes_produccion          OrdenProduccion[]
+  solicitudes_enviadas        SolicitudEdicionNota[]      @relation("SolicitudSolicitante")
+  solicitudes_aprobadas       SolicitudEdicionNota[]      @relation("SolicitudAprobador")
+  solicitudes_abono_enviadas  SolicitudEdicionAbono[]     @relation("SolicitudAbonoSolicitante")
+  solicitudes_abono_aprobadas SolicitudEdicionAbono[]     @relation("SolicitudAbonoAprobador")
+  evidencias_subidas          EvidenciaNota[]
+  pedidos_creados             Pedido[]
+  anticipos_pedido            AnticiposPedido[]
+  evidencias_pedido           EvidenciaPedido[]
+  empleado                    Empleado?
+  remisiones_creadas          Remision[]                  @relation("RemisionCreador")
+  remisiones_enviadas         Remision[]                  @relation("RemisionEnviador")
+  remisiones_recibidas        Remision[]                  @relation("RemisionReceptor")
+  cargas_nota                 CargaNota[]
+  gastos                      Gasto[]
+  pagos_cobrados              Pago[]
+  notas_canceladas            NotaVenta[]                 @relation("NotaCanceladaPor")
+  cotizaciones_canceladas     NotaCotizacion[]            @relation("CotizacionCanceladaPor")
 
   @@map("usuarios")
 }
@@ -372,7 +375,7 @@ model NotaVenta {
   usuario_id   String
   cliente_id   String?
 
-  estatus   EstatusNota @default(ABIERTA)
+  estatus         EstatusNota   @default(ABIERTA)
   // Entrega de mercancía (ver CargasNotaService) — independiente del estatus
   // de pago. Antes registrar una carga sobreescribía `estatus` a
   // FINALIZADA/INCOMPLETA sin importar si la nota era CREDITO, lo que
@@ -380,14 +383,14 @@ model NotaVenta {
   // Ahora la entrega vive aparte y el estatus de pago nunca se toca al
   // cargar mercancía. null = nunca se le registró una carga.
   estatus_entrega EstatusCarga?
-  version   Int         @default(1)
-  subtotal  Decimal     @db.Decimal(12, 2)
-  descuento Decimal     @default(0) @db.Decimal(12, 2)
+  version         Int           @default(1)
+  subtotal        Decimal       @db.Decimal(12, 2)
+  descuento       Decimal       @default(0) @db.Decimal(12, 2)
   // IVA opcional por venta (16% fijo) — no todos los clientes lo requieren.
   // total = subtotal + iva (descuento de cabecera no se usa en ningún flujo).
-  aplica_iva Boolean    @default(false)
-  iva        Decimal    @default(0) @db.Decimal(12, 2)
-  total     Decimal     @db.Decimal(12, 2)
+  aplica_iva      Boolean       @default(false)
+  iva             Decimal       @default(0) @db.Decimal(12, 2)
+  total           Decimal       @db.Decimal(12, 2)
 
   es_credito        Boolean   @default(false)
   fecha_vencimiento DateTime?
@@ -414,10 +417,11 @@ model NotaVenta {
   pagos               Pago[]
   movimientos         MovimientoCuenta[]
   solicitudes_edicion SolicitudEdicionNota[]
+  solicitudes_abono   SolicitudEdicionAbono[]
   evidencias          EvidenciaNota[]
   pedido_origen       Pedido?
   cargas              CargaNota[]
-  cotizacion_origen   NotaCotizacion?        @relation("CotizacionConvertida")
+  cotizacion_origen   NotaCotizacion?         @relation("CotizacionConvertida")
 
   @@unique([ubicacion_id, folio])
   @@map("notas_venta")
@@ -536,8 +540,15 @@ model Pago {
   // los que replican un anticipo de pedido, no llevan usuario.
   usuario_id String?
 
-  nota    NotaVenta @relation(fields: [nota_id], references: [id])
-  usuario Usuario?  @relation(fields: [usuario_id], references: [id])
+  // Movimiento de cuenta generado por este pago cuando es un abono a crédito
+  // (ver VentasService.abonar). Null en pagos de venta normal (no son abono)
+  // y en abonos registrados antes de esta trazabilidad — ver SolicitudesAbonoService.
+  movimiento_cuenta_id String?
+
+  nota              NotaVenta               @relation(fields: [nota_id], references: [id])
+  usuario           Usuario?                @relation(fields: [usuario_id], references: [id])
+  movimiento_cuenta MovimientoCuenta?       @relation(fields: [movimiento_cuenta_id], references: [id])
+  solicitudes_abono SolicitudEdicionAbono[]
 
   @@map("pagos")
 }
@@ -569,6 +580,7 @@ model MovimientoCuenta {
   cliente   Cliente    @relation(fields: [cliente_id], references: [id])
   nota      NotaVenta? @relation(fields: [nota_id], references: [id])
   usuario   Usuario    @relation(fields: [usuario_id], references: [id])
+  pagos     Pago[]
 
   @@index([ubicacion_id, cliente_id, created_at])
   @@map("movimientos_cuenta")
@@ -921,6 +933,55 @@ model SolicitudEdicionNota {
 
   @@index([empresa_id, estatus, created_at])
   @@map("solicitudes_edicion_nota")
+}
+
+// Solicitud de edición/eliminación de UN abono puntual (no de la nota completa).
+// Alcance v1 (ver SolicitudesAbonoService): solo aplica si el abono es el
+// movimiento más reciente en la cuenta del cliente y fue de un solo método.
+enum AccionSolicitudAbono {
+  EDITAR
+  ELIMINAR
+}
+
+model SolicitudEdicionAbono {
+  id             String               @id @default(cuid())
+  // Nullable: si accion es ELIMINAR y se aprueba, el Pago se borra (ver
+  // SolicitudesAbonoService.aplicarCambio) y esta FK queda en null — el
+  // registro de auditoría sobrevive gracias al snapshot *_anterior de abajo.
+  pago_id        String?
+  nota_id        String
+  empresa_id     String
+  solicitante_id String
+  motivo         String
+  accion         AccionSolicitudAbono
+
+  // Snapshot del abono al momento de crear la solicitud — necesario porque si
+  // se aprueba un ELIMINAR, el Pago original deja de existir.
+  monto_anterior      Decimal    @db.Decimal(12, 2)
+  metodo_anterior     MetodoPago
+  referencia_anterior String?
+
+  nuevo_monto      Decimal?    @db.Decimal(12, 2)
+  nuevo_metodo     MetodoPago?
+  nueva_referencia String?
+
+  estatus          EstatusSolicitudEdicion @default(PENDIENTE)
+  aprobado_por_id  String?
+  comentario_admin String?
+  token            String?                 @unique
+  token_expires_at DateTime?
+  token_used_at    DateTime?
+  created_at       DateTime                @default(now())
+  updated_at       DateTime                @updatedAt
+
+  pago         Pago?     @relation(fields: [pago_id], references: [id], onDelete: SetNull)
+  nota         NotaVenta @relation(fields: [nota_id], references: [id])
+  empresa      Empresa   @relation(fields: [empresa_id], references: [id])
+  solicitante  Usuario   @relation("SolicitudAbonoSolicitante", fields: [solicitante_id], references: [id])
+  aprobado_por Usuario?  @relation("SolicitudAbonoAprobador", fields: [aprobado_por_id], references: [id])
+
+  @@index([empresa_id, estatus, created_at])
+  @@map("solicitudes_edicion_abono")
 }
 
 model EvidenciaNota {

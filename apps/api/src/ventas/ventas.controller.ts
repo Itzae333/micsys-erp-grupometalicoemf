@@ -7,6 +7,8 @@ import { VentasService } from './ventas.service';
 import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto, UpdateIvaDto } from './dto/ventas.dto';
 import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
 import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
+import { SolicitudesAbonoService } from '../solicitudes-abono/solicitudes-abono.service';
+import { CrearSolicitudAbonoDto } from '../solicitudes-abono/dto/solicitudes-abono.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -19,6 +21,7 @@ export class VentasController {
   constructor(
     private ventas: VentasService,
     private solicitudesEdicion: SolicitudesEdicionService,
+    private solicitudesAbono: SolicitudesAbonoService,
   ) {}
 
   @Get('corte-caja')
@@ -241,5 +244,39 @@ export class VentasController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.solicitudesEdicion.aperturarDirecto(id, ubicacionId, user.sub, dto);
+  }
+
+  @Post(':notaId/pagos/:pagoId/solicitudes-abono')
+  @Roles('ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Solicitar edición o eliminación de un abono (requiere autorización del ADMIN por correo)' })
+  crearSolicitudAbono(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('pagoId') pagoId: string,
+    @Body() dto: CrearSolicitudAbonoDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.solicitudesAbono.crear(pagoId, ubicacionId, user.sub, dto);
+  }
+
+  @Get(':notaId/pagos/:pagoId/solicitudes-abono')
+  @Roles('ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Historial de solicitudes de edición de un abono' })
+  listarSolicitudesAbono(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('pagoId') pagoId: string,
+  ) {
+    return this.solicitudesAbono.listarPorPago(pagoId, ubicacionId);
+  }
+
+  @Post(':notaId/pagos/:pagoId/solicitudes-abono/abrir-directo')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'ADMIN edita/elimina un abono de inmediato, sin pasar por aprobación por correo' })
+  abrirDirectoAbono(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('pagoId') pagoId: string,
+    @Body() dto: CrearSolicitudAbonoDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.solicitudesAbono.aperturarDirecto(pagoId, ubicacionId, user.sub, dto);
   }
 }

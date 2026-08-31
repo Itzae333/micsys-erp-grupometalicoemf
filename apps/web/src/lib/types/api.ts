@@ -176,6 +176,8 @@ export interface Pago {
   /** Quién registró el cobro — puede diferir de NotaVenta.usuario cuando otro cobra una nota que alguien más dejó abierta. */
   usuario_id: string | null;
   usuario: { id: string; nombre: string; apellidos: string } | null;
+  /** Movimiento de cuenta que generó este pago cuando es un abono a crédito. Null/undefined en pagos de venta normal y en abonos anteriores a esta trazabilidad. */
+  movimiento_cuenta_id?: string | null;
 }
 
 export type TipoEvidencia = 'TICKET_ORIGINAL' | 'COMPROBANTE_PAGO' | 'IMAGEN' | 'TICKET_REEDITADO';
@@ -303,6 +305,25 @@ export interface SolicitudEdicionNota {
   id: string;
   nota_id: string;
   motivo: string;
+  estatus: EstatusSolicitudEdicion;
+  comentario_admin: string | null;
+  solicitante: { id: string; nombre: string; apellidos: string } | null;
+  aprobado_por: { id: string; nombre: string; apellidos: string } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AccionSolicitudAbono = 'EDITAR' | 'ELIMINAR';
+
+export interface SolicitudEdicionAbono {
+  id: string;
+  pago_id: string;
+  nota_id: string;
+  motivo: string;
+  accion: AccionSolicitudAbono;
+  nuevo_monto: number | null;
+  nuevo_metodo: MetodoPago | null;
+  nueva_referencia: string | null;
   estatus: EstatusSolicitudEdicion;
   comentario_admin: string | null;
   solicitante: { id: string; nombre: string; apellidos: string } | null;

@@ -7,7 +7,7 @@ import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { useContextoStore } from '@/lib/store/contexto.store';
 import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID, EMPRESA_LAMINAS_MONTERREY_ID } from '@/lib/empresas';
-import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota } from '@/lib/types/api';
+import type { NotaVenta, Articulo, ArticulosPage, ConfigColumnasSchema, CargaNotaPendientes, SolicitudEdicionNota, Pago, AccionSolicitudAbono } from '@/lib/types/api';
 import { MOTIVOS_CANCELACION } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -127,6 +127,19 @@ export default function NotaDetallePage() {
   const [creandoSolicitud, setCreandoSolicitud] = useState(false);
   const [solicitudError, setSolicitudError] = useState<string | null>(null);
   const [solicitudes, setSolicitudes] = useState<SolicitudEdicionNota[]>([]);
+
+  // Solicitud de edición/eliminación de un abono puntual
+  const [dlgSolicitudAbono, setDlgSolicitudAbono] = useState(false);
+  const [modoDlgSolicitudAbono, setModoDlgSolicitudAbono] = useState<'solicitar' | 'aperturar'>('solicitar');
+  const [pagoSeleccionado, setPagoSeleccionado] = useState<Pago | null>(null);
+  const [accionAbono, setAccionAbono] = useState<AccionSolicitudAbono>('EDITAR');
+  const [abonoMotivo, setAbonoMotivo] = useState('');
+  const [abonoNuevoMonto, setAbonoNuevoMonto] = useState('');
+  const [abonoNuevoMetodo, setAbonoNuevoMetodo] = useState('EFECTIVO');
+  const [abonoNuevaReferencia, setAbonoNuevaReferencia] = useState('');
+  const [creandoSolicitudAbono, setCreandoSolicitudAbono] = useState(false);
+  const [solicitudAbonoError, setSolicitudAbonoError] = useState<string | null>(null);
+  const [pagosConSolicitudPendiente, setPagosConSolicitudPendiente] = useState<Set<string>>(new Set());
 
   const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canCancel = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
@@ -585,6 +598,71 @@ export default function NotaDetallePage() {
     }
   }
 
+  // ── Solicitud de edición/eliminación de un abono ──────────────
+  function openSolicitudAbono(pago: Pago, accion: AccionSolicitudAbono) {
+    setModoDlgSolicitudAbono('solicitar');
+    setPagoSeleccionado(pago);
+    setAccionAbono(accion);
+    setAbonoMotivo('');
+    setAbonoNuevoMonto(String(pago.monto));
+    setAbonoNuevoMetodo(pago.metodo === 'ADMINISTRATIVO' ? 'EFECTIVO' : pago.metodo);
+    setAbonoNuevaReferencia(pago.referencia ?? '');
+    setSolicitudAbonoError(null);
+    setDlgSolicitudAbono(true);
+  }
+
+  function openAperturarDirectoAbono(pago: Pago, accion: AccionSolicitudAbono) {
+    setModoDlgSolicitudAbono('aperturar');
+    setPagoSeleccionado(pago);
+    setAccionAbono(accion);
+    setAbonoMotivo('');
+    setAbonoNuevoMonto(String(pago.monto));
+    setAbonoNuevoMetodo(pago.metodo === 'ADMINISTRATIVO' ? 'EFECTIVO' : pago.metodo);
+    setAbonoNuevaReferencia(pago.referencia ?? '');
+    setSolicitudAbonoError(null);
+    setDlgSolicitudAbono(true);
+  }
+
+  async function onCrearSolicitudAbono() {
+    if (!nota || !pagoSeleccionado) return;
+    if (abonoMotivo.trim().length < 5) {
+      setSolicitudAbonoError('Describe el motivo con al menos 5 caracteres.');
+      return;
+    }
+    if (accionAbono === 'EDITAR' && (!abonoNuevoMonto || Number(abonoNuevoMonto) <= 0)) {
+      setSolicitudAbonoError('Indica el nuevo monto del abono.');
+      return;
+    }
+    setCreandoSolicitudAbono(true);
+    setSolicitudAbonoError(null);
+    try {
+      const url = modoDlgSolicitudAbono === 'aperturar'
+        ? `/ventas/${nota.id}/pagos/${pagoSeleccionado.id}/solicitudes-abono/abrir-directo`
+        : `/ventas/${nota.id}/pagos/${pagoSeleccionado.id}/solicitudes-abono`;
+      await api.post(url, {
+        motivo: abonoMotivo.trim(),
+        accion: accionAbono,
+        ...(accionAbono === 'EDITAR'
+          ? {
+              nuevo_monto: Number(abonoNuevoMonto),
+              nuevo_metodo: abonoNuevoMetodo,
+              nueva_referencia: abonoNuevoMetodo === 'EFECTIVO' ? undefined : (abonoNuevaReferencia || undefined),
+            }
+          : {}),
+      });
+      setDlgSolicitudAbono(false);
+      if (modoDlgSolicitudAbono === 'aperturar') {
+        void load();
+      } else {
+        setPagosConSolicitudPendiente((prev) => new Set(prev).add(pagoSeleccionado.id));
+      }
+    } catch (err) {
+      setSolicitudAbonoError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
+    } finally {
+      setCreandoSolicitudAbono(false);
+    }
+  }
+
   // ── Evidencias ─────────────────────────────────────────────
   function compressImage(file: File): Promise<string> {
     return new Promise((resolve) => {
@@ -699,6 +777,9 @@ export default function NotaDetallePage() {
     && !solicitudPendiente;
   const puedeAperturarDirecto = canAperturarDirecto
     && ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'].includes(nota.estatus);
+  const puedeSolicitarAbono = canSolicitarEdicion && ['PAGADA', 'CREDITO'].includes(nota.estatus);
+  const puedeAperturarAbonoDirecto = canAperturarDirecto && ['PAGADA', 'CREDITO'].includes(nota.estatus);
+  const ultimoPagoId = nota.pagos[nota.pagos.length - 1]?.id;
 
   // Computa saldo y running balance para CREDITO
   const totalPagado = nota.pagos.reduce((s, p) => s + p.monto, 0);
@@ -1061,12 +1142,38 @@ export default function NotaDetallePage() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <p className="text-body-sm font-medium text-steel-900">
                           {METODO_LABEL[pago.metodo]}
                           {pago.referencia && <span className="text-steel-400 font-normal"> — {pago.referencia}</span>}
                         </p>
-                        <span className="text-body font-semibold text-steel-900">{formatPrecio(pago.monto)}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-body font-semibold text-steel-900">{formatPrecio(pago.monto)}</span>
+                          {pago.movimiento_cuenta_id && pago.id === ultimoPagoId && (puedeSolicitarAbono || puedeAperturarAbonoDirecto) && (
+                            pagosConSolicitudPendiente.has(pago.id) ? (
+                              <Badge variant="pending">Solicitud pendiente</Badge>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  title="Solicitar editar abono"
+                                  onClick={() => puedeAperturarAbonoDirecto ? openAperturarDirectoAbono(pago, 'EDITAR') : openSolicitudAbono(pago, 'EDITAR')}
+                                  className="text-steel-400 hover:text-brand-600 transition-colors text-body-sm"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Solicitar eliminar abono"
+                                  onClick={() => puedeAperturarAbonoDirecto ? openAperturarDirectoAbono(pago, 'ELIMINAR') : openSolicitudAbono(pago, 'ELIMINAR')}
+                                  className="text-steel-400 hover:text-brand-600 transition-colors"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
                         <p className="text-meta text-steel-400">{fmtFecha(pago.created_at)}</p>
@@ -1665,6 +1772,84 @@ export default function NotaDetallePage() {
             <Button type="button" variant="secondary" onClick={() => setDlgSolicitud(false)}>Cancelar</Button>
             <Button type="button" loading={creandoSolicitud} onClick={onCrearSolicitud}>
               {modoDlgSolicitud === 'aperturar' ? 'Abrir venta' : 'Enviar solicitud'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </Dialog>
+
+      {/* ── Dialog: solicitar editar/eliminar un abono ───────── */}
+      <Dialog
+        open={dlgSolicitudAbono}
+        onClose={() => setDlgSolicitudAbono(false)}
+        title={
+          accionAbono === 'ELIMINAR'
+            ? (modoDlgSolicitudAbono === 'aperturar' ? 'Eliminar abono' : 'Solicitar eliminar abono')
+            : (modoDlgSolicitudAbono === 'aperturar' ? 'Editar abono' : 'Solicitar editar abono')
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-body-sm text-steel-500">
+            {modoDlgSolicitudAbono === 'aperturar'
+              ? 'El cambio se aplicará de inmediato.'
+              : 'Se enviará un correo al administrador para que autorice el cambio.'}
+          </p>
+
+          {pagoSeleccionado && (
+            <div className="bg-steel-50 rounded-lg px-3 py-2.5 text-body-sm text-steel-600">
+              Abono actual: <span className="font-semibold text-steel-900">{formatPrecio(pagoSeleccionado.monto)}</span> — {METODO_LABEL[pagoSeleccionado.metodo]}
+              {pagoSeleccionado.referencia && ` — ${pagoSeleccionado.referencia}`}
+            </div>
+          )}
+
+          {accionAbono === 'EDITAR' && (
+            <>
+              <div>
+                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Nuevo monto</label>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={abonoNuevoMonto}
+                  onChange={(e) => setAbonoNuevoMonto(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Nuevo método</label>
+                <Select value={abonoNuevoMetodo} onChange={(e) => setAbonoNuevoMetodo(e.target.value)}>
+                  {METODOS.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
+                </Select>
+              </div>
+              {abonoNuevoMetodo !== 'EFECTIVO' && (
+                <div>
+                  <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Referencia</label>
+                  <Input value={abonoNuevaReferencia} onChange={(e) => setAbonoNuevaReferencia(e.target.value)} />
+                </div>
+              )}
+            </>
+          )}
+
+          <div>
+            <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Motivo</label>
+            <textarea
+              className="flex w-full rounded-md border border-steel-300 bg-white px-3 py-2 text-body text-steel-900 focus:outline-none focus:ring-2 focus:ring-brand-600"
+              rows={3}
+              placeholder="Ej: Se registró el abono con el monto equivocado…"
+              value={abonoMotivo}
+              onChange={(e) => setAbonoMotivo(e.target.value)}
+            />
+          </div>
+
+          {solicitudAbonoError && (
+            <div className="bg-brand-50 border border-brand-200 rounded-md px-3 py-2">
+              <p className="text-body-sm text-brand-600">{solicitudAbonoError}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setDlgSolicitudAbono(false)}>Cancelar</Button>
+            <Button type="button" loading={creandoSolicitudAbono} onClick={onCrearSolicitudAbono}>
+              {modoDlgSolicitudAbono === 'aperturar' ? 'Aplicar cambio' : 'Enviar solicitud'}
             </Button>
           </DialogFooter>
         </div>
