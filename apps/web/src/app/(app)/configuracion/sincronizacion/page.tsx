@@ -23,11 +23,22 @@ export default function SincronizacionPage() {
   const toast = useToast();
   const [busyId, setBusyId] = useState<number | null>(null);
 
+  // Además de error/rechazado, se listan los `pending` que llevan más de 5
+  // minutos esperando — normalmente se sincronizan solos en segundos, pero si
+  // el reintento automático (ver useOnlineStatus) sigue sin lograrlo, aquí es
+  // donde el usuario puede verlos y forzar un reintento manual.
+  const PENDING_ESTANCADO_MS = 5 * 60 * 1000;
+
   const items = useLiveQuery(
     async () => {
       const all = await emfDb.syncQueue.toArray();
+      const ahora = Date.now();
       return all
-        .filter((i) => i.status === 'error' || (i.status === 'done' && i.httpStatus === 422))
+        .filter((i) =>
+          i.status === 'error'
+          || (i.status === 'done' && i.httpStatus === 422)
+          || (i.status === 'pending' && ahora - i.createdAt.getTime() > PENDING_ESTANCADO_MS),
+        )
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     },
     [],
@@ -89,13 +100,14 @@ export default function SincronizacionPage() {
               // body no parseable — se muestra sin detalle
             }
             const esRechazo = item.status === 'done' && item.httpStatus === 422;
+            const esPendienteAtorado = item.status === 'pending';
 
             return (
               <div key={item.id} className="bg-white border border-steel-200 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant={esRechazo ? 'credit' : 'cancelled'}>
-                      {esRechazo ? 'Rechazado por el servidor' : 'Error de sincronización'}
+                    <Badge variant={esRechazo ? 'credit' : esPendienteAtorado ? 'pending' : 'cancelled'}>
+                      {esRechazo ? 'Rechazado por el servidor' : esPendienteAtorado ? 'Atorada sin sincronizar' : 'Error de sincronización'}
                     </Badge>
                     <span className="text-body-sm text-steel-500">{item.method} {item.url}</span>
                   </div>

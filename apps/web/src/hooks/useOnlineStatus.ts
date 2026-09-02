@@ -12,6 +12,13 @@ interface OnlineStatus {
   pendingSync: number;
 }
 
+// Cada cuánto se reintenta la cola en segundo plano mientras hay conexión —
+// cubre el caso de que el intento disparado por el evento `online` haya
+// fallado (ej. el navegador avisa "online" con la interfaz de red ya activa
+// pero el internet real tardando unos segundos más en responder) y nada
+// vuelva a reintentarlo, porque ese evento no se repite solo.
+const RETRY_INTERVAL_MS = 2 * 60 * 1000;
+
 export function useOnlineStatus(): OnlineStatus {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -24,9 +31,7 @@ export function useOnlineStatus(): OnlineStatus {
       setPendingSync(count);
     }
 
-    async function handleOnline() {
-      setIsOnline(true);
-      // Cuando se recupera la conexión, procesa la cola automáticamente
+    async function syncNow() {
       await flushQueue();
       await reconcileVentasPendientes();
       await cleanDoneItems();
@@ -40,6 +45,12 @@ export function useOnlineStatus(): OnlineStatus {
       }
     }
 
+    async function handleOnline() {
+      setIsOnline(true);
+      // Cuando se recupera la conexión, procesa la cola automáticamente
+      await syncNow();
+    }
+
     function handleOffline() {
       setIsOnline(false);
     }
@@ -47,12 +58,31 @@ export function useOnlineStatus(): OnlineStatus {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Inicializar conteo
-    refreshPending();
+    // Inicializar conteo y, si ya hay pendientes al montar (ej. se recargó la
+    // página después de un intento fallido que nunca se reintentó solo),
+    // dispara un intento de una vez — no hay que esperar a otra transición
+    // offline→online que quizá nunca vuelva a pasar.
+    (async () => {
+      await refreshPending();
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const count = await getPendingCount();
+        if (count > 0) await syncNow();
+      }
+    })();
+
+    // Reintento periódico mientras la pestaña siga abierta y online — mismo
+    // motivo que arriba, para no depender de que el evento `online` se
+    // repita.
+    const interval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        void syncNow();
+      }
+    }, RETRY_INTERVAL_MS);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
     };
   }, []);
 
