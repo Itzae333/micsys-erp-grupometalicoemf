@@ -179,8 +179,12 @@ export default function PedidosPage() {
   }, [empresa]);
 
   // ── Seleccionar precio del artículo ────────────────────────
+  // Al agregar una línea a un pedido YA EXISTENTE (pedidoActivo) hay que usar
+  // el precio asignado a SU cliente, no `clienteSeleccionado` — ese state solo
+  // se llena al crear un pedido nuevo (dialog "Nuevo pedido") y queda en null
+  // el resto del tiempo, lo que hacía caer siempre al precio de mostrador.
   function precioDeArticulo(art: Articulo): number {
-    const numero = clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
+    const numero = pedidoActivo?.cliente?.precio_num ?? clienteSeleccionado?.precio_num ?? precioMostradorNumero(schema);
     const key = `precio_${numero}` as keyof Articulo;
     return Number(art[key] ?? 0);
   }
@@ -249,11 +253,13 @@ export default function PedidosPage() {
     if (!pedidoActivo) return;
     const draft = lineaDraft[linea.id];
     if (!draft) return;
+    const cant = parseFloat(draft.cantidad);
+    const precio = parseFloat(draft.precio);
     setSavingLinea(linea.id);
     try {
       await api.patch(`/pedidos/${pedidoActivo.id}/lineas/${linea.id}`, {
-        cantidad: parseFloat(draft.cantidad) || linea.cantidad,
-        precio_unitario: parseFloat(draft.precio) || linea.precio_unitario,
+        cantidad: Number.isFinite(cant) && cant > 0 ? cant : linea.cantidad,
+        precio_unitario: Number.isFinite(precio) && precio >= 0 ? precio : linea.precio_unitario,
       });
       await refreshActivo(pedidoActivo.id);
       setLineaDraft((prev) => { const n = { ...prev }; delete n[linea.id]; return n; });
@@ -417,6 +423,10 @@ export default function PedidosPage() {
   }
 
   const totalPreview = (pedidoActivo?.lineas ?? []).reduce((s, l) => s + subtotalPreviewLinea(l), 0);
+  // Saldo pendiente en vivo, igual que totalPreview — si no, mientras se edita
+  // el precio/cantidad de una línea, "Total pedido" ya se actualiza pero
+  // "Saldo pendiente" se queda con el valor viejo hasta guardar la línea.
+  const saldoPendientePreview = Math.max(0, +(totalPreview - (pedidoActivo?.total_anticipos ?? 0)).toFixed(2));
 
   // ── Render ──────────────────────────────────────────────────
   return (
@@ -715,11 +725,11 @@ export default function PedidosPage() {
                     <span className="font-semibold">-${formatMoney(pedidoActivo.total_anticipos)}</span>
                   </div>
                   <div className="flex justify-between text-body font-bold border-t border-steel-200 pt-1 mt-1">
-                    <span className={pedidoActivo.saldo_pendiente > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+                    <span className={saldoPendientePreview > 0 ? 'text-amber-700' : 'text-emerald-700'}>
                       Saldo pendiente
                     </span>
-                    <span className={pedidoActivo.saldo_pendiente > 0 ? 'text-amber-700' : 'text-emerald-700'}>
-                      ${formatMoney(Math.max(0, pedidoActivo.saldo_pendiente))}
+                    <span className={saldoPendientePreview > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+                      ${formatMoney(saldoPendientePreview)}
                     </span>
                   </div>
                 </div>

@@ -13,7 +13,7 @@ import type { Prisma } from '@grupometalicoemf/database';
 
 const PEDIDO_INCLUDE = {
   cliente: {
-    select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true },
+    select: { id: true, nombre: true, apellidos: true, razon_social: true, email: true, telefono: true, precio_num: true },
   },
   usuario: { select: { id: true, nombre: true, apellidos: true } },
   lineas: {

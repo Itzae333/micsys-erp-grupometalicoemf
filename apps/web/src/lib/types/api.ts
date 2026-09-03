@@ -896,7 +896,7 @@ export interface Pedido {
   ubicacion_id: string;
   usuario_id: string;
   cliente_id: string;
-  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null } | null;
+  cliente: { id: string; nombre: string; apellidos: string | null; razon_social: string | null; email: string | null; telefono: string | null; precio_num: number | null } | null;
   usuario: { id: string; nombre: string; apellidos: string } | null;
   estatus: EstatusPedido;
   subtotal: number;
