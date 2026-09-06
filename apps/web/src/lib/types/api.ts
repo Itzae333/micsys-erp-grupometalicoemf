@@ -912,6 +912,9 @@ export interface Pedido {
   created_at: string;
   updated_at: string;
   cerrado_at: string | null;
+  motivo_cancelacion_abono: 'DEVOLUCION' | 'RETENIDO' | null;
+  cancelado_por_id: string | null;
+  cancelado_at: string | null;
 }
 
 export interface PedidosPage {

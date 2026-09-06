@@ -15,8 +15,44 @@ import { getTicketLogoUrl } from '@/lib/utils/ticket-logo';
 import { printRemisionTicket, fechaTicketRemision } from '@/lib/utils/print-remision';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
+import { ArticuloDestinoPicker } from '@/components/remisiones/ArticuloDestinoPicker';
+import type { Articulo } from '@/lib/types/api';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
+
+type EstadoResolucion = 'AUTO_EQUIVALENCIA' | 'AUTO_UNICO_CANDIDATO' | 'AMBIGUO' | 'SIN_CANDIDATOS';
+type OrigenResolucion = 'AUTOMATICA' | 'MANUAL_AMBIGUEDAD' | 'MANUAL_BUSQUEDA';
+
+interface CandidatoDestino {
+  articulo_destino_id: string;
+  clave: string;
+  descripcion_1: string | null; descripcion_2: string | null; descripcion_3: string | null;
+  descripcion_4: string | null; descripcion_5: string | null;
+  score: number;
+}
+
+interface PreviewLinea {
+  linea_id: string;
+  resolucion: {
+    estado: EstadoResolucion;
+    seleccionado: CandidatoDestino | null;
+    candidatos: CandidatoDestino[];
+  };
+}
+
+interface Resolucion {
+  articulo_destino_id: string;
+  origen_resolucion?: OrigenResolucion;
+  // Datos para mostrar en la tabla cuando el artículo elegido a mano no
+  // viene en la respuesta de preview (candidatos/seleccionado) — ej. una
+  // búsqueda manual en SIN_CANDIDATOS.
+  manual?: { clave: string; descripcion_1: string | null; descripcion_2: string | null; descripcion_3: string | null; descripcion_4: string | null; descripcion_5: string | null };
+}
+
+function descripcionCandidato(c: { descripcion_1: string | null; descripcion_2: string | null; descripcion_3: string | null; descripcion_4: string | null; descripcion_5: string | null }): string {
+  return [c.descripcion_1, c.descripcion_2, c.descripcion_3, c.descripcion_4, c.descripcion_5]
+    .filter(Boolean).join(' · ');
+}
 
 interface RemisionLinea {
   id: string;
@@ -104,6 +140,14 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
   const [showPreview, setShowPreview]   = useState(false);
   const [printing, setPrinting]         = useState(false);
 
+  // Equivalencia de artículos entre ubicaciones (ver preview-recepcion) —
+  // cada ubicación tiene su propio catálogo, así que hay que resolver qué
+  // artículo del destino corresponde a cada línea antes de confirmar.
+  const [preview, setPreview]                 = useState<PreviewLinea[] | null>(null);
+  const [previewLoading, setPreviewLoading]   = useState(false);
+  const [resoluciones, setResoluciones]       = useState<Record<string, Resolucion | null>>({});
+  const [pickerAbierto, setPickerAbierto]     = useState<string | null>(null);
+
   const canManage  = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'].includes(usuario?.rol ?? '');
 
@@ -166,6 +210,53 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
     }
   }
 
+  const cargarPreview = useCallback(async () => {
+    if (!rem) return;
+    setPreviewLoading(true);
+    try {
+      const data = await api.get<{ lineas: PreviewLinea[] }>(`/remisiones/${rem.id}/preview-recepcion`);
+      setPreview(data.lineas);
+      const init: Record<string, Resolucion | null> = {};
+      data.lineas.forEach((l) => {
+        const sel = l.resolucion.seleccionado;
+        init[l.linea_id] = sel
+          ? {
+              articulo_destino_id: sel.articulo_destino_id,
+              origen_resolucion: l.resolucion.estado === 'AUTO_UNICO_CANDIDATO' ? 'AUTOMATICA' : undefined,
+            }
+          : null;
+      });
+      setResoluciones(init);
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudieron calcular los artículos equivalentes en destino');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [rem]);
+
+  function elegirCandidato(lineaId: string, candidato: CandidatoDestino) {
+    setResoluciones((prev) => ({
+      ...prev,
+      [lineaId]: { articulo_destino_id: candidato.articulo_destino_id, origen_resolucion: 'MANUAL_AMBIGUEDAD' },
+    }));
+  }
+
+  function elegirManual(lineaId: string, art: Articulo) {
+    setResoluciones((prev) => ({
+      ...prev,
+      [lineaId]: {
+        articulo_destino_id: art.id,
+        origen_resolucion: 'MANUAL_BUSQUEDA',
+        manual: {
+          clave: art.clave,
+          descripcion_1: art.descripcion_1, descripcion_2: art.descripcion_2, descripcion_3: art.descripcion_3,
+          descripcion_4: art.descripcion_4, descripcion_5: art.descripcion_5,
+        },
+      },
+    }));
+    setPickerAbierto(null);
+  }
+
   async function doRecibir() {
     if (!rem || !empresa) return;
     setAction('recibir');
@@ -173,10 +264,22 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
     try {
       await api.patch(
         `/remisiones/${rem.id}/recibir`,
-        { lineas: rem.lineas.map((l) => ({ linea_id: l.id, cantidad_recibida: cantidades[l.id] ?? l.cantidad_enviada })) },
+        {
+          lineas: rem.lineas.map((l) => {
+            const resolucion = resoluciones[l.id];
+            return {
+              linea_id: l.id,
+              cantidad_recibida: cantidades[l.id] ?? l.cantidad_enviada,
+              articulo_destino_id: resolucion?.articulo_destino_id,
+              origen_resolucion: resolucion?.origen_resolucion,
+            };
+          }),
+        },
       );
       await load();
       setShowRecibir(false);
+      setPreview(null);
+      setResoluciones({});
     } catch (err: any) {
       setError(err?.message ?? 'Error al recibir');
     } finally {
@@ -245,7 +348,7 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
             </>
           )}
           {rem.estatus === 'EN_TRANSITO' && (isDestino || canManage) && canReceive && !showRecibir && (
-            <Button size="sm" onClick={() => setShowRecibir(true)}>
+            <Button size="sm" onClick={() => { setShowRecibir(true); void cargarPreview(); }}>
               <PackageCheck className="h-3.5 w-3.5 mr-1.5" />
               Recibir
             </Button>
@@ -332,6 +435,9 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
               <thead>
                 <tr className="border-b border-steel-100">
                   <th className="text-left px-4 py-3 font-medium text-steel-600">Artículo</th>
+                  {showRecibir && (
+                    <th className="text-left px-4 py-3 font-medium text-steel-600">Artículo destino</th>
+                  )}
                   <th className="text-center px-3 py-3 font-medium text-steel-600 hidden md:table-cell">Slots</th>
                   <th className="text-right px-4 py-3 font-medium text-steel-600">Enviado</th>
                   <th className="text-right px-4 py-3 font-medium text-steel-600">Recibido</th>
@@ -345,6 +451,8 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                   const dif = linea.cantidad_recibida != null
                     ? linea.cantidad_recibida - linea.cantidad_enviada
                     : null;
+                  const previewLinea = preview?.find((p) => p.linea_id === linea.id);
+                  const resolucion = resoluciones[linea.id];
                   return (
                     <tr key={linea.id} className="bg-white hover:bg-steel-50 transition-colors">
                       <td className="px-4 py-3">
@@ -353,6 +461,71 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                         </p>
                         <p className="text-meta text-steel-400">{linea.articulo.clave}</p>
                       </td>
+                      {showRecibir && (
+                        <td className="px-4 py-3 relative">
+                          {previewLoading ? (
+                            <span className="text-meta text-steel-400">Calculando…</span>
+                          ) : !previewLinea ? (
+                            <span className="text-meta text-steel-400">—</span>
+                          ) : (
+                            <div className="space-y-1">
+                              {resolucion?.articulo_destino_id && (
+                                (() => {
+                                  const elegido = resolucion.manual
+                                    ?? previewLinea.resolucion.candidatos.find(
+                                      (c) => c.articulo_destino_id === resolucion.articulo_destino_id,
+                                    )
+                                    ?? previewLinea.resolucion.seleccionado;
+                                  return (
+                                    <div>
+                                      <p className="text-body-sm font-medium text-steel-800 leading-tight">
+                                        {(elegido && descripcionCandidato(elegido)) || elegido?.clave}
+                                      </p>
+                                      <p className="text-meta text-steel-400">{elegido?.clave}</p>
+                                    </div>
+                                  );
+                                })()
+                              )}
+
+                              {previewLinea.resolucion.estado === 'AMBIGUO' && (
+                                <select
+                                  value={resolucion?.articulo_destino_id ?? ''}
+                                  onChange={(e) => {
+                                    const c = previewLinea.resolucion.candidatos.find((x) => x.articulo_destino_id === e.target.value);
+                                    if (c) elegirCandidato(linea.id, c);
+                                  }}
+                                  className="w-full border border-steel-300 rounded px-2 py-1 text-meta focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                >
+                                  <option value="">Elegir equivalencia…</option>
+                                  {previewLinea.resolucion.candidatos.map((c) => (
+                                    <option key={c.articulo_destino_id} value={c.articulo_destino_id}>
+                                      {c.clave} — {descripcionCandidato(c) || c.clave} ({Math.round(c.score * 100)}%)
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {(previewLinea.resolucion.estado === 'SIN_CANDIDATOS' || previewLinea.resolucion.estado === 'AMBIGUO' || previewLinea.resolucion.estado.startsWith('AUTO')) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPickerAbierto(pickerAbierto === linea.id ? null : linea.id)}
+                                  className="text-meta text-brand-600 hover:underline"
+                                >
+                                  {previewLinea.resolucion.estado === 'SIN_CANDIDATOS' ? 'Buscar artículo en destino…' : 'Buscar manualmente…'}
+                                </button>
+                              )}
+
+                              {pickerAbierto === linea.id && (
+                                <ArticuloDestinoPicker
+                                  remisionId={rem.id}
+                                  onClose={() => setPickerAbierto(null)}
+                                  onSelect={(art) => elegirManual(linea.id, art)}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      )}
                       <td className="px-3 py-3 text-center text-steel-500 hidden md:table-cell">
                         <span className="text-meta">{linea.slot_origen} → {linea.slot_destino}</span>
                       </td>
@@ -396,17 +569,31 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
               </tbody>
             </table>
 
-            {showRecibir && (
-              <div className="px-4 py-3 border-t border-steel-100 bg-steel-50 flex items-center justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setShowRecibir(false)} disabled={!!action}>
-                  Cancelar
-                </Button>
-                <Button size="sm" onClick={doRecibir} disabled={!!action}>
-                  <PackageCheck className="h-3.5 w-3.5 mr-1.5" />
-                  {action === 'recibir' ? 'Confirmando…' : 'Confirmar recepción'}
-                </Button>
-              </div>
-            )}
+            {showRecibir && (() => {
+              const pendientes = rem.lineas.filter((l) => {
+                const cant = cantidades[l.id] ?? l.cantidad_enviada;
+                return cant > 0 && !resoluciones[l.id]?.articulo_destino_id;
+              });
+              const bloqueado = previewLoading || !preview || pendientes.length > 0;
+              return (
+                <div className="px-4 py-3 border-t border-steel-100 bg-steel-50 space-y-2">
+                  {pendientes.length > 0 && !previewLoading && (
+                    <p className="text-meta text-orange-600">
+                      Falta resolver el artículo destino de: {pendientes.map((l) => l.articulo.clave).join(', ')}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => { setShowRecibir(false); setPreview(null); setResoluciones({}); }} disabled={!!action}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" onClick={doRecibir} disabled={!!action || bloqueado}>
+                      <PackageCheck className="h-3.5 w-3.5 mr-1.5" />
+                      {action === 'recibir' ? 'Confirmando…' : 'Confirmar recepción'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

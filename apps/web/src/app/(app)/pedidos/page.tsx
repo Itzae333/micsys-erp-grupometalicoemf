@@ -94,6 +94,13 @@ export default function PedidosPage() {
   const [lineaDraft, setLineaDraft] = useState<Record<string, { cantidad: string; precio: string }>>({});
   const [savingLinea, setSavingLinea] = useState<string | null>(null);
   const [cancelando, setCancelando] = useState(false);
+  const [revirtiendoCancelacion, setRevirtiendoCancelacion] = useState(false);
+
+  // ── Dialog cancelar (pedidos con anticipos) ──────────────────
+  const [dlgCancelar, setDlgCancelar] = useState(false);
+  const [motivoAbono, setMotivoAbono] = useState<'DEVOLUCION' | 'RETENIDO' | null>(null);
+  const [pagosDevolucion, setPagosDevolucion] = useState<PagoForm[]>(initPagos());
+  const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
 
   // ── Dialog anticipo ─────────────────────────────────────────
   const [dlgAnticipo, setDlgAnticipo] = useState(false);
@@ -395,15 +402,49 @@ export default function PedidosPage() {
   }
 
   // ── Cancelar pedido ─────────────────────────────────────────
+  function openCancelar() {
+    if (!pedidoActivo) return;
+    // Sin anticipos no hay nada que decidir sobre el dinero — se puede
+    // cancelar directo, igual que antes.
+    if (pedidoActivo.anticipos.length === 0) {
+      if (!confirm(`¿Cancelar pedido #${pedidoActivo.folio}?`)) return;
+      void handleCancelar();
+      return;
+    }
+    setMotivoAbono(null);
+    setPagosDevolucion([{ metodo: 'EFECTIVO', monto: pedidoActivo.total_anticipos, referencia: '' }]);
+    setErrorCancelar(null);
+    setDlgCancelar(true);
+  }
+
   async function handleCancelar() {
     if (!pedidoActivo || cancelando) return;
-    if (!confirm(`¿Cancelar pedido #${pedidoActivo.folio}?`)) return;
     setCancelando(true);
+    setErrorCancelar(null);
     try {
-      await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {});
+      await api.patch(`/pedidos/${pedidoActivo.id}/cancelar`, {
+        motivo_abono: motivoAbono ?? undefined,
+        pagos_devolucion: motivoAbono === 'DEVOLUCION' ? pagosDevolucion.filter((p) => p.monto > 0) : undefined,
+      });
       await refreshActivo(pedidoActivo.id);
+      setDlgCancelar(false);
+    } catch (e: any) {
+      setErrorCancelar(e?.message ?? 'Error al cancelar el pedido');
     } finally {
       setCancelando(false);
+    }
+  }
+
+  // ── Deshacer cancelación (por error) ─────────────────────────
+  async function handleRevertirCancelacion() {
+    if (!pedidoActivo || revirtiendoCancelacion) return;
+    if (!confirm(`¿Deshacer la cancelación del pedido #${pedidoActivo.folio}?`)) return;
+    setRevirtiendoCancelacion(true);
+    try {
+      await api.patch(`/pedidos/${pedidoActivo.id}/revertir-cancelacion`, {});
+      await refreshActivo(pedidoActivo.id);
+    } finally {
+      setRevirtiendoCancelacion(false);
     }
   }
 
@@ -601,8 +642,13 @@ export default function PedidosPage() {
                       Liquidar pedido
                     </Button>
                   )}
-                  {(pedidoActivo.estatus === 'ABIERTO' || pedidoActivo.estatus === 'PARCIAL') && pedidoActivo.anticipos.length === 0 && (
-                    <Button size="sm" variant="destructive" disabled={cancelando} loading={cancelando} onClick={handleCancelar}>Cancelar</Button>
+                  {(pedidoActivo.estatus === 'ABIERTO' || pedidoActivo.estatus === 'PARCIAL') && (
+                    <Button size="sm" variant="destructive" disabled={cancelando} loading={cancelando} onClick={openCancelar}>Cancelar</Button>
+                  )}
+                  {pedidoActivo.estatus === 'CANCELADO' && (
+                    <Button size="sm" variant="secondary" disabled={revirtiendoCancelacion} loading={revirtiendoCancelacion} onClick={handleRevertirCancelacion}>
+                      Deshacer cancelación
+                    </Button>
                   )}
                 </div>
               </div>
@@ -946,6 +992,51 @@ export default function PedidosPage() {
           <Button variant="secondary" onClick={() => setDlgLiquidar(false)}>Cancelar</Button>
           <Button onClick={handleLiquidar} disabled={liquidando}>
             {liquidando ? 'Liquidando...' : 'Liquidar e imprimir ticket'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* ── Dialog cancelar (con anticipos) ── */}
+      <Dialog open={dlgCancelar} onClose={() => setDlgCancelar(false)} title="Cancelar pedido">
+        <div className="space-y-4">
+          {pedidoActivo && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-body-sm">
+              <p className="text-amber-800">
+                Este pedido tiene <strong>${formatMoney(pedidoActivo.total_anticipos)}</strong> en anticipos registrados.
+                ¿Qué pasa con ese dinero?
+              </p>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              type="button" size="sm"
+              variant={motivoAbono === 'DEVOLUCION' ? 'primary' : 'secondary'}
+              onClick={() => setMotivoAbono('DEVOLUCION')}
+            >
+              Devolución
+            </Button>
+            <Button
+              type="button" size="sm"
+              variant={motivoAbono === 'RETENIDO' ? 'primary' : 'secondary'}
+              onClick={() => setMotivoAbono('RETENIDO')}
+            >
+              Retenido (no se regresa)
+            </Button>
+          </div>
+          {motivoAbono === 'DEVOLUCION' && (
+            <PagosEditor pagos={pagosDevolucion} onChange={setPagosDevolucion} />
+          )}
+          {motivoAbono === 'RETENIDO' && (
+            <p className="text-body-sm text-steel-500">
+              El negocio conserva el anticipo — no se genera ningún movimiento adicional.
+            </p>
+          )}
+          {errorCancelar && <p className="text-body-sm text-rose-600">{errorCancelar}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setDlgCancelar(false)}>Volver</Button>
+          <Button variant="destructive" onClick={handleCancelar} disabled={cancelando || !motivoAbono}>
+            {cancelando ? 'Cancelando...' : 'Confirmar cancelación'}
           </Button>
         </DialogFooter>
       </Dialog>

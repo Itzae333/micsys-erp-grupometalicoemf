@@ -82,6 +82,33 @@ export class RemisionesController {
     return this.remisiones.enviar(id, user.sub, user.empresa_id);
   }
 
+  @Get(':id/articulos-destino')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @ApiOperation({ summary: 'Buscar artículos en el catálogo de la ubicación destino de la remisión' })
+  @ApiQuery({ name: 'q',     required: false })
+  @ApiQuery({ name: 'page',  required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  buscarArticulosDestino(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('q')     q?:     string,
+    @Query('page')  page?:  string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.remisiones.buscarArticulosDestino(id, user.empresa_id, {
+      q,
+      page:  page  ? Number(page)                 : 1,
+      limit: limit ? Math.min(Number(limit), 100) : 15,
+    });
+  }
+
+  @Get(':id/preview-recepcion')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @ApiOperation({ summary: 'Resuelve/propone el artículo destino equivalente por línea antes de recibir' })
+  previewRecepcion(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.remisiones.previewRecepcion(id, user.empresa_id);
+  }
+
   @Patch(':id/recibir')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
   @ApiOperation({ summary: 'Marcar remisión como recibida (suma existencias en destino)' })

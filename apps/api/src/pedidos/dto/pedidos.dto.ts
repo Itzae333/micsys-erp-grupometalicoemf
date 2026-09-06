@@ -64,6 +64,22 @@ export class LiquidarPedidoDto {
   pagos?: AnticipoDto[];
 }
 
+export class CancelarPedidoDto {
+  @ApiPropertyOptional({
+    enum: ['DEVOLUCION', 'RETENIDO'],
+    description: 'Requerido si el pedido tiene anticipos registrados: qué pasa con ese dinero',
+  })
+  @IsOptional() @IsEnum(['DEVOLUCION', 'RETENIDO'])
+  motivo_abono?: 'DEVOLUCION' | 'RETENIDO';
+
+  @ApiPropertyOptional({ type: [AnticipoDto], description: 'Pagos de la devolución — requerido si motivo_abono es DEVOLUCION' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AnticipoDto)
+  pagos_devolucion?: AnticipoDto[];
+}
+
 export class AgregarEvidenciaPedidoDto {
   @ApiPropertyOptional() @IsOptional() @IsString() descripcion?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() archivo_url?: string;

@@ -1,8 +1,20 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ArticulosService } from '../articulos/articulos.service';
 import type { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
 import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
+import {
+  rankCandidatos,
+  esCandidatoUnicoConfiable,
+  type DescripcionesArticulo,
+} from '../common/utils/articulo-matching';
+
+const DESCRIPCIONES_SELECT = {
+  id: true, clave: true,
+  descripcion_1: true, descripcion_2: true,
+  descripcion_3: true, descripcion_4: true, descripcion_5: true,
+} satisfies Prisma.ArticuloSelect;
 
 const REM_INCLUDE = {
   empresa_origen:  { select: { id: true, nombre: true, logo_url: true } },
@@ -45,7 +57,10 @@ const REM_INCLUDE = {
 
 @Injectable()
 export class RemisionesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private articulos: ArticulosService,
+  ) {}
 
   // ─── Listar ───────────────────────────────────────────────────
 
@@ -212,6 +227,113 @@ export class RemisionesService {
     return this.getById(id, empresaId);
   }
 
+  // ─── Búsqueda manual en catálogo destino ────────────────────────
+  //
+  // El header x-ubicacion-id que usa GET /articulos siempre refleja la
+  // ubicación activa del usuario en el front (contexto), que puede no ser
+  // ub_destino_id (ej. un ADMIN gestionando la recepción desde otra
+  // sucursal). Por eso la búsqueda manual del selector de equivalencia pasa
+  // por aquí: valida la remisión y busca explícitamente en su ub_destino_id.
+
+  async buscarArticulosDestino(
+    id: string,
+    empresaId: string,
+    query: { q?: string; page?: number; limit?: number },
+  ) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, empresa_destino_id: empresaId },
+      select: { ub_destino_id: true },
+    });
+    if (!rem) throw new NotFoundException('Remisión no encontrada');
+    return this.articulos.findAll(rem.ub_destino_id, { ...query, activo: true });
+  }
+
+  // ─── Preview de recepción (resolución de equivalencias) ────────
+  //
+  // Cada ubicación tiene su propio catálogo de artículos, con ids y claves
+  // (SKU) independientes entre sí — las claves son legado y no confiables
+  // para encontrar el equivalente en destino. Este método resuelve, para
+  // cada línea de la remisión, cuál es el artículo del catálogo destino
+  // que corresponde: por equivalencia ya guardada, por único candidato
+  // confiable según similitud de descripciones, por varios candidatos
+  // ambiguos (requiere elegir), o ninguno (requiere búsqueda manual).
+
+  async previewRecepcion(id: string, empresaId: string) {
+    const rem = await this.prisma.remision.findFirst({
+      where: { id, empresa_destino_id: empresaId },
+      include: {
+        lineas: {
+          include: { articulo: { select: DESCRIPCIONES_SELECT } },
+        },
+      },
+    });
+    if (!rem) throw new NotFoundException('Remisión no encontrada');
+    if (rem.estatus !== 'EN_TRANSITO') {
+      throw new BadRequestException('Solo se puede previsualizar la recepción de remisiones EN_TRANSITO');
+    }
+
+    const [catalogoDestino, equivalencias] = await Promise.all([
+      this.prisma.articulo.findMany({
+        where: { ubicacion_id: rem.ub_destino_id, activo: true },
+        select: DESCRIPCIONES_SELECT,
+      }),
+      this.prisma.articuloEquivalencia.findMany({
+        where: {
+          ub_destino_id: rem.ub_destino_id,
+          articulo_origen_id: { in: rem.lineas.map((l) => l.articulo_id) },
+        },
+        include: { articulo_destino: { select: DESCRIPCIONES_SELECT } },
+      }),
+    ]);
+    const equivalenciaPorOrigen = new Map(equivalencias.map((e) => [e.articulo_origen_id, e]));
+
+    const lineas = rem.lineas.map((linea) => {
+      const base = {
+        linea_id: linea.id,
+        articulo_origen: linea.articulo as DescripcionesArticulo,
+        cantidad_enviada: Number(linea.cantidad_enviada),
+        cantidad_recibida: linea.cantidad_recibida != null ? Number(linea.cantidad_recibida) : null,
+      };
+
+      const equivalencia = equivalenciaPorOrigen.get(linea.articulo_id);
+      if (equivalencia) {
+        return {
+          ...base,
+          resolucion: {
+            estado: 'AUTO_EQUIVALENCIA' as const,
+            seleccionado: {
+              articulo_destino_id: equivalencia.articulo_destino_id,
+              ...(equivalencia.articulo_destino as DescripcionesArticulo),
+              score: equivalencia.score != null ? Number(equivalencia.score) : null,
+            },
+            candidatos: [],
+          },
+        };
+      }
+
+      const candidatos = rankCandidatos(linea.articulo as DescripcionesArticulo, catalogoDestino as DescripcionesArticulo[])
+        .map((c) => ({ articulo_destino_id: c.articulo.id, ...c.articulo, score: c.score }));
+      const autoResuelto = esCandidatoUnicoConfiable(
+        candidatos.map((c) => ({ articulo: c, score: c.score })),
+      );
+
+      return {
+        ...base,
+        resolucion: {
+          estado: autoResuelto
+            ? ('AUTO_UNICO_CANDIDATO' as const)
+            : candidatos.length > 0
+              ? ('AMBIGUO' as const)
+              : ('SIN_CANDIDATOS' as const),
+          seleccionado: autoResuelto ? candidatos[0] : null,
+          candidatos,
+        },
+      };
+    });
+
+    return { lineas };
+  }
+
   // ─── Recibir ──────────────────────────────────────────────────
 
   async recibir(id: string, dto: RecibirRemisionDto, usuarioId: string, empresaId: string) {
@@ -234,12 +356,32 @@ export class RemisionesService {
         const cantRecibida = item.cantidad_recibida;
         if (Number(cantRecibida) < Number(linea.cantidad_enviada)) completa = false;
 
-        // Lookup artículo en empresa destino por clave
-        const artDst = await tx.articulo.findFirst({
-          where: { clave: linea.articulo_clave, ubicacion_id: rem.ub_destino_id },
-        });
+        if (cantRecibida > 0) {
+          let artDstId = item.articulo_destino_id;
 
-        if (artDst && cantRecibida > 0) {
+          // Fallback defensivo por clave (compat con llamadas que aún no
+          // resuelven la equivalencia vía preview-recepcion) — las claves
+          // son legado y pueden no coincidir, por eso ya no es el mecanismo
+          // principal.
+          if (!artDstId) {
+            const legacy = await tx.articulo.findFirst({
+              where: { clave: linea.articulo_clave, ubicacion_id: rem.ub_destino_id },
+            });
+            artDstId = legacy?.id;
+          }
+          if (!artDstId) {
+            throw new BadRequestException(
+              `Falta resolver el artículo equivalente en destino para "${linea.articulo_clave}"`,
+            );
+          }
+
+          const artDst = await tx.articulo.findFirst({
+            where: { id: artDstId, ubicacion_id: rem.ub_destino_id },
+          });
+          if (!artDst) {
+            throw new BadRequestException('El artículo destino no pertenece a la ubicación destino');
+          }
+
           const cantAntes   = getExistencia(artDst, linea.slot_destino);
           const cantDespues = cantAntes + cantRecibida;
 
@@ -262,6 +404,29 @@ export class RemisionesService {
             where: { id: artDst.id },
             data: buildExistenciaUpdate(linea.slot_destino, cantDespues),
           });
+
+          if (item.origen_resolucion) {
+            await tx.articuloEquivalencia.upsert({
+              where: {
+                articulo_origen_ub_destino: {
+                  articulo_origen_id: linea.articulo_id,
+                  ub_destino_id: rem.ub_destino_id,
+                },
+              },
+              create: {
+                articulo_origen_id:  linea.articulo_id,
+                ub_destino_id:       rem.ub_destino_id,
+                articulo_destino_id: artDst.id,
+                origen:              item.origen_resolucion,
+                creado_por_id:       usuarioId,
+              },
+              update: {
+                articulo_destino_id: artDst.id,
+                origen:              item.origen_resolucion,
+                creado_por_id:       usuarioId,
+              },
+            });
+          }
         }
 
         await tx.remisionLinea.update({

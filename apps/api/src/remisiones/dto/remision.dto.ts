@@ -1,5 +1,5 @@
 import {
-  IsString, IsInt, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max,
+  IsString, IsInt, IsNumber, IsOptional, IsArray, IsIn, ValidateNested, Min, Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -83,6 +83,23 @@ export class RecepcionLineaDto {
   @Min(0)
   @Type(() => Number)
   cantidad_recibida: number;
+
+  // Artículo del catálogo destino resuelto como equivalente del artículo de
+  // origen (por equivalencia guardada, por coincidencia de descripción, o
+  // elegido a mano). Requerido en la práctica cuando cantidad_recibida > 0 —
+  // ver GET /remisiones/:id/preview-recepcion.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  articulo_destino_id?: string;
+
+  // Solo se envía cuando la resolución debe guardarse como equivalencia para
+  // futuras remisiones entre las mismas dos ubicaciones (no se envía cuando
+  // ya existía una equivalencia previa, para no reescribirla sin necesidad).
+  @ApiPropertyOptional({ enum: ['AUTOMATICA', 'MANUAL_AMBIGUEDAD', 'MANUAL_BUSQUEDA'] })
+  @IsOptional()
+  @IsIn(['AUTOMATICA', 'MANUAL_AMBIGUEDAD', 'MANUAL_BUSQUEDA'])
+  origen_resolucion?: 'AUTOMATICA' | 'MANUAL_AMBIGUEDAD' | 'MANUAL_BUSQUEDA';
 }
 
 export class RecibirRemisionDto {

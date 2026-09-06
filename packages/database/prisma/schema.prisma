@@ -92,6 +92,7 @@ model Ubicacion {
   remisiones_origen      Remision[]                  @relation("RemisionOrigenUbicacion")
   remisiones_destino     Remision[]                  @relation("RemisionDestinoUbicacion")
   gastos                 Gasto[]
+  equivalencias_destino  ArticuloEquivalencia[]
 
   @@map("ubicaciones")
 }
@@ -152,6 +153,8 @@ model Usuario {
   pagos_cobrados              Pago[]
   notas_canceladas            NotaVenta[]                 @relation("NotaCanceladaPor")
   cotizaciones_canceladas     NotaCotizacion[]            @relation("CotizacionCanceladaPor")
+  pedidos_cancelados          Pedido[]                    @relation("PedidoCanceladoPor")
+  equivalencias_creadas       ArticuloEquivalencia[]
 
   @@map("usuarios")
 }
@@ -310,9 +313,48 @@ model Articulo {
   lineas_compra          OrdenCompraLinea[]
   ordenes_produccion     OrdenProduccion[]
   remision_lineas        RemisionLinea[]
+  equivalencias_como_origen  ArticuloEquivalencia[] @relation("EquivalenciaOrigen")
+  equivalencias_como_destino ArticuloEquivalencia[] @relation("EquivalenciaDestino")
 
   @@unique([ubicacion_id, clave])
   @@map("articulos")
+}
+
+// ─────────────────────────────────────────────────────────────
+// EQUIVALENCIA DE ARTÍCULOS ENTRE UBICACIONES
+// Cada ubicación tiene su propio catálogo independiente (ids y
+// claves no relacionados entre sí). Esta tabla recuerda, para un
+// artículo de origen y una ubicación destino, cuál es el artículo
+// equivalente en el catálogo destino — resuelto automáticamente
+// por similitud de descripciones o elegido a mano por el usuario
+// al recibir una remisión (ver RemisionesService.recibir()).
+// ─────────────────────────────────────────────────────────────
+
+enum OrigenEquivalencia {
+  AUTOMATICA
+  MANUAL_AMBIGUEDAD
+  MANUAL_BUSQUEDA
+}
+
+model ArticuloEquivalencia {
+  id                  String             @id @default(cuid())
+  articulo_origen_id  String
+  ub_destino_id       String
+  articulo_destino_id String
+  score               Decimal?           @db.Decimal(5, 4)
+  origen              OrigenEquivalencia
+  creado_por_id       String
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @updatedAt
+
+  articulo_origen  Articulo  @relation("EquivalenciaOrigen", fields: [articulo_origen_id], references: [id])
+  ub_destino       Ubicacion @relation(fields: [ub_destino_id], references: [id])
+  articulo_destino Articulo  @relation("EquivalenciaDestino", fields: [articulo_destino_id], references: [id])
+  creado_por       Usuario   @relation(fields: [creado_por_id], references: [id])
+
+  @@unique([articulo_origen_id, ub_destino_id], name: "articulo_origen_ub_destino")
+  @@index([articulo_destino_id])
+  @@map("articulo_equivalencias")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1096,10 +1138,18 @@ model Pedido {
   updated_at      DateTime      @updatedAt
   cerrado_at      DateTime?
 
-  ubicacion  Ubicacion  @relation(fields: [ubicacion_id], references: [id])
-  usuario    Usuario    @relation(fields: [usuario_id], references: [id])
-  cliente    Cliente    @relation(fields: [cliente_id], references: [id])
-  nota_venta NotaVenta? @relation(fields: [nota_venta_id], references: [id])
+  // Al cancelar un pedido que ya tenía anticipos, hay que dejar constancia de
+  // qué pasó con ese dinero (ver PedidosService.cancelar). Si no tenía
+  // anticipos, motivo_cancelacion_abono queda null.
+  motivo_cancelacion_abono String?   // 'DEVOLUCION' | 'RETENIDO'
+  cancelado_por_id         String?
+  cancelado_at             DateTime?
+
+  ubicacion     Ubicacion  @relation(fields: [ubicacion_id], references: [id])
+  usuario       Usuario    @relation(fields: [usuario_id], references: [id])
+  cliente       Cliente    @relation(fields: [cliente_id], references: [id])
+  nota_venta    NotaVenta? @relation(fields: [nota_venta_id], references: [id])
+  cancelado_por Usuario?   @relation("PedidoCanceladoPor", fields: [cancelado_por_id], references: [id])
 
   lineas     PedidoLinea[]
   anticipos  AnticiposPedido[]

@@ -6,7 +6,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nest
 import { PedidosService } from './pedidos.service';
 import {
   CreatePedidoDto, AddLineaPedidoDto, UpdateLineaPedidoDto,
-  RegistrarAnticipoDto, LiquidarPedidoDto, AgregarEvidenciaPedidoDto,
+  RegistrarAnticipoDto, LiquidarPedidoDto, CancelarPedidoDto, AgregarEvidenciaPedidoDto,
 } from './dto/pedidos.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -120,9 +120,21 @@ export class PedidosController {
 
   @Patch(':id/cancelar')
   @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
-  @ApiOperation({ summary: 'Cancelar pedido (solo si no tiene anticipos)' })
-  cancelar(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
-    return this.pedidos.cancelar(id, ubicacionId);
+  @ApiOperation({ summary: 'Cancelar pedido — si tiene anticipos, requiere indicar motivo_abono' })
+  cancelar(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CancelarPedidoDto,
+  ) {
+    return this.pedidos.cancelar(id, dto, ubicacionId, user.sub);
+  }
+
+  @Patch(':id/revertir-cancelacion')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @ApiOperation({ summary: 'Deshacer una cancelación hecha por error' })
+  revertirCancelacion(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.pedidos.revertirCancelacion(id, ubicacionId);
   }
 
   @Post(':id/evidencias')

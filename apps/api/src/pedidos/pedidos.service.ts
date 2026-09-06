@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CreatePedidoDto, AddLineaPedidoDto, UpdateLineaPedidoDto,
-  RegistrarAnticipoDto, LiquidarPedidoDto, AgregarEvidenciaPedidoDto,
+  RegistrarAnticipoDto, LiquidarPedidoDto, CancelarPedidoDto, AgregarEvidenciaPedidoDto,
 } from './dto/pedidos.dto';
 import type { Prisma } from '@grupometalicoemf/database';
 
@@ -475,8 +475,12 @@ export class PedidosService {
   }
 
   // ─── Cancelar ─────────────────────────────────────────────────
-
-  async cancelar(pedidoId: string, ubicacionId: string) {
+  // Si el pedido ya tiene anticipos, hay que decidir qué pasa con ese dinero:
+  // DEVOLUCION (se le regresa al cliente — se registra como Gasto para que
+  // cuadre en el Corte de Caja del día) o RETENIDO (el negocio se lo queda,
+  // ej. cliente que nunca volvió ni respondió — no genera ningún movimiento,
+  // el anticipo ya se contó como cobrado el día que se recibió).
+  async cancelar(pedidoId: string, dto: CancelarPedidoDto, ubicacionId: string, usuarioId: string) {
     const pedido = await this.findOneRaw(pedidoId, ubicacionId);
 
     if (pedido.estatus === 'LIQUIDADO') {
@@ -485,15 +489,78 @@ export class PedidosService {
     if (pedido.estatus === 'CANCELADO') {
       throw new BadRequestException('El pedido ya está cancelado');
     }
-    if (pedido.anticipos.length > 0) {
-      throw new ForbiddenException(
-        'El pedido tiene anticipos registrados. Contacta al administrador para cancelarlo.',
+
+    const tieneAnticipos = pedido.anticipos.length > 0;
+    if (tieneAnticipos && !dto.motivo_abono) {
+      throw new BadRequestException(
+        'El pedido tiene anticipos registrados — indica qué pasa con ese dinero (devolución o retenido)',
       );
+    }
+
+    const totalAnticipos = Number(pedido.total_anticipos);
+    if (dto.motivo_abono === 'DEVOLUCION') {
+      const montoDevolucion = (dto.pagos_devolucion ?? []).reduce((s, p) => s + p.monto, 0);
+      if (Math.abs(montoDevolucion - totalAnticipos) > 0.01) {
+        throw new BadRequestException(
+          `La devolución ($${montoDevolucion.toFixed(2)}) debe cubrir el total de anticipos ($${totalAnticipos.toFixed(2)})`,
+        );
+      }
+    }
+
+    const ubicacion = await this.prisma.ubicacion.findUniqueOrThrow({
+      where: { id: ubicacionId },
+      select: { empresa_id: true },
+    });
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (dto.motivo_abono === 'DEVOLUCION') {
+        for (const p of dto.pagos_devolucion ?? []) {
+          await tx.gasto.create({
+            data: {
+              empresa_id: ubicacion.empresa_id,
+              ubicacion_id: ubicacionId,
+              concepto: `Devolución anticipo — pedido #${pedido.folio}`,
+              categoria: 'Devolución de anticipo',
+              monto: p.monto,
+              metodo_pago: p.metodo,
+              usuario_id: usuarioId,
+            },
+          });
+        }
+      }
+
+      return tx.pedido.update({
+        where: { id: pedidoId },
+        data: {
+          estatus: 'CANCELADO',
+          motivo_cancelacion_abono: tieneAnticipos ? dto.motivo_abono : null,
+          cancelado_por_id: usuarioId,
+          cancelado_at: new Date(),
+        },
+        include: PEDIDO_INCLUDE,
+      });
+    });
+
+    return this.serializePedido(result);
+  }
+
+  // ─── Deshacer cancelación (por error) ──────────────────────────
+  // No revierte el Gasto de una DEVOLUCION ya registrada — si de verdad fue
+  // un error, hay que borrar ese gasto a mano en Gastos.
+  async revertirCancelacion(pedidoId: string, ubicacionId: string) {
+    const pedido = await this.findOneRaw(pedidoId, ubicacionId);
+    if (pedido.estatus !== 'CANCELADO') {
+      throw new BadRequestException('El pedido no está cancelado');
     }
 
     const result = await this.prisma.pedido.update({
       where: { id: pedidoId },
-      data: { estatus: 'CANCELADO' },
+      data: {
+        estatus: pedido.anticipos.length > 0 ? 'PARCIAL' : 'ABIERTO',
+        motivo_cancelacion_abono: null,
+        cancelado_por_id: null,
+        cancelado_at: null,
+      },
       include: PEDIDO_INCLUDE,
     });
 
