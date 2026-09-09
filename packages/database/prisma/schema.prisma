@@ -149,6 +149,7 @@ model Usuario {
   remisiones_enviadas         Remision[]                  @relation("RemisionEnviador")
   remisiones_recibidas        Remision[]                  @relation("RemisionReceptor")
   cargas_nota                 CargaNota[]
+  cargas_nota_lineas_resueltas CargaNotaLinea[]
   gastos                      Gasto[]
   pagos_cobrados              Pago[]
   notas_canceladas            NotaVenta[]                 @relation("NotaCanceladaPor")
@@ -1075,13 +1076,22 @@ model CargaNota {
 }
 
 model CargaNotaLinea {
-  id                  String  @id @default(cuid())
+  id                  String    @id @default(cuid())
   carga_id            String
   nota_venta_linea_id String
-  cantidad_cargada    Decimal @db.Decimal(12, 3)
+  cantidad_cargada    Decimal   @db.Decimal(12, 3)
 
-  carga CargaNota      @relation(fields: [carga_id], references: [id])
-  linea NotaVentaLinea @relation(fields: [nota_venta_linea_id], references: [id])
+  // Observación de entrega parcial/incompleta dentro de un producto compuesto
+  // (ej. "juego de anaqueles" con charolas y postes que no se tracean como
+  // líneas separadas). Si viene observación, el descuento de inventario de
+  // ESTA línea se difiere hasta que se resuelva — ver resuelta_at.
+  observaciones   String?
+  resuelta_at     DateTime?
+  resuelta_por_id String?
+
+  carga        CargaNota      @relation(fields: [carga_id], references: [id])
+  linea        NotaVentaLinea @relation(fields: [nota_venta_linea_id], references: [id])
+  resuelta_por Usuario?       @relation(fields: [resuelta_por_id], references: [id])
 
   @@map("carga_nota_lineas")
 }

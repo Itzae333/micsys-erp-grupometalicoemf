@@ -117,8 +117,10 @@ export default function NotaDetallePage() {
   const [dlgCarga, setDlgCarga] = useState(false);
   const [cargaPendientes, setCargaPendientes] = useState<CargaNotaPendientes | null>(null);
   const [cargaCantidades, setCargaCantidades] = useState<Record<string, number>>({});
+  const [cargaObservaciones, setCargaObservaciones] = useState<Record<string, string>>({});
   const [registrandoCarga, setRegistrandoCarga] = useState(false);
   const [cargaError, setCargaError] = useState<string | null>(null);
+  const [resolviendoObsId, setResolviendoObsId] = useState<string | null>(null);
 
   // Solicitud de edición
   const [dlgSolicitud, setDlgSolicitud] = useState(false);
@@ -185,6 +187,15 @@ export default function NotaDetallePage() {
   useEffect(() => {
     if (usuario?.rol === 'VENDEDOR') router.replace('/ventas');
   }, [usuario, router]);
+
+  // Si la nota quedó con entrega incompleta, precarga las observaciones
+  // pendientes para mostrar el banner de "resolver" sin tener que abrir el
+  // diálogo de carga.
+  useEffect(() => {
+    if (nota?.estatus_entrega === 'INCOMPLETA') {
+      api.get<CargaNotaPendientes>(`/ventas/${nota.id}/carga`).then(setCargaPendientes).catch(() => {});
+    }
+  }, [nota?.id, nota?.estatus_entrega]);
 
   // Sync drafts de edición inline cuando cambian las líneas de la nota
   useEffect(() => {
@@ -474,13 +485,18 @@ export default function NotaDetallePage() {
       const defaults: Record<string, number> = {};
       for (const l of pend.lineas) defaults[l.id] = l.pendiente;
       setCargaCantidades(defaults);
+      setCargaObservaciones({});
       setDlgCarga(true);
     } catch (err) {
       setCargaError(err instanceof Error ? err.message : 'Error al consultar la carga');
     }
   }
 
-  async function printTicketCarga(detalle: CargaNotaPendientes, cargadoAhora: Record<string, number>) {
+  async function printTicketCarga(
+    detalle: CargaNotaPendientes,
+    cargadoAhora: Record<string, number>,
+    observacionesAhora: Record<string, string>,
+  ) {
     if (!nota) return;
     const logoUrl = getTicketLogoUrl(empresa, ubicacion);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
@@ -506,6 +522,11 @@ export default function NotaDetallePage() {
           pendiente: Math.max(0, +(l.pendiente - entregadoAhora).toFixed(3)),
         };
       }),
+      // Observaciones capturadas en este evento de carga — se imprimen aparte,
+      // hasta abajo del ticket, para que quede constancia de la entrega incompleta.
+      observaciones: detalle.lineas
+        .filter((l) => observacionesAhora[l.id]?.trim())
+        .map((l) => ({ clave: l.clave, descripcion: l.descripcion, texto: observacionesAhora[l.id].trim() })),
     };
     try {
       const controller = new AbortController();
@@ -530,9 +551,14 @@ export default function NotaDetallePage() {
     setRegistrandoCarga(true);
     setCargaError(null);
     const cantidadEnviada = { ...cargaCantidades };
+    const observacionesEnviadas = { ...cargaObservaciones };
     try {
       const lineas = cargaPendientes.lineas
-        .map((l) => ({ nota_venta_linea_id: l.id, cantidad_cargada: cantidadEnviada[l.id] ?? 0 }))
+        .map((l) => ({
+          nota_venta_linea_id: l.id,
+          cantidad_cargada: cantidadEnviada[l.id] ?? 0,
+          observaciones: observacionesEnviadas[l.id]?.trim() || undefined,
+        }))
         .filter((l) => l.cantidad_cargada > 0);
 
       if (lineas.length === 0) {
@@ -543,7 +569,7 @@ export default function NotaDetallePage() {
       const res = await api.post<{ estatus: string; imprimir_ticket: boolean }>(`/ventas/${nota.id}/carga`, { lineas });
 
       if (res.imprimir_ticket) {
-        await printTicketCarga(cargaPendientes, cantidadEnviada);
+        await printTicketCarga(cargaPendientes, cantidadEnviada, observacionesEnviadas);
       }
 
       setDlgCarga(false);
@@ -552,6 +578,20 @@ export default function NotaDetallePage() {
       setCargaError(err instanceof Error ? err.message : 'Error al registrar la carga');
     } finally {
       setRegistrandoCarga(false);
+    }
+  }
+
+  async function resolverObservacion(cargaLineaId: string) {
+    if (!nota) return;
+    setResolviendoObsId(cargaLineaId);
+    try {
+      const pend = await api.post<CargaNotaPendientes>(`/ventas/${nota.id}/carga/${cargaLineaId}/resolver`, {});
+      setCargaPendientes(pend);
+      load();
+    } catch (err) {
+      setCargaError(err instanceof Error ? err.message : 'Error al resolver la observación');
+    } finally {
+      setResolviendoObsId(null);
     }
   }
 
@@ -914,6 +954,41 @@ export default function NotaDetallePage() {
             <p className="text-body-sm text-purple-600">Las cantidades que ya estaban entregadas (cargadas) no se regresaron automáticamente al inventario — si la mercancía fue devuelta físicamente, ajusta el inventario manualmente.</p>
           </div>
         </div>
+      )}
+
+      {/* Banner observaciones de entrega pendientes de resolver */}
+      {nota.estatus_entrega === 'INCOMPLETA' && cargaPendientes && (
+        (() => {
+          const conObs = cargaPendientes.lineas.filter((l) => l.observaciones_pendientes.length > 0);
+          if (conObs.length === 0) return null;
+          return (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                <p className="text-body font-semibold text-amber-800">Entrega incompleta — hay observaciones sin resolver</p>
+              </div>
+              <div className="space-y-2 pl-8">
+                {conObs.map((l) => (
+                  <div key={l.id}>
+                    <p className="text-body-sm font-semibold text-steel-900">{l.descripcion || l.clave}</p>
+                    {l.observaciones_pendientes.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between gap-3 py-1">
+                        <p className="text-body-sm text-amber-700 flex-1">{o.observaciones}</p>
+                        <Button
+                          size="sm" variant="secondary"
+                          loading={resolviendoObsId === o.id}
+                          onClick={() => resolverObservacion(o.id)}
+                        >
+                          Marcar como resuelta
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()
       )}
 
       {/* Banner solicitud pendiente */}
@@ -1702,22 +1777,31 @@ export default function NotaDetallePage() {
             </p>
             <div className="space-y-3">
               {cargaPendientes.lineas.map((l) => (
-                <div key={l.id} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
-                    <p className="text-meta text-steel-400">{l.clave}</p>
-                    <p className="text-meta text-steel-500">
-                      Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
-                    </p>
+                <div key={l.id} className="space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
+                      <p className="text-meta text-steel-400">{l.clave}</p>
+                      <p className="text-meta text-steel-500">
+                        Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
+                      </p>
+                    </div>
+                    <div className="w-28">
+                      <Input
+                        type="number" step="0.001" min="0" max={l.pendiente}
+                        value={cargaCantidades[l.id] ?? 0}
+                        disabled={l.pendiente <= 0}
+                        onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
+                      />
+                    </div>
                   </div>
-                  <div className="w-28">
-                    <Input
-                      type="number" step="0.001" min="0" max={l.pendiente}
-                      value={cargaCantidades[l.id] ?? 0}
-                      disabled={l.pendiente <= 0}
-                      onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
-                    />
-                  </div>
+                  <Textarea
+                    placeholder="Observaciones (ej. faltaron 10 postes del juego de anaqueles)…"
+                    className="text-body-sm"
+                    rows={2}
+                    value={cargaObservaciones[l.id] ?? ''}
+                    onChange={(e) => setCargaObservaciones((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                  />
                 </div>
               ))}
             </div>

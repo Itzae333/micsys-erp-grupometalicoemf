@@ -31,4 +31,16 @@ export class CargasNotaController {
   ) {
     return this.cargas.registrarCarga(id, ubicacionId, user.sub, dto);
   }
+
+  @Post(':id/carga/:cargaLineaId/resolver')
+  @Roles('ADMIN', 'ENCARGADO', 'VENDEDOR')
+  @ApiOperation({ summary: 'Marcar como resuelta la observación de una línea de carga y descontar el inventario diferido' })
+  resolverObservacion(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Param('id') id: string,
+    @Param('cargaLineaId') cargaLineaId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.cargas.resolverObservacion(id, cargaLineaId, ubicacionId, user.sub);
+  }
 }

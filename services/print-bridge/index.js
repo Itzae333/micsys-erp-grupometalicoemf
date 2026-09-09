@@ -788,6 +788,18 @@ function buildEscPosBuffer(ticket) {
       }
     }
 
+    const observaciones = ticket.observaciones ?? [];
+    if (observaciones.length > 0) {
+      push(sep('='));
+      push(CMD.BOLD_ON, ln('*** ENTREGA INCOMPLETA — OBSERVACIONES ***'), CMD.BOLD_OFF);
+      push(sep('-'));
+      for (const o of observaciones) {
+        const nombre = o.descripcion || o.clave;
+        push(ln(nombre + ':'));
+        push(ln('  ' + norm(o.texto)));
+      }
+    }
+
     push(sep('='), CMD.ALIGN_CENTER);
     push(ln('Conserve este comprobante'));
     push(CMD.ALIGN_LEFT);

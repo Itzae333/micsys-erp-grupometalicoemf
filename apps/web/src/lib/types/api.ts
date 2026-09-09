@@ -345,6 +345,11 @@ export interface CargaNotaPendientes {
     cantidad: number;
     cargado: number;
     pendiente: number;
+    observaciones_pendientes: {
+      id: string;
+      observaciones: string;
+      cantidad_cargada: number;
+    }[];
   }[];
 }
 
