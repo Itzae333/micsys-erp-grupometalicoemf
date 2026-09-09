@@ -197,6 +197,7 @@ export default function VentasPage() {
   const [dlgCargaRapida, setDlgCargaRapida] = useState<NotaVenta | null>(null);
   const [cargaPendientes, setCargaPendientes] = useState<CargaNotaPendientes | null>(null);
   const [cargaCantidades, setCargaCantidades] = useState<Record<string, number>>({});
+  const [cargaObservaciones, setCargaObservaciones] = useState<Record<string, string>>({});
   const [registrandoCarga, setRegistrandoCarga] = useState(false);
   const [cargaError, setCargaError] = useState<string | null>(null);
 
@@ -732,13 +733,19 @@ export default function VentasPage() {
       const defaults: Record<string, number> = {};
       for (const l of pend.lineas) defaults[l.id] = l.pendiente;
       setCargaCantidades(defaults);
+      setCargaObservaciones({});
       setDlgCargaRapida(nota);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Error al consultar la carga', 'error');
     }
   }
 
-  async function printTicketCargaRapida(nota: NotaVenta, detalle: CargaNotaPendientes, cargadoAhora: Record<string, number>) {
+  async function printTicketCargaRapida(
+    nota: NotaVenta,
+    detalle: CargaNotaPendientes,
+    cargadoAhora: Record<string, number>,
+    observacionesAhora: Record<string, string>,
+  ) {
     const logoUrl = getTicketLogoUrl(empresa, ubicacion);
     const logo_escpos_b64 = logoUrl ? await logoToEscPosBase64(logoUrl) : null;
     const payload = {
@@ -759,6 +766,9 @@ export default function VentasPage() {
           pendiente: Math.max(0, +(l.pendiente - entregadoAhora).toFixed(3)),
         };
       }),
+      observaciones: detalle.lineas
+        .filter((l) => observacionesAhora[l.id]?.trim())
+        .map((l) => ({ clave: l.clave, descripcion: l.descripcion, texto: observacionesAhora[l.id].trim() })),
     };
     try {
       const controller = new AbortController();
@@ -780,9 +790,14 @@ export default function VentasPage() {
     setRegistrandoCarga(true);
     setCargaError(null);
     const cantidadEnviada = { ...cargaCantidades };
+    const observacionesEnviadas = { ...cargaObservaciones };
     try {
       const lineas = cargaPendientes.lineas
-        .map((l) => ({ nota_venta_linea_id: l.id, cantidad_cargada: cantidadEnviada[l.id] ?? 0 }))
+        .map((l) => ({
+          nota_venta_linea_id: l.id,
+          cantidad_cargada: cantidadEnviada[l.id] ?? 0,
+          observaciones: observacionesEnviadas[l.id]?.trim() || undefined,
+        }))
         .filter((l) => l.cantidad_cargada > 0);
 
       if (lineas.length === 0) {
@@ -793,7 +808,7 @@ export default function VentasPage() {
       const res = await api.post<{ estatus: string; imprimir_ticket: boolean }>(`/ventas/${dlgCargaRapida.id}/carga`, { lineas });
 
       if (res.imprimir_ticket) {
-        await printTicketCargaRapida(dlgCargaRapida, cargaPendientes, cantidadEnviada);
+        await printTicketCargaRapida(dlgCargaRapida, cargaPendientes, cantidadEnviada, observacionesEnviadas);
       }
 
       setDlgCargaRapida(null);
@@ -2832,22 +2847,31 @@ export default function VentasPage() {
             </p>
             <div className="space-y-3">
               {cargaPendientes.lineas.map((l) => (
-                <div key={l.id} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
-                    <p className="text-meta text-steel-400">{l.clave}</p>
-                    <p className="text-meta text-steel-500">
-                      Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
-                    </p>
+                <div key={l.id} className="space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body-sm font-semibold text-steel-900 break-words">{l.descripcion || l.clave}</p>
+                      <p className="text-meta text-steel-400">{l.clave}</p>
+                      <p className="text-meta text-steel-500">
+                        Vendido: {l.cantidad} · Cargado: {l.cargado} · Pendiente: {l.pendiente}
+                      </p>
+                    </div>
+                    <div className="w-28">
+                      <Input
+                        type="number" step="0.001" min="0" max={l.pendiente}
+                        value={cargaCantidades[l.id] ?? 0}
+                        disabled={l.pendiente <= 0}
+                        onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
+                      />
+                    </div>
                   </div>
-                  <div className="w-28">
-                    <Input
-                      type="number" step="0.001" min="0" max={l.pendiente}
-                      value={cargaCantidades[l.id] ?? 0}
-                      disabled={l.pendiente <= 0}
-                      onChange={(e) => setCargaCantidades((prev) => ({ ...prev, [l.id]: Math.min(parseFloat(e.target.value) || 0, l.pendiente) }))}
-                    />
-                  </div>
+                  <Textarea
+                    placeholder="Observaciones (ej. faltaron 10 postes del juego de anaqueles)…"
+                    className="text-body-sm"
+                    rows={2}
+                    value={cargaObservaciones[l.id] ?? ''}
+                    onChange={(e) => setCargaObservaciones((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                  />
                 </div>
               ))}
             </div>
