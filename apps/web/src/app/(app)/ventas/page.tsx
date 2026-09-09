@@ -142,6 +142,7 @@ export default function VentasPage() {
   ]);
   const [cobrandoError, setCobrandoError] = useState<string | null>(null);
   const [cobrando, setCobrando] = useState(false);
+  const [preparandoCobro, setPreparandoCobro] = useState(false);
   const [checkCredito, setCheckCredito] = useState(false);
   const [checkNotaPorPagar, setCheckNotaPorPagar] = useState(false);
   const [checkSinPrecio, setCheckSinPrecio] = useState(false);
@@ -1036,9 +1037,40 @@ export default function VentasPage() {
   }
 
   // ── Cobrar ────────────────────────────────────────────────
-  function openCobrar(nota: NotaVenta) {
-    setNotaActiva(nota);
-    setPagos([{ metodo: 'EFECTIVO', monto: nota.total, referencia: '' }]);
+  async function openCobrar(nota: NotaVenta) {
+    // Si el cajero editó cantidad/precio de una línea y le dio clic a "Cobrar"
+    // antes de que el blur terminara de guardar el cambio (PATCH async), el
+    // modal podía abrir con nota.total viejo mientras el carrito ya mostraba
+    // el total nuevo (totalConIvaPreview) — se sincronizan aquí antes de abrir.
+    let notaFinal = nota;
+    const pendientes = nota.lineas.filter((l) => {
+      const draft = lineaDraft[l.id];
+      if (!draft) return false;
+      const cantDirty = draft.cantidad !== undefined && Math.abs((parseInt(draft.cantidad, 10) || 0) - l.cantidad) > 0.0001;
+      const precioDirty = draft.precio !== undefined && Math.abs((parseFloat(draft.precio) || 0) - l.precio_unitario) > 0.0001;
+      return cantDirty || precioDirty;
+    });
+    if (pendientes.length > 0) {
+      setPreparandoCobro(true);
+      try {
+        for (const l of pendientes) {
+          const draft = lineaDraft[l.id];
+          if (draft.cantidad !== undefined && Math.abs((parseInt(draft.cantidad, 10) || 0) - l.cantidad) > 0.0001) {
+            notaFinal = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${l.id}`, { cantidad: parseInt(draft.cantidad, 10) });
+          }
+          if (draft.precio !== undefined && Math.abs((parseFloat(draft.precio) || 0) - l.precio_unitario) > 0.0001) {
+            notaFinal = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${l.id}`, { precio_unitario: parseFloat(draft.precio) });
+          }
+        }
+      } catch {
+        // Si falla el guardado, se abre igual con lo último confirmado por el
+        // servidor — mejor eso que dejar el modal atorado.
+      } finally {
+        setPreparandoCobro(false);
+      }
+    }
+    setNotaActiva(notaFinal);
+    setPagos([{ metodo: 'EFECTIVO', monto: notaFinal.total, referencia: '' }]);
     setCobrandoError(null);
     setCheckCredito(false);
     setCheckNotaPorPagar(false);
@@ -1402,7 +1434,7 @@ export default function VentasPage() {
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {canAdmin && notaActiva.lineas.length > 0 && (
-                <Button size="sm" onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}>
+                <Button size="sm" loading={preparandoCobro} onClick={() => { setDlgLinea(false); void openCobrar(notaActiva); }}>
                   Cobrar — {formatPrecio(totalConIvaPreview)}
                 </Button>
               )}
@@ -1641,7 +1673,8 @@ export default function VentasPage() {
                     <Button
                       className="w-full"
                       disabled={notaActiva.lineas.length === 0}
-                      onClick={() => { setDlgLinea(false); openCobrar(notaActiva); }}
+                      loading={preparandoCobro}
+                      onClick={() => { setDlgLinea(false); void openCobrar(notaActiva); }}
                     >
                       Cobrar {formatPrecio(totalConIvaPreview)}
                     </Button>
