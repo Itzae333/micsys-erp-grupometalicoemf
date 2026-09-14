@@ -1080,7 +1080,12 @@ export class ReportesService {
         orderBy: { created_at: 'asc' },
         include: {
           cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true } },
-          pagos:   { where: { origen_anticipo_pedido: false }, select: { metodo: true, monto: true } },
+          // Acotado a `hasta`: sin esto, un abono cobrado DESPUÉS del rango
+          // del corte (p. ej. liquidar el viernes una nota a crédito del
+          // jueves) se volvía a contar cada vez que se regeneraba el corte
+          // del jueves — inflando el dinero cobrado y cambiando el estatus
+          // que se muestra por nota (ver estatusAlCorte abajo).
+          pagos: { where: { origen_anticipo_pedido: false, created_at: { lte: hasta } }, select: { metodo: true, monto: true } },
         },
       }),
       this.prisma.pago.groupBy({
@@ -1089,6 +1094,10 @@ export class ReportesService {
           // Excluye los Pago que solo replican un anticipo de Pedido ya cobrado
           // (ver PedidosService.liquidar) — ese dinero ya se contó el día del anticipo.
           origen_anticipo_pedido: false,
+          // El propio pago también debe estar dentro del rango — filtrar solo
+          // por la fecha de la nota (abajo) permitía que un abono posterior
+          // sobre una nota vieja se contara en el corte de un día anterior.
+          created_at: { gte: desde, lte: hasta },
           nota: {
             ubicacion_id: ubicacionId,
             estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA', 'FINALIZADA'] },
@@ -1122,9 +1131,22 @@ export class ReportesService {
       };
     }
 
+    // `nota.estatus` es un solo campo mutable: un abono posterior (ver
+    // VentasService.abonar) lo sobreescribe de CREDITO a PAGADA en la MISMA
+    // fila, sin dejar rastro del estatus que tenía el día del corte
+    // original. Para que un corte de un día pasado no cambie de CREDITO a
+    // PAGADA al regenerarse después de que el cliente liquidó, se deriva el
+    // estatus "como estaba a la fecha del corte" a partir de `n.pagos` (ya
+    // acotados a `hasta` arriba) en vez de confiar en el campo en vivo.
+    function estatusAlCorte(nota: (typeof notas)[number]): string {
+      if (nota.estatus !== 'PAGADA' && nota.estatus !== 'CREDITO') return nota.estatus;
+      const pagado = nota.pagos.reduce((s, p) => s + Number(p.monto), 0);
+      return pagado >= Number(nota.total) ? 'PAGADA' : 'CREDITO';
+    }
+
     const porEstatusMap = new Map<string, { count: number; total: number }>();
     for (const n of notas) {
-      const key = n.estatus;
+      const key = estatusAlCorte(n);
       const cur = porEstatusMap.get(key) ?? { count: 0, total: 0 };
       cur.count += 1;
       cur.total  = +(cur.total + dec(n.total)).toFixed(2);
@@ -1154,7 +1176,7 @@ export class ReportesService {
       por_metodo:      porMetodo,
       por_estatus:     Object.fromEntries(porEstatusMap),
       abonos_count:    abonosAgg._count,
-      notas: notas.map((n) => serializeDecimal(n)),
+      notas: notas.map((n) => serializeDecimal({ ...n, estatus: estatusAlCorte(n) })),
       gastos: gastos.map((g) => ({
         id: g.id,
         concepto: g.concepto,

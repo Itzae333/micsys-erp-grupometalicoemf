@@ -1254,7 +1254,17 @@ export class VentasService {
           // puede ser distinto de `usuario` (quien levantó la nota). Ordenados
           // por fecha: el primero es quien la cerró originalmente, uno
           // posterior sería un abono a crédito ya cobrado por alguien más.
-          pagos: { orderBy: { created_at: 'asc' }, include: { usuario: { select: { id: true, nombre: true, apellidos: true } } } },
+          //
+          // Acotados a `hasta`: sin este filtro, un abono cobrado DESPUÉS del
+          // rango del corte (p. ej. liquidar el viernes una nota a crédito
+          // del jueves) se volvía a sumar cada vez que se regeneraba el corte
+          // del jueves — duplicando el dinero cobrado y hasta cambiando el
+          // estatus mostrado de esa nota (ver estatusAlCorte abajo).
+          pagos: {
+            where: hasta ? { created_at: { lte: finDiaMx(hasta) } } : undefined,
+            orderBy: { created_at: 'asc' },
+            include: { usuario: { select: { id: true, nombre: true, apellidos: true } } },
+          },
           // Si la nota nació de liquidar un pedido, se marca con el folio y la
           // fecha del primer anticipo — para que se note a simple vista que
           // parte de ese dinero ya se reportó en un corte anterior.
@@ -1299,6 +1309,28 @@ export class VentasService {
       }),
     ]);
 
+    // `nota.estatus` es un solo campo mutable: cuando abonar() liquida una
+    // nota a crédito, sobreescribe CREDITO -> PAGADA en la MISMA fila, sin
+    // dejar rastro del estatus que tenía el día del corte original. Para que
+    // el corte de un día pasado no cambie de CREDITO a PAGADA al
+    // regenerarse después de que el cliente liquidó, se deriva el estatus
+    // "como estaba a la fecha del corte" a partir de `nota.pagos` (ya
+    // acotados a `hasta` arriba) en vez de confiar en el campo en vivo —
+    // mismo criterio que usan cerrar()/abonar() (pagado >= esperado ?
+    // PAGADA : CREDITO). CANCELADA/REABIERTA/etc. no son estados derivables
+    // del dinero, se dejan igual.
+    function estatusAlCorte(nota: (typeof notas)[number]): string {
+      if (nota.estatus !== 'PAGADA' && nota.estatus !== 'CREDITO') return nota.estatus;
+      const montoAnticipoReplicado = nota.pagos
+        .filter((p) => p.origen_anticipo_pedido)
+        .reduce((s, p) => s + Number(p.monto), 0);
+      const totalEsperado = Math.max(0, +(Number(nota.total) - montoAnticipoReplicado).toFixed(2));
+      const pagado = nota.pagos
+        .filter((p) => !p.origen_anticipo_pedido && p.metodo !== 'ADMINISTRATIVO')
+        .reduce((s, p) => s + Number(p.monto), 0);
+      return pagado >= totalEsperado ? 'PAGADA' : 'CREDITO';
+    }
+
     const metodos: Record<string, { count: number; total: number }> = {
       EFECTIVO:     { count: 0, total: 0 },
       TARJETA:      { count: 0, total: 0 },
@@ -1320,7 +1352,7 @@ export class VentasService {
     const efectivoRealPorNota = new Map<string, number>();
 
     for (const nota of notas) {
-      const est = nota.estatus as string;
+      const est = estatusAlCorte(nota);
       if (!porEstatus[est]) porEstatus[est] = { count: 0, total: 0 };
       porEstatus[est].count++;
 
@@ -1549,7 +1581,7 @@ export class VentasService {
     // dinero ya quedó contado en `metodos` vía el loop principal de notas.
     const detalleCreditoMismoDia: DetalleCredito[] = [];
     for (const nota of notas) {
-      if (nota.estatus !== 'CREDITO') continue;
+      if (estatusAlCorte(nota) !== 'CREDITO') continue;
       const notaTotal = Number(nota.total);
       const pagosNota = nota.pagos
         .filter((p) => !p.origen_anticipo_pedido)
@@ -1648,7 +1680,7 @@ export class VentasService {
       return {
         id: n.id,
         folio: n.folio,
-        estatus: n.estatus,
+        estatus: estatusAlCorte(n),
         total: notaTotal,
         cambio,
         created_at: n.created_at,
