@@ -15,6 +15,11 @@ interface ListQuery {
   proveedorId?: string;
 }
 
+// Sentinel usado por el filtro de Inventario para "artículos sin proveedor
+// asignado" — proveedorId normal filtra por igualdad, este valor filtra por
+// proveedor_id: null (ver findAll).
+const SIN_PROVEEDOR = '__sin_proveedor__';
+
 const PRECIO_FIELDS = [
   'precio_1','precio_2','precio_3','precio_4','precio_5',
   'precio_6','precio_7','precio_8','precio_9','precio_10',
@@ -37,7 +42,8 @@ export class ArticulosService {
 
     const where: Record<string, unknown> = { ubicacion_id: ubicacionId };
     if (activo !== undefined) where['activo'] = activo;
-    if (proveedorId) where['proveedor_id'] = proveedorId;
+    if (proveedorId === SIN_PROVEEDOR) where['proveedor_id'] = null;
+    else if (proveedorId) where['proveedor_id'] = proveedorId;
     if (q) {
       const words = q.trim().split(/\s+/).filter(Boolean);
       where['AND'] = words.map((word) => ({

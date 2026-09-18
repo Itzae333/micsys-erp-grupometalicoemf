@@ -47,6 +47,10 @@ const ArticuloSchema = z.object({
 
 type ArticuloForm = z.infer<typeof ArticuloSchema>;
 
+// Sentinel para filtrar "artículos sin proveedor asignado" — debe coincidir
+// con el mismo valor que interpreta el backend (ver ArticulosService.findAll).
+const SIN_PROVEEDOR = '__sin_proveedor__';
+
 
 function generarClave(d1: string, d2: string): string {
   const norm = (s: string) =>
@@ -73,6 +77,7 @@ export default function InventarioPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [proveedorFiltro, setProveedorFiltro] = useState('');
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Articulo | null>(null);
@@ -122,6 +127,7 @@ export default function InventarioPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '50' });
       if (q) params.set('q', q);
+      if (proveedorFiltro) params.set('proveedorId', proveedorFiltro);
       const data = await api.get<ArticulosPage>(`/articulos?${params}`);
       setResult(data);
     } catch {
@@ -129,7 +135,7 @@ export default function InventarioPage() {
     } finally {
       setLoading(false);
     }
-  }, [empresa?.id, ubicacion?.id, page, q]);
+  }, [empresa?.id, ubicacion?.id, page, q, proveedorFiltro]);
 
   const loadProveedores = useCallback(async () => {
     if (!empresa?.id || !ubicacion?.id) return;
@@ -271,8 +277,8 @@ export default function InventarioPage() {
       </div>
 
       {/* Barra de búsqueda */}
-      <div className="px-6 py-3 border-b border-steel-100 bg-white flex-shrink-0">
-        <div className="relative max-w-sm">
+      <div className="px-6 py-3 border-b border-steel-100 bg-white flex-shrink-0 flex items-center gap-3">
+        <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
           <input
             type="text"
@@ -291,6 +297,19 @@ export default function InventarioPage() {
             </button>
           )}
         </div>
+        {hayProveedorAsignado && (
+          <Select
+            value={proveedorFiltro}
+            onChange={(e) => { setProveedorFiltro(e.target.value); setPage(1); }}
+            className="max-w-[220px] text-body-sm"
+          >
+            <option value="">Todos los proveedores</option>
+            <option value={SIN_PROVEEDOR}>Sin proveedor</option>
+            {proveedores.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </Select>
+        )}
       </div>
 
       {/* Tabla */}
