@@ -73,6 +73,13 @@ export interface VentaPendiente {
   syncQueueId?: number; // FK a syncQueue.id
   folioLocal: number;   // contador local para folio provisional ("OFFLINE-3")
   lastError?: string;
+  // Guardados aparte del payload de syncQueue (que puede perderse/limpiarse)
+  // para poder reconstruir la venta y re-encolarla fielmente si el reintento
+  // manual encuentra que ya no hay un ítem de cola vivo al que engancharse
+  // (ver reintentarVentaPendiente). Opcionales: registros creados antes de
+  // este campo no los tendrán.
+  aplicaIva?: boolean;
+  observaciones?: string;
 }
 
 // ── PIN de acceso sin conexión (bloquea/reanuda sesión ya autenticada) ─────

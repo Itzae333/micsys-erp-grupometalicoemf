@@ -335,6 +335,8 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       pagos: pagosPendiente,
       syncQueueId: queueId,
       folioLocal,
+      aplicaIva: dto.aplica_iva,
+      observaciones: dto.observaciones,
     });
 
     // Nota "sombra" — solo para poder imprimir el ticket de inmediato, sin

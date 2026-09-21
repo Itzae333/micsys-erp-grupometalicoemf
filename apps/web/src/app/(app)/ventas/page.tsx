@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap, Download, MessageCircle } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap, Download, MessageCircle, RefreshCw } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { emfDb } from '@/lib/db/emf-db';
+import { reintentarVentaPendiente } from '@/lib/db/ventas-pendientes';
 import { VentaRapidaDialog } from './VentaRapidaDialog';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -87,6 +88,17 @@ export default function VentasPage() {
     [empresa?.id, ubicacion?.id],
     [],
   );
+  const [retryingClientRef, setRetryingClientRef] = useState<string | null>(null);
+
+  async function onRetryVentaPendiente(clientRef: string) {
+    setRetryingClientRef(clientRef);
+    try {
+      const { ok, mensaje } = await reintentarVentaPendiente(clientRef);
+      toast(mensaje, ok ? 'success' : 'error');
+    } finally {
+      setRetryingClientRef(null);
+    }
+  }
 
   const [notas, setNotas] = useState<NotaVenta[]>([]);
   const [total, setTotal] = useState(0);
@@ -1802,6 +1814,14 @@ export default function VentasPage() {
                     <Badge variant={vp.syncStatus === 'failed' ? 'cancelled' : 'incomplete'}>
                       {vp.syncStatus === 'failed' ? 'Sincronización fallida' : 'Pendiente de sincronizar'}
                     </Badge>
+                    <button
+                      onClick={() => void onRetryVentaPendiente(vp.clientRef)}
+                      disabled={retryingClientRef === vp.clientRef}
+                      className="flex items-center gap-1 text-caption text-steel-500 hover:text-brand-600 transition-colors disabled:opacity-40 flex-shrink-0"
+                    >
+                      <RefreshCw className={cn('h-3 w-3', retryingClientRef === vp.clientRef && 'animate-spin')} />
+                      Reintentar
+                    </button>
                     <span className="font-semibold text-steel-900 text-right w-24 flex-shrink-0">
                       {formatPrecio(vp.total)}
                     </span>

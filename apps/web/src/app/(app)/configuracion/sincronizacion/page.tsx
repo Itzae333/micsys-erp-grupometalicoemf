@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import { emfDb } from '@/lib/db/emf-db';
-import { retryItem, discardErrorItem } from '@/lib/db/sync-queue';
-import { removeVentaPendiente } from '@/lib/db/ventas-pendientes';
+import { retryItem, discardErrorItem, cleanDoneItems } from '@/lib/db/sync-queue';
+import { removeVentaPendiente, reconcileVentasPendientes } from '@/lib/db/ventas-pendientes';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -49,6 +49,12 @@ export default function SincronizacionPage() {
     setBusyId(id);
     try {
       const ok = await retryItem(id);
+      // Sin esto, la nota sombra en la lista de Ventas se quedaba mostrando
+      // el estado viejo (p. ej. "fallida") hasta el próximo ciclo automático
+      // de useOnlineStatus (hasta 2 min después), aunque el reintento manual
+      // ya hubiera tenido éxito aquí mismo.
+      await reconcileVentasPendientes();
+      await cleanDoneItems();
       toast(ok ? 'Sincronizado correctamente' : 'Sigue fallando — revisa el motivo', ok ? 'success' : 'error');
     } finally {
       setBusyId(null);
