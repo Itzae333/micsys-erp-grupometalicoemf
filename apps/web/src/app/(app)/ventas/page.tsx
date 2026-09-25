@@ -608,7 +608,7 @@ export default function VentasPage() {
 
   async function updateLineaInline(lineaId: string, field: 'cantidad' | 'precio_unitario', rawValue: string) {
     if (!notaActiva) return;
-    const parsed = field === 'cantidad' ? parseInt(rawValue, 10) : parseFloat(rawValue);
+    const parsed = parseFloat(rawValue);
     const min = field === 'cantidad' ? 0.001 : 0;
     if (isNaN(parsed) || parsed < min) return;
     const orig = notaActiva.lineas.find((l) => l.id === lineaId);
@@ -1058,7 +1058,7 @@ export default function VentasPage() {
     const pendientes = nota.lineas.filter((l) => {
       const draft = lineaDraft[l.id];
       if (!draft) return false;
-      const cantDirty = draft.cantidad !== undefined && Math.abs((parseInt(draft.cantidad, 10) || 0) - l.cantidad) > 0.0001;
+      const cantDirty = draft.cantidad !== undefined && Math.abs((parseFloat(draft.cantidad) || 0) - l.cantidad) > 0.0001;
       const precioDirty = draft.precio !== undefined && Math.abs((parseFloat(draft.precio) || 0) - l.precio_unitario) > 0.0001;
       return cantDirty || precioDirty;
     });
@@ -1067,8 +1067,8 @@ export default function VentasPage() {
       try {
         for (const l of pendientes) {
           const draft = lineaDraft[l.id];
-          if (draft.cantidad !== undefined && Math.abs((parseInt(draft.cantidad, 10) || 0) - l.cantidad) > 0.0001) {
-            notaFinal = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${l.id}`, { cantidad: parseInt(draft.cantidad, 10) });
+          if (draft.cantidad !== undefined && Math.abs((parseFloat(draft.cantidad) || 0) - l.cantidad) > 0.0001) {
+            notaFinal = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${l.id}`, { cantidad: parseFloat(draft.cantidad) });
           }
           if (draft.precio !== undefined && Math.abs((parseFloat(draft.precio) || 0) - l.precio_unitario) > 0.0001) {
             notaFinal = await api.patch<NotaVenta>(`/ventas/${nota.id}/lineas/${l.id}`, { precio_unitario: parseFloat(draft.precio) });
