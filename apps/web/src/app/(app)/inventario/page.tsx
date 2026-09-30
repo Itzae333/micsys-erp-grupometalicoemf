@@ -261,12 +261,14 @@ export default function InventarioPage() {
           <h1 className="text-display-md font-bold text-steel-900">Inventario</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => router.push('/inventario/proveedores')}
-          >
-            Proveedores
-          </Button>
+          {usuario?.rol !== 'SUPER_USUARIO' && (
+            <Button
+              variant="secondary"
+              onClick={() => router.push('/inventario/proveedores')}
+            >
+              Proveedores
+            </Button>
+          )}
           {canWrite && (
             <Button onClick={openCreate}>
               <Plus className="h-4 w-4 mr-1.5" />
