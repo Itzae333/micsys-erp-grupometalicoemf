@@ -35,7 +35,7 @@ export class MovimientosController {
   }
 
   @Post('entrada')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Registrar entrada de mercancía (aumenta existencia)' })
   registrarEntrada(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -46,7 +46,7 @@ export class MovimientosController {
   }
 
   @Post('salida')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Registrar salida interna (reduce existencia)' })
   registrarSalida(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -57,7 +57,7 @@ export class MovimientosController {
   }
 
   @Post('transferencia')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Transferir cantidad entre slots de existencia' })
   registrarTransferencia(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -68,8 +68,8 @@ export class MovimientosController {
   }
 
   @Post('ajuste')
-  @Roles('SUPER_USUARIO', 'ADMIN')
-  @ApiOperation({ summary: 'Ajuste de inventario por conteo físico (solo ADMIN/SUPER)' })
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Ajuste de inventario por conteo físico (solo ADMIN)' })
   registrarAjuste(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Body() dto: AjusteDto,

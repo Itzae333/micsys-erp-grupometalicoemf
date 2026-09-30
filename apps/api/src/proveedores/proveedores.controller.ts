@@ -30,14 +30,14 @@ export class ProveedoresController {
   }
 
   @Post()
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Crear proveedor' })
   create(@Headers('x-empresa-id') empresaId: string, @Body() dto: CreateProveedorDto) {
     return this.proveedores.create(dto, empresaId);
   }
 
   @Patch(':id')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Editar proveedor' })
   update(
     @Headers('x-empresa-id') empresaId: string,
@@ -48,7 +48,7 @@ export class ProveedoresController {
   }
 
   @Delete(':id')
-  @Roles('SUPER_USUARIO', 'ADMIN')
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'Desactivar proveedor (soft delete)' })
   deactivate(@Headers('x-empresa-id') empresaId: string, @Param('id') id: string) {
     return this.proveedores.deactivate(id, empresaId);

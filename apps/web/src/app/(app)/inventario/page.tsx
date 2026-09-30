@@ -88,7 +88,7 @@ export default function InventarioPage() {
   const [vendedorModalArt, setVendedorModalArt] = useState<Articulo | null>(null);
   const claveEditada = useRef(false);
 
-  const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
+  const canWrite = ['ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
   const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   const {

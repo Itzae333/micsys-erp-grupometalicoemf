@@ -67,8 +67,8 @@ export default function ArticuloDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
-  const canEditPrecios = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canWrite = ['ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
+  const canEditPrecios = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canDelete = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const isVendedor = usuario?.rol === 'VENDEDOR';
   // El Vendedor no tiene canWrite (no edita info/precios ni da de alta), pero sí

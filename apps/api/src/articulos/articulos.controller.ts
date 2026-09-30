@@ -50,14 +50,14 @@ export class ArticulosController {
   }
 
   @Post()
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Crear artículo' })
   create(@Headers('x-ubicacion-id') ubicacionId: string, @Body() dto: CreateArticuloDto) {
     return this.articulos.create(dto, ubicacionId);
   }
 
   @Patch(':id')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
   @ApiOperation({ summary: 'Editar artículo' })
   update(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -68,7 +68,7 @@ export class ArticulosController {
   }
 
   @Patch(':id/precios')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
+  @Roles('ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Actualizar precios de artículo' })
   updatePrecios(
     @Headers('x-ubicacion-id') ubicacionId: string,
@@ -79,7 +79,7 @@ export class ArticulosController {
   }
 
   @Patch(':id/existencias')
-  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
   @ApiOperation({ summary: 'Actualizar existencias de artículo' })
   updateExistencias(
     @Headers('x-ubicacion-id') ubicacionId: string,

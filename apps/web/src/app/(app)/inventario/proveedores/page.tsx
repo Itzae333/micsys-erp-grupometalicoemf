@@ -34,7 +34,7 @@ export default function ProveedoresPage() {
   const [editTarget, setEditTarget] = useState<Proveedor | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const canWrite = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
+  const canWrite = ['ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
 
   const {
     register,
