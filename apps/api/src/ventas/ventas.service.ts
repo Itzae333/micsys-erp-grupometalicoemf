@@ -913,8 +913,10 @@ export class VentasService {
         data: { saldo_pendiente: saldoDespues },
       });
 
-      const totalPagadoNuevo = totalPagado + montoAbono;
-      const nuevoEstatus = totalPagadoNuevo >= totalNota ? 'PAGADA' : 'CREDITO';
+      // Redondeo a centavos: 19000 + 28481.12 = 47481.119999999995 en float y
+      // dejaría la nota en CRÉDITO aunque ya esté liquidada.
+      const totalPagadoNuevo = +(totalPagado + montoAbono).toFixed(2);
+      const nuevoEstatus = totalPagadoNuevo >= +totalNota.toFixed(2) ? 'PAGADA' : 'CREDITO';
 
       return tx.notaVenta.update({
         where: { id: notaId },

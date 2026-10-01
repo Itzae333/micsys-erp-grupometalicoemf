@@ -375,8 +375,9 @@ export class SolicitudesAbonoService {
     }
 
     const pagosFinales = await tx.pago.findMany({ where: { nota_id: pago.nota_id } });
-    const totalPagadoFinal = pagosFinales.reduce((s, p) => s + Number(p.monto), 0);
-    const nuevoEstatus = totalPagadoFinal >= Number(pago.nota.total) ? 'PAGADA' : 'CREDITO';
+    // Redondeo a centavos para evitar errores de punto flotante (47481.119999999995 < 47481.12)
+    const totalPagadoFinal = +pagosFinales.reduce((s, p) => s + Number(p.monto), 0).toFixed(2);
+    const nuevoEstatus = totalPagadoFinal >= +Number(pago.nota.total).toFixed(2) ? 'PAGADA' : 'CREDITO';
     await tx.notaVenta.update({ where: { id: pago.nota_id }, data: { estatus: nuevoEstatus } });
   }
 
