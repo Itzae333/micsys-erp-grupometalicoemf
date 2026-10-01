@@ -25,3 +25,27 @@ describe('RhService.listarUsuariosDisponibles', () => {
     expect(where.OR).toEqual([{ empleado: null }, { empleado: { id: 'empleado-9' } }]);
   });
 });
+
+describe('RhService.listarEmpleados — búsqueda', () => {
+  function build() {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const count = vi.fn().mockResolvedValue(0);
+    const service = new RhService({ empleado: { findMany, count } } as unknown as PrismaService);
+    return { service, findMany };
+  }
+
+  it('cada palabra se busca en nombre, apellidos o puesto', async () => {
+    const { service, findMany } = build();
+    await service.listarEmpleados('emp-1', { q: 'Pérez  Fer', page: 1, limit: 8 });
+    const { where } = findMany.mock.calls[0][0];
+    expect(where.AND).toHaveLength(2);
+    expect(where.AND[0].OR.map((c: any) => Object.keys(c)[0])).toEqual(['nombre', 'apellidos', 'puesto']);
+    expect(where.AND[1].OR[0].nombre.contains).toBe('Fer');
+  });
+
+  it('sin texto no agrega filtro de búsqueda', async () => {
+    const { service, findMany } = build();
+    await service.listarEmpleados('emp-1', { page: 1, limit: 8 });
+    expect(findMany.mock.calls[0][0].where.AND).toBeUndefined();
+  });
+});

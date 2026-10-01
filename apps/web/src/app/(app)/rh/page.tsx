@@ -140,23 +140,33 @@ function EmpleadoSearch({
   const [items, setItems] = useState<Empleado[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reqId = useRef(0);
+  // Si el valor pasa a null porque el usuario está escribiendo, el texto no se
+  // debe borrar; solo se limpia cuando el padre reinicia el campo.
+  const escribiendo = useRef(false);
 
   useEffect(() => {
     if (value) setQ(`${value.apellidos} ${value.nombre}`);
-    else setQ('');
+    else if (!escribiendo.current) setQ('');
+    escribiendo.current = false;
   }, [value]);
 
   function handleChange(val: string) {
+    escribiendo.current = true;
     setQ(val);
     onChange(null);
     if (timer.current) clearTimeout(timer.current);
-    if (val.length < 2) { setItems([]); return; }
+    const id = ++reqId.current;
+    if (val.trim().length < 2) { setItems([]); setOpen(false); return; }
     timer.current = setTimeout(async () => {
       try {
-        const res = await api.get<EmpleadosPage>(`/rh/empleados?q=${encodeURIComponent(val)}&limit=8`);
+        const res = await api.get<EmpleadosPage>(`/rh/empleados?q=${encodeURIComponent(val.trim())}&activo=true&limit=8`);
+        if (id !== reqId.current) return; // llegó una respuesta de una búsqueda anterior
         setItems(res.data);
         setOpen(true);
-      } catch { setItems([]); }
+      } catch {
+        if (id === reqId.current) setItems([]);
+      }
     }, 250);
   }
 
@@ -176,6 +186,11 @@ function EmpleadoSearch({
         onFocus={() => items.length > 0 && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
+      {open && items.length === 0 && q.trim().length >= 2 && (
+        <p className="absolute z-50 mt-1 w-full bg-white border border-steel-200 rounded-lg shadow-lg px-3 py-2 text-body-sm text-steel-400">
+          Sin coincidencias
+        </p>
+      )}
       {open && items.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full bg-white border border-steel-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
           {items.map((e) => (

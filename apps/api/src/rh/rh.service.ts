@@ -74,12 +74,17 @@ export class RhService {
     const where: Record<string, unknown> = { empresa_id: empresaId };
     if (opts.activo !== undefined) where.activo = opts.activo === 'true';
     if (opts.areaId) where.area_id = opts.areaId;
-    if (opts.q) {
-      where.OR = [
-        { nombre:    { contains: opts.q, mode: 'insensitive' } },
-        { apellidos: { contains: opts.q, mode: 'insensitive' } },
-        { puesto:    { contains: opts.q, mode: 'insensitive' } },
-      ];
+    // Cada palabra debe aparecer en nombre, apellidos o puesto — así "Pérez Fer"
+    // o "Fernando Pérez" encuentran al empleado aunque estén en campos distintos.
+    const palabras = (opts.q ?? '').split(/\s+/).filter(Boolean);
+    if (palabras.length > 0) {
+      where.AND = palabras.map((p) => ({
+        OR: [
+          { nombre:    { contains: p, mode: 'insensitive' } },
+          { apellidos: { contains: p, mode: 'insensitive' } },
+          { puesto:    { contains: p, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     const [data, total] = await Promise.all([
