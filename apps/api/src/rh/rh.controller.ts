@@ -75,6 +75,17 @@ export class RhController {
     });
   }
 
+  @Get('usuarios-disponibles')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'JEFE_RH')
+  @ApiOperation({ summary: 'Usuarios activos sin empleado vinculado (para el combo de empleado)' })
+  @ApiQuery({ name: 'incluirEmpleadoId', required: false })
+  usuariosDisponibles(
+    @Headers('x-empresa-id') empresaId: string,
+    @Query('incluirEmpleadoId') incluirEmpleadoId?: string,
+  ) {
+    return this.rh.listarUsuariosDisponibles(empresaId, incluirEmpleadoId);
+  }
+
   @Get('empleados/:id')
   @ApiOperation({ summary: 'Detalle de empleado' })
   getEmpleado(

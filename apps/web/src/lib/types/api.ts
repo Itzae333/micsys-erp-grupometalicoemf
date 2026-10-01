@@ -595,6 +595,14 @@ export interface Empleado {
   updated_at: string;
 }
 
+export interface UsuarioDisponible {
+  id: string;
+  nombre: string;
+  apellidos: string;
+  email: string;
+  rol: string;
+}
+
 export interface EmpleadosPage {
   data: Empleado[];
   total: number;
@@ -939,4 +947,74 @@ export interface LiquidarPedidoResult {
   nota_venta_id: string;
   nota_folio: number;
   ticket: Record<string, unknown>;
+}
+
+// ── Entregas de materia prima a áreas ─────────────────────────
+
+export type EstatusEntregaMateriaPrima = 'ACTIVA' | 'CANCELADA';
+export type TipoDevolucionMateriaPrima = 'SOBRANTE' | 'DEFECTUOSO' | 'MERMA' | 'ERROR_ENTREGA';
+
+export interface DevolucionMateriaPrimaLinea {
+  id: string;
+  entrega_linea_id: string;
+  tipo: TipoDevolucionMateriaPrima;
+  cantidad: number;
+  movimiento_id: string | null;
+}
+
+export interface EntregaMateriaPrimaLinea {
+  id: string;
+  articulo_id: string;
+  existencia_num: number;
+  cantidad: number;
+  articulo: { id: string; clave: string; descripcion_1: string | null; descripcion_2: string | null };
+  devoluciones: DevolucionMateriaPrimaLinea[];
+}
+
+export interface DevolucionMateriaPrima {
+  id: string;
+  fecha: string;
+  motivo: string | null;
+  registrador: { id: string; nombre: string; apellidos: string };
+  lineas: DevolucionMateriaPrimaLinea[];
+}
+
+export interface EntregaMateriaPrima {
+  id: string;
+  fecha: string;
+  estatus: EstatusEntregaMateriaPrima;
+  observaciones: string | null;
+  area: { id: string; nombre: string };
+  empleado: { id: string; nombre: string; apellidos: string } | null;
+  entregador: { id: string; nombre: string; apellidos: string };
+  lineas: EntregaMateriaPrimaLinea[];
+  devoluciones: DevolucionMateriaPrima[];
+}
+
+export interface EntregasMateriaPrimaPage {
+  data: EntregaMateriaPrima[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface FilaConsumoMateriaPrima {
+  id: string;
+  nombre: string;
+  entregas: number;
+  entregado: number;
+  devuelto: number;
+  merma: number;
+  defectuoso: number;
+  neto: number;
+}
+
+export interface ReporteConsumoMateriaPrima {
+  desde: string | null;
+  hasta: string | null;
+  total_entregas: number;
+  por_area: FilaConsumoMateriaPrima[];
+  por_empleado: FilaConsumoMateriaPrima[];
+  por_articulo: FilaConsumoMateriaPrima[];
 }

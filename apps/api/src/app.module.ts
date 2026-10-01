@@ -32,6 +32,7 @@ import { SolicitudesAbonoModule } from './solicitudes-abono/solicitudes-abono.mo
 import { MailModule } from './mail/mail.module';
 import { GastosModule } from './gastos/gastos.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
+import { EntregasMateriaPrimaModule } from './entregas-materia-prima/entregas-materia-prima.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
     SolicitudesAbonoModule,
     GastosModule,
     CotizacionesModule,
+    EntregasMateriaPrimaModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },

@@ -14,7 +14,7 @@ import type {
   Area, Empleado, EmpleadosPage, TipoPago,
   RegistroAsistencia, AsistenciaPage, EstatusAsistencia,
   OrdenProduccion, OrdenesProduccionPage, EstatusProduccion,
-  Articulo, ArticulosPage,
+  Articulo, ArticulosPage, UsuarioDisponible,
 } from '@/lib/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -271,6 +271,7 @@ export default function RhPage() {
     descuento_por_30min: '', minimo_piezas_semana: '', sancion_por_pieza: '',
   });
   const [savingEmp, setSavingEmp] = useState(false);
+  const [usuariosDisp, setUsuariosDisp] = useState<UsuarioDisponible[]>([]);
 
   // ── Estado — Áreas (dialog) ────────────────────────────────
 
@@ -420,7 +421,17 @@ export default function RhPage() {
 
   // ── Handlers — Empleados ──────────────────────────────────
 
+  async function cargarUsuariosDisponibles(incluirEmpleadoId?: string) {
+    try {
+      const qs = incluirEmpleadoId ? `?incluirEmpleadoId=${incluirEmpleadoId}` : '';
+      setUsuariosDisp(await api.get<UsuarioDisponible[]>(`/rh/usuarios-disponibles${qs}`));
+    } catch {
+      setUsuariosDisp([]);
+    }
+  }
+
   function abrirNuevoEmp() {
+    void cargarUsuariosDisponibles();
     setEditEmp(null);
     setEmpForm({
       nombre: '', apellidos: '', puesto: '',
@@ -432,6 +443,7 @@ export default function RhPage() {
   }
 
   function abrirEditEmp(e: Empleado) {
+    void cargarUsuariosDisponibles(e.id);
     setEditEmp(e);
     setEmpForm({
       nombre:        e.nombre,
@@ -1381,11 +1393,26 @@ export default function RhPage() {
             <label className="block text-body-sm font-medium text-steel-700 mb-1">
               Usuario del sistema <span className="text-steel-400 font-normal">(opcional)</span>
             </label>
-            <Input
+            <select
               value={empForm.usuario_id}
-              onChange={(e) => setEmpForm((f) => ({ ...f, usuario_id: e.target.value }))}
-              placeholder="ID del usuario (déjalo vacío si no tiene cuenta)"
-            />
+              onChange={(e) => {
+                const u = usuariosDisp.find((x) => x.id === e.target.value);
+                setEmpForm((f) => ({
+                  ...f,
+                  usuario_id: e.target.value,
+                  nombre:    f.nombre    || u?.nombre    || '',
+                  apellidos: f.apellidos || u?.apellidos || '',
+                }));
+              }}
+              className="w-full h-9 px-3 rounded-lg border border-steel-200 text-body-sm bg-white"
+            >
+              <option value="">Sin cuenta en el sistema</option>
+              {usuariosDisp.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre} {u.apellidos} — {u.rol}
+                </option>
+              ))}
+            </select>
             <p className="text-meta text-steel-400 mt-1">
               No todos los empleados tienen cuenta en el sistema. El admin/encargado no es necesariamente empleado.
             </p>

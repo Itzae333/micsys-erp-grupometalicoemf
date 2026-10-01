@@ -42,6 +42,7 @@ model Empresa {
   remisiones_origen    Remision[]                @relation("RemisionOrigenEmpresa")
   remisiones_destino   Remision[]                @relation("RemisionDestinoEmpresa")
   gastos               Gasto[]
+  entregas_materia_prima EntregaMateriaPrima[]
 
   @@map("empresas")
 }
@@ -93,6 +94,7 @@ model Ubicacion {
   remisiones_destino     Remision[]                  @relation("RemisionDestinoUbicacion")
   gastos                 Gasto[]
   equivalencias_destino  ArticuloEquivalencia[]
+  entregas_materia_prima EntregaMateriaPrima[]
 
   @@map("ubicaciones")
 }
@@ -138,6 +140,8 @@ model Usuario {
   ordenes_produccion          OrdenProduccion[]
   solicitudes_enviadas        SolicitudEdicionNota[]      @relation("SolicitudSolicitante")
   solicitudes_aprobadas       SolicitudEdicionNota[]      @relation("SolicitudAprobador")
+  entregas_materia_prima      EntregaMateriaPrima[]       @relation("EntregaEntregadaPor")
+  devoluciones_materia_prima  DevolucionMateriaPrima[]
   solicitudes_abono_enviadas  SolicitudEdicionAbono[]     @relation("SolicitudAbonoSolicitante")
   solicitudes_abono_aprobadas SolicitudEdicionAbono[]     @relation("SolicitudAbonoAprobador")
   evidencias_subidas          EvidenciaNota[]
@@ -316,6 +320,7 @@ model Articulo {
   remision_lineas        RemisionLinea[]
   equivalencias_como_origen  ArticuloEquivalencia[] @relation("EquivalenciaOrigen")
   equivalencias_como_destino ArticuloEquivalencia[] @relation("EquivalenciaDestino")
+  entregas_materia_prima_lineas EntregaMateriaPrimaLinea[]
 
   @@unique([ubicacion_id, clave])
   @@map("articulos")
@@ -851,6 +856,7 @@ model Area {
   empresa   Empresa              @relation(fields: [empresa_id], references: [id])
   empleados Empleado[]
   registros RegistroAsistencia[]
+  entregas_materia_prima EntregaMateriaPrima[]
 
   @@unique([empresa_id, nombre])
   @@index([empresa_id, activa])
@@ -879,6 +885,7 @@ model Empleado {
   area        Area?                @relation(fields: [area_id], references: [id])
   usuario     Usuario?             @relation(fields: [usuario_id], references: [id])
   asistencias RegistroAsistencia[]
+  entregas_materia_prima EntregaMateriaPrima[]
 
   @@index([empresa_id, activo])
   @@map("empleados")
@@ -1289,4 +1296,101 @@ model AuditLog {
   @@index([empresa_id, created_at(sort: Desc)])
   @@index([entidad, entidad_id])
   @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENTREGAS DE MATERIA PRIMA A ÁREAS
+// La materia prima son los mismos Artículos del inventario de la
+// ubicación. Cada línea de entrega genera un MovimientoInventario
+// de SALIDA (descuenta existencia). Las devoluciones regresan
+// existencia solo si son SOBRANTE o ERROR_ENTREGA (ENTRADA); MERMA
+// y DEFECTUOSO no suman existencia pero quedan imputadas al área.
+// ─────────────────────────────────────────────────────────────
+
+enum EstatusEntregaMateriaPrima {
+  ACTIVA
+  CANCELADA
+}
+
+enum TipoDevolucionMateriaPrima {
+  SOBRANTE
+  DEFECTUOSO
+  MERMA
+  ERROR_ENTREGA
+}
+
+model EntregaMateriaPrima {
+  id            String                     @id @default(cuid())
+  empresa_id    String
+  ubicacion_id  String
+  area_id       String
+  empleado_id   String?
+  entregado_por String
+  fecha         DateTime                   @default(now())
+  observaciones String?
+  estatus       EstatusEntregaMateriaPrima @default(ACTIVA)
+  created_at    DateTime                   @default(now())
+  updated_at    DateTime                   @updatedAt
+
+  empresa        Empresa                        @relation(fields: [empresa_id], references: [id])
+  ubicacion      Ubicacion                      @relation(fields: [ubicacion_id], references: [id])
+  area           Area                           @relation(fields: [area_id], references: [id])
+  empleado       Empleado?                      @relation(fields: [empleado_id], references: [id])
+  entregador     Usuario                        @relation("EntregaEntregadaPor", fields: [entregado_por], references: [id])
+  lineas         EntregaMateriaPrimaLinea[]
+  devoluciones   DevolucionMateriaPrima[]
+
+  @@index([ubicacion_id, fecha])
+  @@index([area_id, fecha])
+  @@index([empleado_id, fecha])
+  @@map("entregas_materia_prima")
+}
+
+model EntregaMateriaPrimaLinea {
+  id             String  @id @default(cuid())
+  entrega_id     String
+  articulo_id    String
+  existencia_num Int
+  cantidad       Decimal @db.Decimal(12, 3)
+  movimiento_id  String?
+
+  entrega      EntregaMateriaPrima              @relation(fields: [entrega_id], references: [id], onDelete: Cascade)
+  articulo     Articulo                         @relation(fields: [articulo_id], references: [id])
+  devoluciones DevolucionMateriaPrimaLinea[]
+
+  @@index([entrega_id])
+  @@index([articulo_id])
+  @@map("entregas_materia_prima_lineas")
+}
+
+model DevolucionMateriaPrima {
+  id            String   @id @default(cuid())
+  entrega_id    String
+  registrada_por String
+  fecha         DateTime @default(now())
+  motivo        String?
+  created_at    DateTime @default(now())
+
+  entrega    EntregaMateriaPrima           @relation(fields: [entrega_id], references: [id], onDelete: Cascade)
+  registrador Usuario                      @relation(fields: [registrada_por], references: [id])
+  lineas     DevolucionMateriaPrimaLinea[]
+
+  @@index([entrega_id])
+  @@map("devoluciones_materia_prima")
+}
+
+model DevolucionMateriaPrimaLinea {
+  id               String                     @id @default(cuid())
+  devolucion_id    String
+  entrega_linea_id String
+  tipo             TipoDevolucionMateriaPrima
+  cantidad         Decimal                    @db.Decimal(12, 3)
+  movimiento_id    String?
+
+  devolucion    DevolucionMateriaPrima   @relation(fields: [devolucion_id], references: [id], onDelete: Cascade)
+  entrega_linea EntregaMateriaPrimaLinea @relation(fields: [entrega_linea_id], references: [id])
+
+  @@index([devolucion_id])
+  @@index([entrega_linea_id])
+  @@map("devoluciones_materia_prima_lineas")
 }

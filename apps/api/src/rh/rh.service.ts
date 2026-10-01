@@ -117,6 +117,23 @@ export class RhService {
     return serializeDecimal(emp);
   }
 
+  /** Usuarios activos de la empresa que aún no están vinculados a un empleado.
+   *  Al editar se pasa `incluirEmpleadoId` para que siga apareciendo el ya vinculado. */
+  async listarUsuariosDisponibles(empresaId: string, incluirEmpleadoId?: string) {
+    return this.prisma.usuario.findMany({
+      where: {
+        empresa_id: empresaId,
+        activo: true,
+        OR: [
+          { empleado: null },
+          ...(incluirEmpleadoId ? [{ empleado: { id: incluirEmpleadoId } }] : []),
+        ],
+      },
+      orderBy: [{ apellidos: 'asc' }, { nombre: 'asc' }],
+      select: { id: true, nombre: true, apellidos: true, email: true, rol: true },
+    });
+  }
+
   async crearEmpleado(dto: CreateEmpleadoDto, empresaId: string) {
     // Validar que area_id pertenece a la empresa
     if (dto.area_id) {

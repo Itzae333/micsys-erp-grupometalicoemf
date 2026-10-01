@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  PackageOpen,
   ArrowUpFromLine,
   Users,
   ClipboardList,
@@ -72,6 +73,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Inventario',
     icon: <Package className="h-4 w-4" />,
     roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'JEFE_MANUFACTURA', 'VENDEDOR'],
+  },
+  {
+    href: '/entregas-materia-prima',
+    label: 'Materia prima',
+    icon: <PackageOpen className="h-4 w-4" />,
+    roles: ['ADMIN', 'ENCARGADO'],
   },
   {
     href: '/movimientos',
