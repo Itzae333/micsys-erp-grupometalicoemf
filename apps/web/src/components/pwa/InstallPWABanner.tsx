@@ -1,13 +1,58 @@
 'use client';
 
 import { Download, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInstallPWA } from '@/hooks/useInstallPWA';
 import { Button } from '@/components/ui/button';
+import { AbrirEnSafari, PasosSafari } from './IOSInstallSteps';
+
+const DISMISS_KEY = 'emf_ios_install_dismissed_at';
+const DISMISS_DAYS = 14;
 
 export function InstallPWABanner() {
-  const { canInstall, install } = useInstallPWA();
+  const { canInstall, install, isIOS, isIOSSafari, isInstalled } = useInstallPWA();
   const [dismissed, setDismissed] = useState(false);
+  const [iosOculto, setIosOculto] = useState(true);
+
+  // En iOS no hay botón de instalar: mostramos la guía, y si el usuario la cierra
+  // no se vuelve a mostrar por un tiempo (se puede volver a ver en /instalar).
+  useEffect(() => {
+    try {
+      const t = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
+      setIosOculto(Date.now() - t < DISMISS_DAYS * 24 * 60 * 60 * 1000);
+    } catch {
+      setIosOculto(false);
+    }
+  }, []);
+
+  function cerrarIOS() {
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* sin storage */ }
+    setIosOculto(true);
+  }
+
+  if (isIOS && !isInstalled) {
+    if (iosOculto) return null;
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-3">
+        <div className="mx-auto max-w-md bg-white rounded-2xl shadow-2xl border border-steel-200 p-5 max-h-[85vh] overflow-y-auto">
+          <div className="flex items-start gap-3 mb-4">
+            <img src="/brand/grupo/apple-touch-icon.png" alt="" className="w-12 h-12 rounded-xl flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-lg font-bold text-steel-900 leading-tight">Instala la app en tu iPhone</p>
+              <p className="text-sm text-steel-500">Entra más rápido, sin escribir la dirección.</p>
+            </div>
+            <button onClick={cerrarIOS} className="text-steel-400 p-1" aria-label="Cerrar">
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+          {isIOSSafari ? <PasosSafari /> : <AbrirEnSafari />}
+          <button onClick={cerrarIOS} className="mt-4 w-full text-base text-steel-500 py-2">
+            Ahora no
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!canInstall || dismissed) return null;
 
