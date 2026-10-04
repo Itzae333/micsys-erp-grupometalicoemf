@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Package, Pencil, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Package, Pencil, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -216,6 +216,18 @@ export default function ArticuloDetailPage() {
     load();
   }
 
+  // Producto especial: no se borra, solo se oculta del inventario.
+  async function toggleOculto() {
+    if (!articulo) return;
+    setDeleteError(null);
+    try {
+      await api.patch(`/articulos/${id}/${articulo.oculto ? 'mostrar' : 'ocultar'}`, {});
+      load();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'No se pudo actualizar el producto');
+    }
+  }
+
   async function onEliminar() {
     setDeleting(true);
     setDeleteError(null);
@@ -269,6 +281,8 @@ export default function ArticuloDetailPage() {
               <Badge variant={articulo.activo ? 'paid' : 'default'}>
                 {articulo.activo ? 'Activo' : 'Inactivo'}
               </Badge>
+              {articulo.es_especial && <Badge variant="default">Especial</Badge>}
+              {articulo.oculto && <Badge variant="default">Oculto</Badge>}
             </div>
             <p className="text-body text-steel-600">{articulo.descripcion_1 ?? ''}</p>
             {articulo.proveedor && (
@@ -292,7 +306,19 @@ export default function ArticuloDetailPage() {
                 <><ToggleLeft className="h-4 w-4 text-steel-400" /> Activar</>
               )}
             </button>
-            {canDelete && (
+            {articulo.es_especial && (
+              <button
+                onClick={toggleOculto}
+                className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-steel-800 px-3 py-1.5 border border-steel-200 rounded-lg hover:bg-steel-50 transition-colors"
+              >
+                {articulo.oculto ? (
+                  <><Eye className="h-4 w-4" /> Mostrar en inventario</>
+                ) : (
+                  <><EyeOff className="h-4 w-4" /> Ocultar del inventario</>
+                )}
+              </button>
+            )}
+            {canDelete && !articulo.es_especial && (
               <button
                 onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
                 className="flex items-center gap-1.5 text-body-sm text-steel-500 hover:text-brand-600 px-3 py-1.5 border border-steel-200 rounded-lg hover:bg-brand-50 transition-colors"

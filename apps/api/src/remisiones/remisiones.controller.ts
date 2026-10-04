@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { RemisionesService } from './remisiones.service';
-import { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
+import { CreateRemisionDto, RecibirRemisionDto, RecepcionDirectaDto } from './dto/remision.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -20,6 +20,36 @@ export class RemisionesController {
   @ApiOperation({ summary: 'Empresas y ubicaciones disponibles como destino' })
   getDestinos() {
     return this.remisiones.getDestinos();
+  }
+
+  @Get('articulos-ubicacion')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @ApiOperation({ summary: 'Buscar artículos en la ubicación activa (recepción sin remisión)' })
+  @ApiQuery({ name: 'q',     required: false })
+  @ApiQuery({ name: 'page',  required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  buscarArticulosUbicacion(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('q')     q?:     string,
+    @Query('page')  page?:  string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.remisiones.buscarArticulosUbicacion(ubicacionId, {
+      q,
+      page:  page  ? Number(page)                 : 1,
+      limit: limit ? Math.min(Number(limit), 100) : 15,
+    });
+  }
+
+  @Post('recepcion-directa')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @ApiOperation({ summary: 'Recibir sin remisión: el destino la captura (solo entrada en destino)' })
+  recepcionDirecta(
+    @Body() dto: RecepcionDirectaDto,
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.remisiones.recepcionDirecta(dto, user.sub, user.empresa_id, ubicacionId);
   }
 
   @Get('folio/:folio')

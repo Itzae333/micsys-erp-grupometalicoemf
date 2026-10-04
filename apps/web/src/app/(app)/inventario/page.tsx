@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Package, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2 } from 'lucide-react';
+import { Plus, Package, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -86,6 +86,10 @@ export default function InventarioPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [vendedorModalArt, setVendedorModalArt] = useState<Articulo | null>(null);
+  // Producto especial (uso único): se puede ocultar del inventario sin borrarlo
+  const [esEspecial, setEsEspecial] = useState(false);
+  const [verOcultos, setVerOcultos] = useState(false);
+  const [listaError, setListaError] = useState<string | null>(null);
   const claveEditada = useRef(false);
 
   const canWrite = ['ADMIN', 'ENCARGADO', 'ALMACENISTA'].includes(usuario?.rol ?? '');
@@ -128,6 +132,7 @@ export default function InventarioPage() {
       const params = new URLSearchParams({ page: String(page), limit: '50' });
       if (q) params.set('q', q);
       if (proveedorFiltro) params.set('proveedorId', proveedorFiltro);
+      if (verOcultos) params.set('ocultos', 'true');
       const data = await api.get<ArticulosPage>(`/articulos?${params}`);
       setResult(data);
     } catch {
@@ -135,7 +140,7 @@ export default function InventarioPage() {
     } finally {
       setLoading(false);
     }
-  }, [empresa?.id, ubicacion?.id, page, q, proveedorFiltro]);
+  }, [empresa?.id, ubicacion?.id, page, q, proveedorFiltro, verOcultos]);
 
   const loadProveedores = useCallback(async () => {
     if (!empresa?.id || !ubicacion?.id) return;
@@ -158,6 +163,7 @@ export default function InventarioPage() {
 
   function openCreate() {
     setEditTarget(null);
+    setEsEspecial(false);
     claveEditada.current = false;
     reset({});
     setFormError(null);
@@ -166,6 +172,7 @@ export default function InventarioPage() {
 
   function openEdit(art: Articulo) {
     setEditTarget(art);
+    setEsEspecial(!!art.es_especial);
     claveEditada.current = true;
     reset({
       clave: art.clave,
@@ -200,6 +207,7 @@ export default function InventarioPage() {
     const payload = {
       ...data,
       proveedor_id: data.proveedor_id || undefined,
+      es_especial: esEspecial,
     };
     try {
       if (editTarget) {
@@ -233,6 +241,18 @@ export default function InventarioPage() {
       setDeleteError(err instanceof Error ? err.message : 'Error al eliminar el artículo');
     } finally {
       setDeleting(false);
+    }
+  }
+
+  // Los productos especiales no se borran: se ocultan del inventario (y de
+  // búsquedas/ventas nuevas) conservando notas, kardex y tickets.
+  async function onToggleOculto(art: Articulo) {
+    setListaError(null);
+    try {
+      await api.patch(`/articulos/${art.id}/${art.oculto ? 'mostrar' : 'ocultar'}`, {});
+      loadArticulos();
+    } catch (err) {
+      setListaError(err instanceof Error ? err.message : 'No se pudo actualizar el producto');
     }
   }
 
@@ -299,6 +319,14 @@ export default function InventarioPage() {
             </button>
           )}
         </div>
+        <label className="flex items-center gap-2 text-body-sm text-steel-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={verOcultos}
+            onChange={(e) => { setVerOcultos(e.target.checked); setPage(1); }}
+          />
+          Ver ocultos
+        </label>
         {hayProveedorAsignado && (
           <Select
             value={proveedorFiltro}
@@ -313,6 +341,10 @@ export default function InventarioPage() {
           </Select>
         )}
       </div>
+
+      {listaError && (
+        <div className="px-6 py-2 bg-brand-50 border-b border-brand-200 text-body-sm text-brand-600">{listaError}</div>
+      )}
 
       {/* Tabla */}
       <div className="flex-1 overflow-auto">
@@ -377,6 +409,9 @@ export default function InventarioPage() {
                     <td key={d.numero} className="px-4 py-2.5">
                       <span className="text-table text-steel-900 truncate block max-w-[200px]">
                         {(art[`descripcion_${d.numero}` as keyof Articulo] as string | null) ?? '—'}
+                        {d.numero === activeDescripciones[0]?.numero && art.es_especial && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-meta">Especial</span>
+                        )}
                       </span>
                     </td>
                   ))}
@@ -422,7 +457,17 @@ export default function InventarioPage() {
                           Editar
                         </button>
                       )}
-                      {canDelete && (
+                      {canWrite && art.es_especial && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void onToggleOculto(art); }}
+                          className="text-steel-400 hover:text-steel-700 p-1.5 rounded hover:bg-steel-100"
+                          title={art.oculto ? 'Mostrar en inventario' : 'Ocultar del inventario'}
+                          aria-label={art.oculto ? 'Mostrar producto especial' : 'Ocultar producto especial'}
+                        >
+                          {art.oculto ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                      {canDelete && !art.es_especial && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeleteTarget(art); }}
                           className="text-steel-400 hover:text-brand-600 p-1.5 rounded hover:bg-brand-50"
@@ -572,6 +617,23 @@ export default function InventarioPage() {
               ))}
             </Select>
           </div>
+
+          {canWrite && (
+            <label className="flex items-start gap-2 text-body-sm text-steel-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={esEspecial}
+                onChange={(e) => setEsEspecial(e.target.checked)}
+              />
+              <span>
+                Producto especial (uso único)
+                <span className="block text-meta text-steel-500">
+                  Al terminar la venta se puede ocultar del inventario sin borrar el historial.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Precios activos */}
           {activePrices.length > 0 && (

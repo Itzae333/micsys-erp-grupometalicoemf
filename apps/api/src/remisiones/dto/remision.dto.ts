@@ -102,10 +102,70 @@ export class RecepcionLineaDto {
   origen_resolucion?: 'AUTOMATICA' | 'MANUAL_AMBIGUEDAD' | 'MANUAL_BUSQUEDA';
 }
 
+// Producto que llegó y no venía en la remisión: se toma del inventario del
+// propio destino y solo afecta su existencia.
+export class RecepcionLineaExtraDto {
+  @ApiProperty()
+  @IsString()
+  articulo_destino_id: string;
+
+  @ApiProperty({ minimum: 0.001 })
+  @IsNumber()
+  @Min(0.001)
+  @Type(() => Number)
+  cantidad: number;
+
+  @ApiProperty({ minimum: 1, maximum: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @Type(() => Number)
+  slot_destino: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notas?: string;
+}
+
 export class RecibirRemisionDto {
   @ApiProperty({ type: [RecepcionLineaDto] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => RecepcionLineaDto)
   lineas: RecepcionLineaDto[];
+
+  @ApiPropertyOptional({ type: [RecepcionLineaExtraDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecepcionLineaExtraDto)
+  lineas_extra?: RecepcionLineaExtraDto[];
+}
+
+// Recepción cuando el origen nunca capturó la remisión: la crea el destino.
+export class RecepcionDirectaDto {
+  @ApiProperty()
+  @IsString()
+  empresa_origen_id: string;
+
+  @ApiProperty()
+  @IsString()
+  ub_origen_id: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  concepto?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notas?: string;
+
+  @ApiProperty({ type: [RecepcionLineaExtraDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecepcionLineaExtraDto)
+  lineas: RecepcionLineaExtraDto[];
 }

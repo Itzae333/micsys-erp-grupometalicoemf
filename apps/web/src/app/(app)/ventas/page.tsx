@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
+import { OcultarEspecialesDialog, especialesPendientes } from '@/components/ventas/OcultarEspecialesDialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
@@ -149,6 +150,7 @@ export default function VentasPage() {
 
   // Dialog cobrar
   const [dlgCobrar, setDlgCobrar] = useState(false);
+  const [especialesOcultar, setEspecialesOcultar] = useState<ReturnType<typeof especialesPendientes>>([]);
   const [pagos, setPagos] = useState<{ metodo: string; monto: number; referencia: string }[]>([
     { metodo: 'EFECTIVO', monto: 0, referencia: '' },
   ]);
@@ -1125,6 +1127,9 @@ export default function VentasPage() {
       setDlgCobrar(false);
       setNotaActiva(null);
       patchNota(notaActualizada);
+      // Productos especiales de uso único: ofrecer ocultarlos del inventario
+      // (solo al cerrar la venta, no al dejarla por pagar).
+      if (!checkNotaPorPagar) setEspecialesOcultar(especialesPendientes(notaActualizada.lineas));
       // Auto-imprimir según copias configuradas en Configuración > Ticketera
       const copiasAuto = (() => {
         try {
@@ -2003,6 +2008,8 @@ export default function VentasPage() {
         </div>
       </div>
       )}
+
+      <OcultarEspecialesDialog articulos={especialesOcultar} onClose={() => setEspecialesOcultar([])} />
 
       {/* ── Modal de detalle de nota — solo móvil ─────────────── */}
       <div className="md:hidden">

@@ -32,7 +32,7 @@ const NOTA_INCLUDE = {
     include: {
       articulo: {
         select: {
-          id: true, clave: true,
+          id: true, clave: true, es_especial: true, oculto: true,
           descripcion_1: true, descripcion_2: true,
           descripcion_3: true, descripcion_4: true, descripcion_5: true,
         },
@@ -199,6 +199,7 @@ export class VentasService {
     });
     if (!art) throw new NotFoundException('Artículo no encontrado');
     if (!art.activo) throw new BadRequestException('El artículo está inactivo');
+    if (art.oculto) throw new BadRequestException('El artículo está oculto del inventario');
 
     const subtotal = this.calcSubtotal(dto.cantidad, dto.precio_unitario, dto.descuento ?? 0);
 

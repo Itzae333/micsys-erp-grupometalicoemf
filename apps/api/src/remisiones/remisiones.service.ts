@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ArticulosService } from '../articulos/articulos.service';
-import type { CreateRemisionDto, RecibirRemisionDto } from './dto/remision.dto';
+import type { CreateRemisionDto, RecibirRemisionDto, RecepcionDirectaDto } from './dto/remision.dto';
 import type { Prisma, RolUsuario } from '@grupometalicoemf/database';
 import { getExistencia, buildExistenciaUpdate } from '../common/utils/existencia';
 import {
@@ -274,7 +274,7 @@ export class RemisionesService {
 
     const [catalogoDestino, equivalencias] = await Promise.all([
       this.prisma.articulo.findMany({
-        where: { ubicacion_id: rem.ub_destino_id, activo: true },
+        where: { ubicacion_id: rem.ub_destino_id, activo: true, oculto: false },
         select: DESCRIPCIONES_SELECT,
       }),
       this.prisma.articuloEquivalencia.findMany({
@@ -435,6 +435,33 @@ export class RemisionesService {
         });
       }
 
+      // Productos que llegaron y no venían en la remisión: solo entrada en
+      // destino, no cuentan para completa/parcial.
+      for (const extra of dto.lineas_extra ?? []) {
+        const artDst = await this.entradaEnDestino(tx, {
+          ubDestinoId: rem.ub_destino_id,
+          articuloId:  extra.articulo_destino_id,
+          slot:        extra.slot_destino,
+          cantidad:    extra.cantidad,
+          concepto:    `Recepción remisión ${rem.folio} (no listado)`,
+          remisionId:  rem.id,
+          usuarioId,
+        });
+        await tx.remisionLinea.create({
+          data: {
+            remision_id:         rem.id,
+            articulo_id:         artDst.id,
+            articulo_clave:      artDst.clave,
+            slot_origen:         1,
+            slot_destino:        extra.slot_destino,
+            cantidad_enviada:    0,
+            cantidad_recibida:   extra.cantidad,
+            notas:               extra.notas ?? null,
+            agregada_en_destino: true,
+          },
+        });
+      }
+
       await tx.remision.update({
         where: { id },
         data: {
@@ -446,6 +473,95 @@ export class RemisionesService {
     });
 
     return this.getById(id, empresaId);
+  }
+
+  // ─── Recepción directa (el origen nunca capturó la remisión) ──
+  //
+  // El destino crea la remisión a nombre del origen con lo que revisó. Solo
+  // entra inventario al destino; el origen no se descuenta.
+
+  async recepcionDirecta(
+    dto: RecepcionDirectaDto,
+    usuarioId: string,
+    empresaId: string,
+    ubDestinoId: string,
+  ) {
+    if (!dto.lineas?.length) {
+      throw new BadRequestException('Agrega al menos un producto recibido');
+    }
+    if (!ubDestinoId) {
+      throw new BadRequestException('No hay ubicación activa para recibir');
+    }
+    if (dto.ub_origen_id === ubDestinoId) {
+      throw new BadRequestException('El origen y el destino no pueden ser la misma ubicación');
+    }
+
+    const [ubDestino, ubOrigen] = await Promise.all([
+      this.prisma.ubicacion.findFirst({ where: { id: ubDestinoId, empresa_id: empresaId } }),
+      this.prisma.ubicacion.findFirst({
+        where: { id: dto.ub_origen_id, empresa_id: dto.empresa_origen_id },
+      }),
+    ]);
+    if (!ubDestino) throw new BadRequestException('La ubicación destino no pertenece a tu empresa');
+    if (!ubOrigen) throw new BadRequestException('Origen no válido');
+
+    const folio = await this.nextFolio();
+    const ahora = new Date();
+
+    const id = await this.prisma.$transaction(async (tx) => {
+      const rem = await tx.remision.create({
+        data: {
+          folio,
+          empresa_origen_id:     dto.empresa_origen_id,
+          ub_origen_id:          dto.ub_origen_id,
+          empresa_destino_id:    empresaId,
+          ub_destino_id:         ubDestinoId,
+          estatus:               'RECIBIDA_COMPLETA',
+          concepto:              dto.concepto ?? null,
+          notas:                 dto.notas    ?? null,
+          creado_por_id:         usuarioId,
+          recibido_por_id:       usuarioId,
+          fecha_recepcion:       ahora,
+          capturada_por_destino: true,
+        },
+      });
+
+      for (const l of dto.lineas) {
+        const artDst = await this.entradaEnDestino(tx, {
+          ubDestinoId,
+          articuloId: l.articulo_destino_id,
+          slot:       l.slot_destino,
+          cantidad:   l.cantidad,
+          concepto:   `Recepción directa remisión ${folio}`,
+          remisionId: rem.id,
+          usuarioId,
+        });
+        await tx.remisionLinea.create({
+          data: {
+            remision_id:         rem.id,
+            articulo_id:         artDst.id,
+            articulo_clave:      artDst.clave,
+            slot_origen:         1,
+            slot_destino:        l.slot_destino,
+            cantidad_enviada:    l.cantidad,
+            cantidad_recibida:   l.cantidad,
+            notas:               l.notas ?? null,
+            agregada_en_destino: true,
+          },
+        });
+      }
+      return rem.id;
+    });
+
+    return this.getById(id, empresaId);
+  }
+
+  // Búsqueda en el catálogo de la ubicación activa (recepción sin remisión).
+  async buscarArticulosUbicacion(
+    ubicacionId: string,
+    query: { q?: string; page?: number; limit?: number },
+  ) {
+    return this.articulos.findAll(ubicacionId, { ...query, activo: true });
   }
 
   // ─── Cancelar (solo BORRADOR) ─────────────────────────────────
@@ -492,6 +608,50 @@ export class RemisionesService {
     });
     const num = last ? parseInt(last.folio.split('-')[2] ?? '0', 10) + 1 : 1;
     return `${prefix}${String(num).padStart(4, '0')}`;
+  }
+
+  // Entrada de inventario en el destino (movimiento + existencia). Devuelve el
+  // artículo afectado.
+  private async entradaEnDestino(
+    tx: Prisma.TransactionClient,
+    p: {
+      ubDestinoId: string;
+      articuloId: string;
+      slot: number;
+      cantidad: number;
+      concepto: string;
+      remisionId: string;
+      usuarioId: string;
+    },
+  ) {
+    const art = await tx.articulo.findFirst({
+      where: { id: p.articuloId, ubicacion_id: p.ubDestinoId },
+    });
+    if (!art) {
+      throw new BadRequestException('El artículo no pertenece a la ubicación destino');
+    }
+    const cantAntes   = getExistencia(art, p.slot);
+    const cantDespues = cantAntes + p.cantidad;
+
+    await tx.movimientoInventario.create({
+      data: {
+        ubicacion_id:     p.ubDestinoId,
+        articulo_id:      art.id,
+        tipo:             'ENTRADA',
+        existencia_num:   p.slot,
+        cantidad:         p.cantidad,
+        cantidad_antes:   cantAntes,
+        cantidad_despues: cantDespues,
+        concepto:         p.concepto,
+        referencia_id:    p.remisionId,
+        usuario_id:       p.usuarioId,
+      },
+    });
+    await tx.articulo.update({
+      where: { id: art.id },
+      data: buildExistenciaUpdate(p.slot, cantDespues),
+    });
+    return art;
   }
 
   private serialize(rem: any) {

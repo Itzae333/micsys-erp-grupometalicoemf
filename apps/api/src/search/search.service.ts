@@ -33,6 +33,7 @@ export class SearchService {
       this.prisma.articulo.findMany({
         where: {
           ubicacion_id: ubicacionId,
+          oculto: false,
           OR: [
             { clave: ilike },
             { descripcion_1: ilike },

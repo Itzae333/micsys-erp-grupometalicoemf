@@ -28,8 +28,11 @@ export interface RemisionTicket {
   };
   empresa_destino: { nombre: string };
   ub_destino: { nombre: string };
+  // El origen no capturó la remisión; la creó el destino con lo recibido.
+  capturada_por_destino?: boolean;
   lineas: {
     cantidad_enviada: number;
+    cantidad_recibida?: number | null;
     articulo: {
       clave: string;
       descripcion_1: string | null; descripcion_2: string | null;
@@ -75,9 +78,11 @@ export async function printRemisionTicket(rem: RemisionTicket): Promise<boolean>
     lineas: rem.lineas.map((l) => ({
       clave: l.articulo.clave,
       descripcion: descripcionCompletaRemision(l.articulo) || null,
-      cantidad: l.cantidad_enviada,
+      cantidad: rem.capturada_por_destino ? (l.cantidad_recibida ?? l.cantidad_enviada) : l.cantidad_enviada,
     })),
-    qr_url: `${appUrl}/movimientos/recibir?folio=${rem.folio}`,
+    capturada_por_destino: rem.capturada_por_destino ?? false,
+    // Ya fue recibida al capturarla, no hay nada que confirmar con el QR.
+    qr_url: rem.capturada_por_destino ? null : `${appUrl}/movimientos/recibir?folio=${rem.folio}`,
   };
 
   try {

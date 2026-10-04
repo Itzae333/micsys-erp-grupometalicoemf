@@ -20,6 +20,7 @@ export class ArticulosController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'proveedorId', required: false })
   @ApiQuery({ name: 'activo', required: false })
+  @ApiQuery({ name: 'ocultos', required: false })
   findAll(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('q') q?: string,
@@ -27,6 +28,7 @@ export class ArticulosController {
     @Query('limit') limit?: string,
     @Query('proveedorId') proveedorId?: string,
     @Query('activo') activo?: string,
+    @Query('ocultos') ocultos?: string,
   ) {
     return this.articulos.findAll(ubicacionId, {
       q,
@@ -34,6 +36,7 @@ export class ArticulosController {
       limit: limit ? Math.min(Number(limit), 200) : 50,
       proveedorId,
       activo: activo === undefined ? true : activo === 'true',
+      ocultos: ocultos === 'true',
     });
   }
 
@@ -65,6 +68,20 @@ export class ArticulosController {
     @Body() dto: Partial<CreateArticuloDto> & { activo?: boolean },
   ) {
     return this.articulos.update(id, dto, ubicacionId);
+  }
+
+  @Patch(':id/ocultar')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR')
+  @ApiOperation({ summary: 'Ocultar del inventario un producto especial (no se borra)' })
+  ocultar(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.articulos.setOculto(id, true, ubicacionId);
+  }
+
+  @Patch(':id/mostrar')
+  @Roles('ADMIN', 'ENCARGADO', 'ALMACENISTA')
+  @ApiOperation({ summary: 'Volver a mostrar un producto especial oculto' })
+  mostrar(@Headers('x-ubicacion-id') ubicacionId: string, @Param('id') id: string) {
+    return this.articulos.setOculto(id, false, ubicacionId);
   }
 
   @Patch(':id/precios')

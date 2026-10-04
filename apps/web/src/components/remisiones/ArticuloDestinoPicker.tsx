@@ -11,7 +11,8 @@ function descripcionCompleta(art: Articulo): string {
 }
 
 interface Props {
-  remisionId: string;
+  // Sin remisionId busca en la ubicación activa (recepción sin remisión).
+  remisionId?: string;
   onSelect: (art: Articulo) => void;
   onClose: () => void;
 }
@@ -29,7 +30,8 @@ export function ArticuloDestinoPicker({ remisionId, onSelect, onClose }: Props) 
     try {
       const qp = new URLSearchParams({ page: '1', limit: '15' });
       if (query) qp.set('q', query);
-      const res = await api.get<ArticulosPage>(`/remisiones/${remisionId}/articulos-destino?${qp}`);
+      const base = remisionId ? `/remisiones/${remisionId}/articulos-destino` : '/remisiones/articulos-ubicacion';
+      const res = await api.get<ArticulosPage>(`${base}?${qp}`);
       setResultados(res.data);
     } finally {
       setLoading(false);

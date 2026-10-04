@@ -91,6 +91,8 @@ export interface Articulo {
   imagen_url: string | null;
   proveedor_id: string | null;
   proveedor: { id: string; nombre: string } | null;
+  es_especial?: boolean;
+  oculto?: boolean;
 
   precio_1: number | null;
   precio_2: number | null;
@@ -155,6 +157,7 @@ export interface NotaVentaLinea {
   articulo_id: string;
   articulo: {
     id: string; clave: string;
+    es_especial?: boolean; oculto?: boolean;
     descripcion_1: string | null; descripcion_2: string | null;
     descripcion_3: string | null; descripcion_4: string | null; descripcion_5: string | null;
   } | null;

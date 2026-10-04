@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
+import { LineasExtraEditor, type LineaExtra } from '@/components/remisiones/LineasExtraEditor';
 
 interface RemisionLinea {
   id: string;
@@ -58,6 +59,7 @@ function RecibirContent() {
   const [notFound, setNotFound]   = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [done, setDone]           = useState(false);
+  const [extras, setExtras]       = useState<LineaExtra[]>([]);
 
   // Inbox de remisiones pendientes dirigidas a esta ubicación
   const [pendientes, setPendientes]             = useState<RemisionPendiente[] | null>(null);
@@ -94,6 +96,7 @@ function RecibirContent() {
     setSearching(true);
     setNotFound(false);
     setRem(null);
+    setExtras([]);
     setError(null);
     try {
       const data = await api.get<Remision>(`/remisiones/folio/${encodeURIComponent(f)}`);
@@ -115,7 +118,14 @@ function RecibirContent() {
     try {
       await api.patch(
         `/remisiones/${rem.id}/recibir`,
-        { lineas: rem.lineas.map((l) => ({ linea_id: l.id, cantidad_recibida: cantidades[l.id] ?? l.cantidad_enviada })) },
+        {
+          lineas: rem.lineas.map((l) => ({ linea_id: l.id, cantidad_recibida: cantidades[l.id] ?? l.cantidad_enviada })),
+          lineas_extra: extras.map((e) => ({
+            articulo_destino_id: e.articulo.id,
+            cantidad: e.cantidad,
+            slot_destino: e.slot_destino,
+          })),
+        },
       );
       setDone(true);
     } catch (err: any) {
@@ -214,6 +224,18 @@ function RecibirContent() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {!rem && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-body-sm font-medium text-blue-900">¿Llegó mercancía y el origen no capturó la remisión?</p>
+            <p className="text-meta text-blue-700">Captúrala aquí con lo que recibiste. Solo entra a tu inventario.</p>
+          </div>
+          <Button variant="outline" onClick={() => router.push('/movimientos/remisiones/recepcion-directa')}>
+            Recibir sin remisión
+          </Button>
         </div>
       )}
 
@@ -325,12 +347,16 @@ function RecibirContent() {
             </div>
 
             {rem.estatus === 'EN_TRANSITO' && (
+              <LineasExtraEditor remisionId={rem.id} lineas={extras} onChange={setExtras} disabled={saving} />
+            )}
+
+            {rem.estatus === 'EN_TRANSITO' && (
               <div className="px-4 py-4 border-t border-steel-100 bg-steel-50 space-y-3">
                 {error && (
                   <p className="text-body-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
                 )}
                 <div className="flex justify-end">
-                  <Button onClick={confirmar} disabled={saving}>
+                  <Button onClick={confirmar} disabled={saving || extras.some((e) => !(e.cantidad > 0))}>
                     <PackageCheck className="h-4 w-4 mr-1.5" />
                     {saving ? 'Confirmando…' : 'Confirmar recepción'}
                   </Button>

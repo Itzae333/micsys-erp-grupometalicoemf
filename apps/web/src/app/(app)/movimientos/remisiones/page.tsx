@@ -32,6 +32,7 @@ interface Remision {
   created_at: string;
   fecha_envio: string | null;
   fecha_recepcion: string | null;
+  capturada_por_destino?: boolean;
   empresa_origen:  { id: string; nombre: string };
   ub_origen:       { id: string; nombre: string };
   empresa_destino: { id: string; nombre: string };
@@ -80,6 +81,7 @@ export default function RemisionesPage() {
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
+  const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'].includes(usuario?.rol ?? '');
   const canCreate = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'VENDEDOR'].includes(usuario?.rol ?? '');
   // "Todas" muestra remisiones de todas las ubicaciones de la empresa —
   // solo tiene sentido para quien administra toda la empresa, no para un
@@ -130,12 +132,20 @@ export default function RemisionesPage() {
           <h1 className="text-display-sm font-bold text-steel-900">Remisiones</h1>
           <p className="text-body-sm text-steel-500 mt-0.5">Movimientos de inventario multi-artículo</p>
         </div>
-        {canCreate && (
-          <Button onClick={() => router.push('/movimientos/remisiones/nueva')} size="sm">
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Nueva remisión
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {canReceive && (
+            <Button variant="outline" size="sm" onClick={() => router.push('/movimientos/remisiones/recepcion-directa')}>
+              <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+              Recibir sin remisión
+            </Button>
+          )}
+          {canCreate && (
+            <Button onClick={() => router.push('/movimientos/remisiones/nueva')} size="sm">
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Nueva remisión
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -187,15 +197,24 @@ export default function RemisionesPage() {
             <tbody className="divide-y divide-steel-100 bg-white">
               {result.data.map((rem) => {
                 const cfg = ESTATUS_CFG[rem.estatus];
-                // Solo las de salida (esta empresa es el origen) tienen ticket de remisión.
-                const esSalida = rem.empresa_origen.id === empresa?.id && rem.estatus !== 'CANCELADA';
+                // Tienen ticket las de salida (esta empresa es el origen) y las que el
+                // destino capturó porque el origen nunca registró la remisión.
+                const esSalida = rem.estatus !== 'CANCELADA' && (
+                  rem.empresa_origen.id === empresa?.id
+                  || (!!rem.capturada_por_destino && rem.empresa_destino.id === empresa?.id)
+                );
                 return (
                   <tr
                     key={rem.id}
                     onClick={() => router.push(`/movimientos/remisiones/${rem.id}`)}
                     className="bg-white hover:bg-steel-50 transition-colors cursor-pointer"
                   >
-                    <td className="px-4 py-3 font-mono font-medium text-brand-600">{rem.folio}</td>
+                    <td className="px-4 py-3 font-mono font-medium text-brand-600">
+                      {rem.folio}
+                      {rem.capturada_por_destino && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-meta font-sans">Capturada por destino</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 text-steel-700">
                         <span className="font-medium truncate max-w-[100px]">{rem.empresa_origen.nombre}</span>

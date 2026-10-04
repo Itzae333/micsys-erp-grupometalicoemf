@@ -13,6 +13,8 @@ interface ListQuery {
   limit?: number;
   activo?: boolean;
   proveedorId?: string;
+  // Solo los ocultos (productos especiales ocultados); por defecto se excluyen.
+  ocultos?: boolean;
 }
 
 // Sentinel usado por el filtro de Inventario para "artículos sin proveedor
@@ -37,10 +39,10 @@ export class ArticulosService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(ubicacionId: string, query: ListQuery = {}) {
-    const { q, page = 1, limit = 50, activo, proveedorId } = query;
+    const { q, page = 1, limit = 50, activo, proveedorId, ocultos = false } = query;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = { ubicacion_id: ubicacionId };
+    const where: Record<string, unknown> = { ubicacion_id: ubicacionId, oculto: ocultos };
     if (activo !== undefined) where['activo'] = activo;
     if (proveedorId === SIN_PROVEEDOR) where['proveedor_id'] = null;
     else if (proveedorId) where['proveedor_id'] = proveedorId;
@@ -150,6 +152,21 @@ export class ArticulosService {
       include: { proveedor: { select: { id: true, nombre: true } } },
     });
     return this.serialize(art);
+  }
+
+  // Los productos especiales no se borran (rompería notas y kardex): solo se
+  // ocultan del inventario y de las búsquedas.
+  async setOculto(id: string, oculto: boolean, ubicacionId: string) {
+    const art = await this.findOne(id, ubicacionId);
+    if (!art['es_especial']) {
+      throw new ConflictException('Solo los productos especiales se pueden ocultar');
+    }
+    const updated = await this.prisma.articulo.update({
+      where: { id },
+      data: { oculto },
+      include: { proveedor: { select: { id: true, nombre: true } } },
+    });
+    return this.serialize(updated);
   }
 
   async remove(id: string, ubicacionId: string) {

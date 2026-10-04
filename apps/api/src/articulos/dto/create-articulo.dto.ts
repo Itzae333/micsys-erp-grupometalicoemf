@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -7,6 +7,7 @@ export class CreateArticuloDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString() imagen_url?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() proveedor_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() es_especial?: boolean;
 
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) precio_1?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) precio_2?: number;

@@ -16,10 +16,12 @@ function nombreDisplay(art: Articulo): string {
 export async function refreshArticulosCache(empresaId: string, ubicacionId: string): Promise<void> {
   let page = 1;
   let pages = 1;
+  const idsVigentes = new Set<string>();
 
   do {
     const res = await api.get<ArticulosPage>(`/articulos?page=${page}&limit=${PAGE_LIMIT}&activo=true`);
     pages = res.pages;
+    res.data.forEach((art) => idsVigentes.add(art.id));
 
     await emfDb.articulosCache.bulkPut(
       res.data.map((art) => ({
@@ -35,6 +37,13 @@ export async function refreshArticulosCache(empresaId: string, ubicacionId: stri
 
     page++;
   } while (page <= pages);
+
+  // Descarga completa: quita lo que el servidor ya no devuelve (ej. productos
+  // especiales ocultados) para que no sigan saliendo en la búsqueda offline.
+  await emfDb.articulosCache
+    .where({ empresaId, ubicacionId })
+    .filter((c) => !idsVigentes.has(c.id))
+    .delete();
 }
 
 const REFRESH_TTL_MS = 10 * 60 * 1000; // 10 min

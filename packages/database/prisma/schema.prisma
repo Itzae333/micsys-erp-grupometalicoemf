@@ -282,8 +282,11 @@ model Articulo {
   activo       Boolean @default(true)
   imagen_url   String?
   proveedor_id String?
+  // Producto de uso único: puede ocultarse del inventario sin borrarse.
+  es_especial  Boolean @default(false)
+  oculto       Boolean @default(false)
 
-  precio_1  Decimal? @db.Decimal(12, 2)
+  precio_1 Decimal? @db.Decimal(12, 2)
   precio_2  Decimal? @db.Decimal(12, 2)
   precio_3  Decimal? @db.Decimal(12, 2)
   precio_4  Decimal? @db.Decimal(12, 2)
@@ -700,6 +703,8 @@ model Remision {
   recibido_por_id    String?
   fecha_envio        DateTime?
   fecha_recepcion    DateTime?
+  // El origen no capturó la remisión; la creó el destino al recibir (sin salida en origen).
+  capturada_por_destino Boolean      @default(false)
   created_at         DateTime        @default(now())
   updated_at         DateTime        @updatedAt
 
@@ -728,6 +733,9 @@ model RemisionLinea {
   cantidad_enviada  Decimal  @db.Decimal(12, 3)
   cantidad_recibida Decimal? @db.Decimal(12, 3)
   notas             String?
+  // Línea agregada por el destino (no venía en la remisión de origen).
+  // articulo_id apunta al artículo del propio destino.
+  agregada_en_destino Boolean @default(false)
 
   remision Remision @relation(fields: [remision_id], references: [id], onDelete: Cascade)
   articulo Articulo @relation(fields: [articulo_id], references: [id])

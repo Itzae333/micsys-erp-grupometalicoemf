@@ -326,6 +326,9 @@ function buildEscPosBuffer(ticket) {
     pushHeader(ticket, push);
     push(CMD.BOLD_ON, ln('REMISION DE ALMACEN'), CMD.BOLD_OFF);
     push(CMD.BOLD_ON, ln(ticket.folio ?? ''), CMD.BOLD_OFF);
+    if (ticket.capturada_por_destino) {
+      push(ln('CAPTURADA EN DESTINO'), ln('(sin remision de origen)'));
+    }
     push(CMD.ALIGN_LEFT, sep('='));
     push(ln('ORIGEN:  ' + norm(ticket.origen?.empresa ?? '')));
     push(ln('         ' + norm(ticket.origen?.ubicacion ?? '')));

@@ -16,6 +16,7 @@ import { printRemisionTicket, fechaTicketRemision } from '@/lib/utils/print-remi
 import { useBlockRoles } from '@/lib/hooks/use-block-roles';
 import { TicketPreviewRemision } from '@/components/remisiones/TicketPreviewRemision';
 import { ArticuloDestinoPicker } from '@/components/remisiones/ArticuloDestinoPicker';
+import { LineasExtraEditor, type LineaExtra } from '@/components/remisiones/LineasExtraEditor';
 import type { Articulo } from '@/lib/types/api';
 
 type EstatusRemision = 'BORRADOR' | 'EN_TRANSITO' | 'RECIBIDA_COMPLETA' | 'RECIBIDA_PARCIAL' | 'CANCELADA';
@@ -62,6 +63,7 @@ interface RemisionLinea {
   cantidad_enviada: number;
   cantidad_recibida: number | null;
   notas: string | null;
+  agregada_en_destino?: boolean;
   articulo: {
     id: string; clave: string;
     descripcion_1: string | null; descripcion_2: string | null;
@@ -78,6 +80,7 @@ interface Remision {
   created_at: string;
   fecha_envio: string | null;
   fecha_recepcion: string | null;
+  capturada_por_destino?: boolean;
   empresa_origen:  { id: string; nombre: string; logo_url: string | null };
   ub_origen:       {
     id: string;
@@ -147,6 +150,8 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
   const [previewLoading, setPreviewLoading]   = useState(false);
   const [resoluciones, setResoluciones]       = useState<Record<string, Resolucion | null>>({});
   const [pickerAbierto, setPickerAbierto]     = useState<string | null>(null);
+  // Productos que llegaron y no venían en la remisión (solo entran al destino)
+  const [extras, setExtras]                   = useState<LineaExtra[]>([]);
 
   const canManage  = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'].includes(usuario?.rol ?? '');
   const canReceive = ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO', 'ALMACENISTA', 'VENDEDOR'].includes(usuario?.rol ?? '');
@@ -274,12 +279,18 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
               origen_resolucion: resolucion?.origen_resolucion,
             };
           }),
+          lineas_extra: extras.map((e) => ({
+            articulo_destino_id: e.articulo.id,
+            cantidad: e.cantidad,
+            slot_destino: e.slot_destino,
+          })),
         },
       );
       await load();
       setShowRecibir(false);
       setPreview(null);
       setResoluciones({});
+      setExtras([]);
     } catch (err: any) {
       setError(err?.message ?? 'Error al recibir');
     } finally {
@@ -325,6 +336,11 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                 {cfg.label}
               </span>
             </div>
+            {rem.capturada_por_destino && (
+              <p className="text-body-sm text-blue-700 mt-0.5">
+                Capturada por el destino: el origen no registró esta remisión
+              </p>
+            )}
             {rem.concepto && <p className="text-body-sm text-steel-500 mt-0.5">{rem.concepto}</p>}
           </div>
         </div>
@@ -460,6 +476,11 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                           {descripcionCompleta(linea.articulo) || linea.articulo.clave}
                         </p>
                         <p className="text-meta text-steel-400">{linea.articulo.clave}</p>
+                        {linea.agregada_en_destino && (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-meta font-medium">
+                            Agregado en destino
+                          </span>
+                        )}
                       </td>
                       {showRecibir && (
                         <td className="px-4 py-3 relative">
@@ -569,12 +590,21 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
               </tbody>
             </table>
 
+            {showRecibir && (
+              <LineasExtraEditor
+                remisionId={rem.id}
+                lineas={extras}
+                onChange={setExtras}
+                disabled={!!action}
+              />
+            )}
+
             {showRecibir && (() => {
               const pendientes = rem.lineas.filter((l) => {
                 const cant = cantidades[l.id] ?? l.cantidad_enviada;
                 return cant > 0 && !resoluciones[l.id]?.articulo_destino_id;
               });
-              const bloqueado = previewLoading || !preview || pendientes.length > 0;
+              const bloqueado = previewLoading || !preview || pendientes.length > 0 || extras.some((e) => !(e.cantidad > 0));
               return (
                 <div className="px-4 py-3 border-t border-steel-100 bg-steel-50 space-y-2">
                   {pendientes.length > 0 && !previewLoading && (
@@ -583,7 +613,7 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                     </p>
                   )}
                   <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => { setShowRecibir(false); setPreview(null); setResoluciones({}); }} disabled={!!action}>
+                    <Button variant="ghost" size="sm" onClick={() => { setShowRecibir(false); setPreview(null); setResoluciones({}); setExtras([]); }} disabled={!!action}>
                       Cancelar
                     </Button>
                     <Button size="sm" onClick={doRecibir} disabled={!!action || bloqueado}>
