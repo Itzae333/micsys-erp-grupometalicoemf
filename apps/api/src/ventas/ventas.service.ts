@@ -1165,6 +1165,15 @@ export class VentasService {
 
   // ─── Corte de caja ────────────────────────────────────────────
 
+  // Nombres para el encabezado de los archivos exportados del corte.
+  async getNombresUbicacion(ubicacionId: string): Promise<{ empresa?: string; ubicacion?: string }> {
+    const ub = await this.prisma.ubicacion.findUnique({
+      where: { id: ubicacionId },
+      select: { nombre: true, empresa: { select: { nombre: true } } },
+    });
+    return { empresa: ub?.empresa?.nombre, ubicacion: ub?.nombre };
+  }
+
   async getCorteCaja(
     ubicacionId: string,
     query: { desde?: string; hasta?: string },

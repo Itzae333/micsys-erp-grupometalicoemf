@@ -1,9 +1,11 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Headers,
+  Param, Body, Query, Headers, Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { VentasService } from './ventas.service';
+import { buildCorteCajaWorkbook } from './corte-caja-xlsx';
 import { CreateNotaDto, AddLineaDto, UpdateLineaDto, CerrarNotaDto, CancelarNotaDto, AbonarNotaDto, SendEmailDto, AgregarEvidenciaDto, VentaRapidaDto, UpdateIvaDto } from './dto/ventas.dto';
 import { SolicitudesEdicionService } from '../solicitudes-edicion/solicitudes-edicion.service';
 import { CrearSolicitudDto } from '../solicitudes-edicion/dto/solicitudes-edicion.dto';
@@ -36,6 +38,32 @@ export class VentasController {
     @Query('hasta') hasta?: string,
   ) {
     return this.ventas.getCorteCaja(ubicacionId, { desde, hasta }, user.rol);
+  }
+
+  @Get('corte-caja/xlsx')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @ApiOperation({ summary: 'Descarga el corte de caja en Excel — solo SUPER_USUARIO y ADMIN' })
+  @ApiQuery({ name: 'desde', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'hasta', required: false, description: 'YYYY-MM-DD' })
+  async getCorteCajaXlsx(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Res() res: Response,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    const [data, contexto] = await Promise.all([
+      this.ventas.getCorteCaja(ubicacionId, { desde, hasta }, user.rol),
+      this.ventas.getNombresUbicacion(ubicacionId),
+    ]);
+    const workbook = buildCorteCajaWorkbook(data, contexto);
+    const periodo = data.desde === data.hasta ? data.desde : `${data.desde}_a_${data.hasta}`;
+    const filename = `corte-de-caja_${periodo}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
   }
 
   @Get()

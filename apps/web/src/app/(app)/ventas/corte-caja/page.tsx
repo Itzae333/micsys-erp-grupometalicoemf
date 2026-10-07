@@ -7,12 +7,14 @@ import { useContextoStore } from '@/lib/store/contexto.store';
 import { EMPRESA_METALICOS_LYEVA_ID, EMPRESA_EMFIMIFAR_ID } from '@/lib/empresas';
 import { getTicketLogoUrl, logoToEscPosBase64, buildTicketUbicacionFiscal } from '@/lib/utils/ticket-logo';
 import { getPendingCount } from '@/lib/db/sync-queue';
+import { generateCorteCajaPDF } from '@/lib/utils/corte-caja-pdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Calculator, Printer, RefreshCw, AlertTriangle,
   Banknote, CreditCard, Building2, Package, CalendarCheck,
+  FileSpreadsheet, FileText,
 } from 'lucide-react';
 
 // ── tipos ────────────────────────────────────────────────────
@@ -157,6 +159,9 @@ export default function CorteCajaPage() {
   const [error, setError] = useState('');
   const [pendingSync, setPendingSync] = useState(0);
   const [desgloseMultipago, setDesgloseMultipago] = useState(false);
+  const [exportando, setExportando] = useState<'xlsx' | 'pdf' | null>(null);
+  // Exportar a Excel/PDF es solo para quien administra (el backend lo valida igual).
+  const puedeExportar = usuario?.rol === 'SUPER_USUARIO' || usuario?.rol === 'ADMIN';
 
   useEffect(() => {
     getPendingCount().then(setPendingSync).catch(() => {});
@@ -250,6 +255,43 @@ export default function CorteCajaPage() {
       });
     } catch {
       // print bridge offline — silencioso
+    }
+  };
+
+  // Se exporta el rango con el que se generó el corte en pantalla (data.desde/hasta),
+  // no lo que haya quedado tecleado después en los filtros.
+  const exportarXlsx = async () => {
+    if (!data) return;
+    setExportando('xlsx');
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (data.desde) params.set('desde', data.desde);
+      if (data.hasta) params.set('hasta', data.hasta);
+      const { blob, filename } = await api.getBlob(`/ventas/corte-caja/xlsx?${params}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename ?? `corte-de-caja_${data.desde}_a_${data.hasta}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo exportar a Excel');
+    } finally {
+      setExportando(null);
+    }
+  };
+
+  const exportarPdf = async () => {
+    if (!data || !empresa) return;
+    setExportando('pdf');
+    setError('');
+    try {
+      await generateCorteCajaPDF(data, empresa.nombre, ubicacion?.nombre);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo exportar a PDF');
+    } finally {
+      setExportando(null);
     }
   };
 
@@ -420,6 +462,16 @@ export default function CorteCajaPage() {
             <Button variant="outline" onClick={print} className="gap-2">
               <Printer className="h-4 w-4" /> Imprimir ticket
             </Button>
+            {puedeExportar && (
+              <>
+                <Button variant="outline" onClick={exportarXlsx} disabled={exportando !== null} className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" /> {exportando === 'xlsx' ? 'Exportando…' : 'Excel'}
+                </Button>
+                <Button variant="outline" onClick={exportarPdf} disabled={exportando !== null} className="gap-2">
+                  <FileText className="h-4 w-4" /> {exportando === 'pdf' ? 'Generando…' : 'PDF'}
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
