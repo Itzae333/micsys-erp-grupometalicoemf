@@ -143,7 +143,7 @@ const NAV_ITEMS: NavItem[] = [
     href: '/historial-legacy',
     label: 'Historial Legacy',
     icon: <History className="h-4 w-4" />,
-    roles: ['SUPER_USUARIO', 'ADMIN'],
+    roles: ['SUPER_USUARIO', 'ADMIN', 'ENCARGADO'],
   },
   {
     href: '/configuracion',

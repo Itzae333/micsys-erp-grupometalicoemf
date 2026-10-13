@@ -16,6 +16,8 @@ interface ListaVentasQuery {
   desde?: string;
   hasta?: string;
   q?: string;
+  // Número de nota (solo dígitos): se compara contra el campo `nota`, ej. "N00013720".
+  nota?: string;
   sucursal?: string;
 }
 
@@ -356,7 +358,7 @@ export class MigracionService {
   }
 
   async listarVentas(empresaId: string, query: ListaVentasQuery) {
-    const { page, limit, desde, hasta, q, sucursal } = query;
+    const { page, limit, desde, hasta, q, nota, sucursal } = query;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = { empresa_id: empresaId };
@@ -366,6 +368,20 @@ export class MigracionService {
       where['AND'] = words.map((word) => ({
         cliente_nombre: { contains: word, mode: 'insensitive' },
       }));
+    }
+    const digitos = nota?.replace(/\D/g, '');
+    if (digitos) {
+      // El folio viene como "N" + 8 dígitos con ceros a la izquierda: se rellena
+      // igual para que "13720" encuentre N00013720 y no N00113720.
+      const relleno = digitos.padStart(8, '0');
+      const and = (where['AND'] as unknown[] | undefined) ?? [];
+      and.push({
+        OR: [
+          { nota: { endsWith: relleno, mode: 'insensitive' } },
+          { nota: { equals: digitos } },
+        ],
+      });
+      where['AND'] = and;
     }
     if (desde || hasta) {
       where['fecha_hora'] = {
@@ -386,6 +402,7 @@ export class MigracionService {
           legacy_id: true,
           sucursal: true,
           cliente_nombre: true,
+          nota: true,
           total: true,
           recibido: true,
           restan: true,

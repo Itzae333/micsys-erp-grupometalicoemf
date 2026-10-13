@@ -15,6 +15,7 @@ interface VentaLegacy {
   legacy_id: number;
   sucursal: string;
   cliente_nombre: string | null;
+  nota: string | null;
   total: number;
   recibido: number;
   restan: number;
@@ -88,6 +89,12 @@ const COLUMNAS_VENTAS: DataTableColumn<VentaLegacy>[] = [
     render: (v) => formatFechaCorta(v.fecha_hora),
   },
   {
+    key: 'nota',
+    header: 'Nota',
+    className: 'font-mono text-steel-700 whitespace-nowrap',
+    render: (v) => v.nota || <span className="text-steel-400">—</span>,
+  },
+  {
     key: 'cliente',
     header: 'Cliente',
     className: 'font-medium text-steel-900 max-w-[140px] truncate',
@@ -132,6 +139,7 @@ export default function HistorialLegacyPage() {
   const [page, setPage]               = useState(1);
   const [loading, setLoading]         = useState(true);
   const [q, setQ]                     = useState('');
+  const [nota, setNota]               = useState('');
   const [sucursal, setSucursal]       = useState('');
   const [desde, setDesde]             = useState('');
   const [hasta, setHasta]             = useState('');
@@ -148,6 +156,7 @@ export default function HistorialLegacyPage() {
     try {
       const params = new URLSearchParams({ page: String(p), limit: '30' });
       if (q)       params.set('q', q);
+      if (nota)    params.set('nota', nota);
       if (sucursal) params.set('sucursal', sucursal);
       if (desde)   params.set('desde', desde);
       if (hasta)   params.set('hasta', hasta);
@@ -236,6 +245,17 @@ export default function HistorialLegacyPage() {
           />
         </div>
 
+        {/* Número de nota: solo dígitos, ej. 13720 encuentra N00013720 */}
+        <Input
+          className="h-9 w-36 font-mono"
+          placeholder="No. de nota"
+          aria-label="Buscar por número de nota"
+          inputMode="numeric"
+          value={nota}
+          onChange={(e) => setNota(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => e.key === 'Enter' && cargar(1)}
+        />
+
         {/* Sucursal */}
         <select
           className="h-9 px-3 border border-steel-200 rounded-lg text-body-sm text-steel-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
@@ -282,11 +302,11 @@ export default function HistorialLegacyPage() {
             <Search className="h-3.5 w-3.5 mr-1.5" />
             Buscar
           </Button>
-          {(q || sucursal || desde || hasta) && (
+          {(q || nota || sucursal || desde || hasta) && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => { setQ(''); setSucursal(''); setDesde(''); setHasta(''); }}
+              onClick={() => { setQ(''); setNota(''); setSucursal(''); setDesde(''); setHasta(''); }}
               disabled={loading}
             >
               Limpiar

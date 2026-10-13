@@ -85,13 +85,14 @@ export class MigracionController {
   }
 
   @Get('ventas')
-  @Roles('SUPER_USUARIO', 'ADMIN')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Listar ventas históricas legacy' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'desde', required: false, type: String, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'hasta', required: false, type: String, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'q', required: false, type: String })
+  @ApiQuery({ name: 'nota', required: false, type: String, description: 'Número de nota, solo dígitos (ej. 13720 → N00013720)' })
   @ApiQuery({ name: 'sucursal', required: false, type: String, description: 'Valor normalizado de sucursal (p.ej. virgen, punto_venta)' })
   listarVentas(
     @Headers('x-empresa-id') empresaId: string,
@@ -100,6 +101,7 @@ export class MigracionController {
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
     @Query('q') q?: string,
+    @Query('nota') nota?: string,
     @Query('sucursal') sucursal?: string,
   ) {
     return this.migracion.listarVentas(empresaId, {
@@ -108,19 +110,20 @@ export class MigracionController {
       desde,
       hasta,
       q,
+      nota,
       sucursal,
     });
   }
 
   @Get('ventas/sucursales')
-  @Roles('SUPER_USUARIO', 'ADMIN')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Lista de sucursales distintas con ventas históricas' })
   getSucursales(@Headers('x-empresa-id') empresaId: string) {
     return this.migracion.getSucursales(empresaId);
   }
 
   @Get('ventas/:id')
-  @Roles('SUPER_USUARIO', 'ADMIN')
+  @Roles('SUPER_USUARIO', 'ADMIN', 'ENCARGADO')
   @ApiOperation({ summary: 'Detalle de venta histórica legacy' })
   detailVenta(
     @Headers('x-empresa-id') empresaId: string,
