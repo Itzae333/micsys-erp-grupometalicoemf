@@ -368,8 +368,10 @@ export class MigracionService {
         // nota. El folio viene como "N" + 8 dígitos con ceros a la izquierda; se
         // rellena igual para que "13720" encuentre N00013720 y no N00113720.
         const digitos = texto.replace(/\D/g, '');
+        // `contains` y no `endsWith`: el valor importado del CSV puede traer
+        // espacios o saltos de línea al final que no se ven en pantalla.
         where['OR'] = [
-          { nota: { endsWith: digitos.padStart(8, '0'), mode: 'insensitive' } },
+          { nota: { contains: digitos.padStart(8, '0'), mode: 'insensitive' } },
           { nota: { equals: digitos } },
         ];
       } else {
