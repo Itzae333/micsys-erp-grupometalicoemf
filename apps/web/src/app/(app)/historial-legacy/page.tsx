@@ -139,7 +139,6 @@ export default function HistorialLegacyPage() {
   const [page, setPage]               = useState(1);
   const [loading, setLoading]         = useState(true);
   const [q, setQ]                     = useState('');
-  const [nota, setNota]               = useState('');
   const [sucursal, setSucursal]       = useState('');
   const [desde, setDesde]             = useState('');
   const [hasta, setHasta]             = useState('');
@@ -156,7 +155,6 @@ export default function HistorialLegacyPage() {
     try {
       const params = new URLSearchParams({ page: String(p), limit: '30' });
       if (q)       params.set('q', q);
-      if (nota)    params.set('nota', nota);
       if (sucursal) params.set('sucursal', sucursal);
       if (desde)   params.set('desde', desde);
       if (hasta)   params.set('hasta', hasta);
@@ -237,24 +235,13 @@ export default function HistorialLegacyPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-steel-400" />
           <Input
             className="pl-9 h-9"
-            placeholder="Buscar cliente…"
-            aria-label="Buscar cliente"
+            placeholder="Buscar cliente o No. de nota…"
+            aria-label="Buscar por cliente o número de nota"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && cargar(1)}
           />
         </div>
-
-        {/* Número de nota: solo dígitos, ej. 13720 encuentra N00013720 */}
-        <Input
-          className="h-9 w-36 font-mono"
-          placeholder="No. de nota"
-          aria-label="Buscar por número de nota"
-          inputMode="numeric"
-          value={nota}
-          onChange={(e) => setNota(e.target.value.replace(/\D/g, ''))}
-          onKeyDown={(e) => e.key === 'Enter' && cargar(1)}
-        />
 
         {/* Sucursal */}
         <select
@@ -302,11 +289,11 @@ export default function HistorialLegacyPage() {
             <Search className="h-3.5 w-3.5 mr-1.5" />
             Buscar
           </Button>
-          {(q || nota || sucursal || desde || hasta) && (
+          {(q || sucursal || desde || hasta) && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => { setQ(''); setNota(''); setSucursal(''); setDesde(''); setHasta(''); }}
+              onClick={() => { setQ(''); setSucursal(''); setDesde(''); setHasta(''); }}
               disabled={loading}
             >
               Limpiar

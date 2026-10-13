@@ -16,8 +16,6 @@ interface ListaVentasQuery {
   desde?: string;
   hasta?: string;
   q?: string;
-  // Número de nota (solo dígitos): se compara contra el campo `nota`, ej. "N00013720".
-  nota?: string;
   sucursal?: string;
 }
 
@@ -358,30 +356,28 @@ export class MigracionService {
   }
 
   async listarVentas(empresaId: string, query: ListaVentasQuery) {
-    const { page, limit, desde, hasta, q, nota, sucursal } = query;
+    const { page, limit, desde, hasta, q, sucursal } = query;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = { empresa_id: empresaId };
     if (sucursal) where['sucursal'] = sucursal;
     if (q) {
-      const words = q.trim().split(/\s+/).filter(Boolean);
-      where['AND'] = words.map((word) => ({
-        cliente_nombre: { contains: word, mode: 'insensitive' },
-      }));
-    }
-    const digitos = nota?.replace(/\D/g, '');
-    if (digitos) {
-      // El folio viene como "N" + 8 dígitos con ceros a la izquierda: se rellena
-      // igual para que "13720" encuentre N00013720 y no N00113720.
-      const relleno = digitos.padStart(8, '0');
-      const and = (where['AND'] as unknown[] | undefined) ?? [];
-      and.push({
-        OR: [
-          { nota: { endsWith: relleno, mode: 'insensitive' } },
+      const texto = q.trim();
+      if (/^n?\d+$/i.test(texto)) {
+        // Solo un número (13722) o un folio (N00013722): se busca por número de
+        // nota. El folio viene como "N" + 8 dígitos con ceros a la izquierda; se
+        // rellena igual para que "13720" encuentre N00013720 y no N00113720.
+        const digitos = texto.replace(/\D/g, '');
+        where['OR'] = [
+          { nota: { endsWith: digitos.padStart(8, '0'), mode: 'insensitive' } },
           { nota: { equals: digitos } },
-        ],
-      });
-      where['AND'] = and;
+        ];
+      } else {
+        const words = texto.split(/\s+/).filter(Boolean);
+        where['AND'] = words.map((word) => ({
+          cliente_nombre: { contains: word, mode: 'insensitive' },
+        }));
+      }
     }
     if (desde || hasta) {
       where['fecha_hora'] = {
