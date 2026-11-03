@@ -60,6 +60,15 @@ export class IntegracionController {
     res.send(buffer);
   }
 
+  /** Todas las ventas del cliente, con cuándo se liquidó cada una. ?page&limit&estatus&tipo&desde&hasta&q */
+  @Get('clientes/:id/ventas')
+  ventas(
+    @Param('id') id: string,
+    @Query() q: { page?: string; limit?: string; estatus?: string; tipo?: string; desde?: string; hasta?: string; q?: string },
+  ) {
+    return this.svc.ventasCliente(id, q);
+  }
+
   @Get('clientes/:id/movimientos')
   movimientos(@Param('id') id: string, @Query() q: { desde?: string; hasta?: string; limit?: string }) {
     return this.svc.movimientos(id, q);
