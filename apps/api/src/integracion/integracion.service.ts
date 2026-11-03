@@ -19,39 +19,50 @@ const MIME_OK = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', '
 const DATA_URL = /^data:([\w.+/-]+);base64,/;
 
 /**
- * Lectura para el CRM. Alcance fijo a UNA empresa (por defecto EMFIMIFAR) y solo lectura:
- * nada de aquí escribe en el ERP.
+ * Lectura para el CRM. Solo lectura y limitada a las empresas que se configuren en
+ * INTEGRACION_EMPRESAS (nombres separados por coma, o `*` para todas las activas).
+ * Sin configurar, solo se expone EMFIMIFAR: ampliar el alcance de la llave es una decisión explícita.
  */
 @Injectable()
 export class IntegracionService {
-  private empresaId: string | null = null;
+  private cache: { ids: string[]; at: number } | null = null;
 
   constructor(private prisma: PrismaService) {}
 
-  private async empresa(): Promise<string> {
-    if (this.empresaId) return this.empresaId;
-    const nombre = process.env.INTEGRACION_EMPRESA ?? 'EMFIMIFAR';
-    const e = await this.prisma.empresa.findFirst({
-      where: { nombre: { equals: nombre, mode: 'insensitive' }, activa: true },
+  /** Ids de las empresas que esta llave puede leer. */
+  private async empresas(): Promise<string[]> {
+    if (this.cache && Date.now() - this.cache.at < 5 * 60_000) return this.cache.ids;
+    const cfg = (process.env.INTEGRACION_EMPRESAS ?? process.env.INTEGRACION_EMPRESA ?? 'EMFIMIFAR').trim();
+    const nombres = cfg === '*' ? [] : cfg.split(',').map((x) => x.trim()).filter(Boolean);
+    const rows = await this.prisma.empresa.findMany({
+      where: {
+        activa: true,
+        ...(cfg === '*' ? {} : { OR: nombres.map((nombre) => ({ nombre: { equals: nombre, mode: 'insensitive' as const } })) }),
+      },
       select: { id: true },
     });
-    if (!e) throw new ServiceUnavailableException(`No se encontró la empresa "${nombre}" para la integración.`);
-    this.empresaId = e.id;
-    return e.id;
+    if (rows.length === 0) throw new ServiceUnavailableException(`No se encontró ninguna empresa para la integración (${cfg}).`);
+    this.cache = { ids: rows.map((r) => r.id), at: Date.now() };
+    return this.cache.ids;
+  }
+
+  async listarEmpresas() {
+    const ids = await this.empresas();
+    return this.prisma.empresa.findMany({ where: { id: { in: ids } }, orderBy: { nombre: 'asc' }, select: { id: true, nombre: true } });
   }
 
   async ubicaciones() {
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const rows = await this.prisma.ubicacion.findMany({
       where: { empresa_id, activa: true },
-      orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true, tipo: true },
+      orderBy: [{ empresa: { nombre: 'asc' } }, { nombre: 'asc' }],
+      select: { id: true, nombre: true, tipo: true, empresa_id: true, empresa: { select: { nombre: true } } },
     });
-    return rows;
+    return rows.map((u) => ({ id: u.id, nombre: u.nombre, tipo: u.tipo, empresa_id: u.empresa_id, empresa: u.empresa.nombre }));
   }
 
-  async clientes(q: { ubicacion_id?: string; search?: string; page?: string; limit?: string; con_saldo?: string; ids?: string }) {
-    const empresa_id = await this.empresa();
+  async clientes(q: { ubicacion_id?: string; empresa_id?: string; search?: string; page?: string; limit?: string; con_saldo?: string; ids?: string }) {
+    const empresa_id = { in: await this.empresas() };
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 50));
     const where: Record<string, unknown> = {
@@ -61,6 +72,7 @@ export class IntegracionService {
       NOT: { nombre: 'MOSTRADOR' },
     };
     if (q.ubicacion_id) where.ubicacion_id = q.ubicacion_id;
+    if (q.empresa_id) where.ubicacion = { empresa_id: empresa_id.in.includes(q.empresa_id) ? q.empresa_id : { in: [] } };
     const lista = (q.ids ?? '').split(',').map((x) => x.trim()).filter(Boolean);
     if (lista.length > 100) throw new BadRequestException('Máximo 100 ids por consulta.');
     if (lista.length) where.id = { in: lista };
@@ -82,7 +94,7 @@ export class IntegracionService {
         orderBy: { nombre: 'asc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { ubicacion: { select: { id: true, nombre: true } } },
+        include: { ubicacion: { select: { id: true, nombre: true, empresa_id: true, empresa: { select: { nombre: true } } } } },
       }),
     ]);
     return {
@@ -93,6 +105,8 @@ export class IntegracionService {
         id: c.id,
         ubicacion_id: c.ubicacion_id,
         ubicacion: c.ubicacion.nombre,
+        empresa_id: c.ubicacion.empresa_id,
+        empresa: c.ubicacion.empresa.nombre,
         nombre: c.nombre,
         apellidos: c.apellidos,
         razon_social: c.razon_social,
@@ -110,7 +124,7 @@ export class IntegracionService {
   async saldos(ids: string[]) {
     if (ids.length === 0) return [];
     if (ids.length > 200) throw new BadRequestException('Máximo 200 clientes por consulta.');
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const rows = await this.prisma.cliente.findMany({
       where: { id: { in: ids }, ubicacion: { empresa_id } },
       select: { id: true, saldo_pendiente: true, limite_credito: true },
@@ -126,7 +140,7 @@ export class IntegracionService {
   async tickets(clienteIds: string[], q: { estatus?: string; desde?: string; hasta?: string }) {
     if (clienteIds.length === 0) return [];
     if (clienteIds.length > 100) throw new BadRequestException('Máximo 100 clientes por consulta.');
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
 
     const where: Record<string, unknown> = {
       cliente_id: { in: clienteIds },
@@ -186,7 +200,7 @@ export class IntegracionService {
    * y la lista de evidencias (sin el contenido; cada imagen se baja con `evidencia()`).
    */
   async ticket(id: string) {
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const nota = await this.prisma.notaVenta.findFirst({
       where: { id, ubicacion: { empresa_id } },
       include: {
@@ -290,7 +304,7 @@ export class IntegracionService {
     clienteId: string,
     q: { page?: string; limit?: string; estatus?: string; tipo?: string; desde?: string; hasta?: string; q?: string },
   ) {
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const cliente = await this.prisma.cliente.findFirst({
       where: { id: clienteId, ubicacion: { empresa_id } },
       select: { id: true, nombre: true, apellidos: true, razon_social: true },
@@ -418,7 +432,7 @@ export class IntegracionService {
 
   /** Imagen/PDF de una evidencia de una venta. Solo tipos de archivo conocidos. */
   async evidencia(notaId: string, evidenciaId: string) {
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const nota = await this.prisma.notaVenta.findFirst({ where: { id: notaId, ubicacion: { empresa_id } }, select: { id: true } });
     if (!nota) throw new NotFoundException('Venta no encontrada');
     const rows = await this.prisma.$queryRaw<{ b64: string | null }[]>`
@@ -431,7 +445,7 @@ export class IntegracionService {
 
   /** Cargos, abonos y ajustes de la cuenta del cliente en el ERP (para auditar el saldo). */
   async movimientos(clienteId: string, q: { desde?: string; hasta?: string; limit?: string }) {
-    const empresa_id = await this.empresa();
+    const empresa_id = { in: await this.empresas() };
     const c = await this.prisma.cliente.findFirst({ where: { id: clienteId, ubicacion: { empresa_id } }, select: { id: true } });
     if (!c) throw new NotFoundException('Cliente no encontrado');
     const rows = await this.prisma.movimientoCuenta.findMany({

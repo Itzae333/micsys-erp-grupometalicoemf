@@ -22,13 +22,19 @@ const ids = (s?: string) =>
 export class IntegracionController {
   constructor(private svc: IntegracionService) {}
 
+  /** Empresas que esta llave puede leer (INTEGRACION_EMPRESAS). */
+  @Get('empresas')
+  empresas() {
+    return this.svc.listarEmpresas();
+  }
+
   @Get('ubicaciones')
   ubicaciones() {
     return this.svc.ubicaciones();
   }
 
   @Get('clientes')
-  clientes(@Query() q: { ubicacion_id?: string; search?: string; page?: string; limit?: string; con_saldo?: string; ids?: string }) {
+  clientes(@Query() q: { ubicacion_id?: string; empresa_id?: string; search?: string; page?: string; limit?: string; con_saldo?: string; ids?: string }) {
     return this.svc.clientes(q);
   }
 
