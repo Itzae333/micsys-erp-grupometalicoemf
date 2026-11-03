@@ -33,6 +33,7 @@ import { MailModule } from './mail/mail.module';
 import { GastosModule } from './gastos/gastos.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 import { EntregasMateriaPrimaModule } from './entregas-materia-prima/entregas-materia-prima.module';
+import { IntegracionModule } from './integracion/integracion.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { EntregasMateriaPrimaModule } from './entregas-materia-prima/entregas-ma
     GastosModule,
     CotizacionesModule,
     EntregasMateriaPrimaModule,
+    IntegracionModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: ThrottlerGuard  },
