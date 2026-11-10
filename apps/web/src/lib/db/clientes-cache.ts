@@ -5,7 +5,9 @@ import type { Cliente } from '../types/api';
 const TTL_MS = 60 * 60 * 1000; // 1 hora
 
 function cacheKey(empresaId: string, ubicacionId: string) {
-  return `${empresaId}:${ubicacionId}:list`;
+  // v2: la lista completa (antes solo traía los primeros 500). El cambio de llave
+  // descarta el caché viejo incompleto en vez de esperar a que venza.
+  return `${empresaId}:${ubicacionId}:list:v2`;
 }
 
 // Lee la lista de clientes desde caché local o la descarga si expiró.
@@ -26,7 +28,7 @@ export async function getClientesCache(
   }
 
   try {
-    const clientes = await api.get<Cliente[]>('/clientes');
+    const clientes = await api.get<Cliente[]>('/clientes?todos=true');
     await emfDb.clientesCache.put({
       id: key,
       empresaId,

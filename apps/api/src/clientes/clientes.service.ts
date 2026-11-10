@@ -6,7 +6,7 @@ import type { CreateClienteDto, UpdateClienteDto } from './dto/create-cliente.dt
 export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(ubicacionId: string, q?: string) {
+  async findAll(ubicacionId: string, q?: string, todos = false) {
     const where: Record<string, unknown> = { ubicacion_id: ubicacionId };
     if (q) {
       where['OR'] = [
@@ -23,7 +23,7 @@ export class ClientesService {
     const clientes = await this.prisma.cliente.findMany({
       where,
       orderBy: { nombre: 'asc' },
-      take: q ? undefined : 500,
+      take: q || todos ? undefined : 500,
     });
 
     return clientes.map((c) => this.serialize(c));

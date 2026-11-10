@@ -16,11 +16,13 @@ export class ClientesController {
   @Get()
   @ApiOperation({ summary: 'Lista de clientes con búsqueda opcional' })
   @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'todos', required: false, description: 'true = sin tope de 500 (para el caché offline de Venta rápida)' })
   findAll(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('q') q?: string,
+    @Query('todos') todos?: string,
   ) {
-    return this.clientes.findAll(ubicacionId, q);
+    return this.clientes.findAll(ubicacionId, q, todos === 'true');
   }
 
   @Get(':id')
