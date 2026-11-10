@@ -10,6 +10,7 @@ import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { ClienteCombobox } from '@/components/ventas/ClienteCombobox';
 import { getClientesCache } from '@/lib/db/clientes-cache';
 import { searchArticulosCache, refreshArticulosCacheIfStale } from '@/lib/db/articulos-cache';
 import { getConfigColumnasSchema } from '@/lib/db/config-columnas-cache';
@@ -431,11 +432,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         ) : (
           <div>
             <label className="text-body-sm font-medium text-steel-700 mb-1 block">Cliente (opcional para contado)</label>
-            <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="Público en general">
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
-              ))}
-            </Select>
+            <ClienteCombobox clientes={clientes} value={clienteId} onChange={setClienteId} placeholder="Público en general" />
             {clienteSeleccionado?.precio_num && schema && (
               <p className="text-meta text-brand-600 mt-1">
                 Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}

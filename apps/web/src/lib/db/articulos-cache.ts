@@ -69,9 +69,15 @@ export async function searchArticulosCache(
     .where({ empresaId, ubicacionId })
     .toArray();
 
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? rows.filter((r) => r.clave.toLowerCase().includes(q) || r.nombre.toLowerCase().includes(q))
+  // Por palabras (todas deben aparecer, en cualquier orden): el nombre guarda las
+  // descripciones separadas por " · ", así que "charola 40" nunca coincidiría
+  // como una sola frase con "Charola · 40 X 85".
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = words.length
+    ? rows.filter((r) => {
+        const texto = `${r.clave} ${r.nombre}`.toLowerCase();
+        return words.every((w) => texto.includes(w));
+      })
     : rows;
 
   return filtered.slice(0, 30).map((r) => JSON.parse(r.payload) as Articulo);
