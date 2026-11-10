@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
+import { api } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import type { Cliente } from '@/lib/types/api';
 
@@ -16,7 +17,9 @@ const normalizar = (s: string) =>
 interface Props {
   clientes: Cliente[];
   value: string;
-  onChange: (clienteId: string) => void;
+  // Segundo argumento: el cliente elegido, por si vino del servidor y no estaba
+  // en `clientes` (lista local incompleta o desactualizada).
+  onChange: (clienteId: string, cliente?: Cliente) => void;
   placeholder?: string;
   disabled?: boolean;
 }
@@ -34,24 +37,51 @@ export function ClienteCombobox({
   const contenedorRef = useRef<HTMLDivElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
 
-  const seleccionado = clientes.find((c) => c.id === value) ?? null;
+  // Clientes encontrados en el servidor al escribir — complementan la lista
+  // local, que puede estar incompleta o desactualizada.
+  const [remotos, setRemotos] = useState<Cliente[]>([]);
+  const [buscandoRemoto, setBuscandoRemoto] = useState(false);
+
+  const seleccionado = clientes.find((c) => c.id === value) ?? remotos.find((c) => c.id === value) ?? null;
+
+  useEffect(() => {
+    const texto = q.trim();
+    if (!abierto || texto.length < 2) { setRemotos([]); return; }
+    let cancelado = false;
+    const t = setTimeout(async () => {
+      setBuscandoRemoto(true);
+      try {
+        const res = await api.get<Cliente[]>(`/clientes?q=${encodeURIComponent(texto)}`);
+        if (!cancelado) setRemotos(res);
+      } catch {
+        // Sin conexión: se queda con la lista local.
+        if (!cancelado) setRemotos([]);
+      } finally {
+        if (!cancelado) setBuscandoRemoto(false);
+      }
+    }, 300);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [q, abierto]);
 
   const resultados = useMemo(() => {
     const words = normalizar(q).split(/\s+/).filter(Boolean);
-    const lista = words.length
+    const locales = words.length
       ? clientes.filter((c) => {
           const texto = normalizar(`${clienteLabel(c)} ${c.nombre} ${c.apellidos ?? ''} ${c.telefono ?? ''}`);
           return words.every((w) => texto.includes(w));
         })
       : clientes;
+    // Los del servidor se suman sin repetir los que ya estaban en la lista local.
+    const ids = new Set(locales.map((c) => c.id));
+    const lista = words.length ? [...locales, ...remotos.filter((c) => !ids.has(c.id))] : locales;
     return lista.slice(0, MAX_RESULTADOS);
-  }, [clientes, q]);
+  }, [clientes, remotos, q]);
 
   // Con el buscador vacío, la primera opción es quitar el cliente.
-  const opciones: { id: string; label: string }[] = useMemo(
+  const opciones: { id: string; label: string; cliente?: Cliente }[] = useMemo(
     () => [
       ...(q.trim() ? [] : [{ id: '', label: placeholder }]),
-      ...resultados.map((c) => ({ id: c.id, label: clienteLabel(c) })),
+      ...resultados.map((c) => ({ id: c.id, label: clienteLabel(c), cliente: c })),
     ],
     [resultados, q, placeholder],
   );
@@ -74,8 +104,8 @@ export function ClienteCombobox({
     listaRef.current?.querySelector<HTMLElement>(`[data-idx="${activo}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [activo]);
 
-  function elegir(id: string) {
-    onChange(id);
+  function elegir(id: string, cliente?: Cliente) {
+    onChange(id, cliente);
     setAbierto(false);
     setQ('');
   }
@@ -89,7 +119,7 @@ export function ClienteCombobox({
       e.preventDefault();
       setActivo((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
-      if (abierto && opciones[activo]) { e.preventDefault(); elegir(opciones[activo].id); }
+      if (abierto && opciones[activo]) { e.preventDefault(); elegir(opciones[activo].id, opciones[activo].cliente); }
     } else if (e.key === 'Escape') {
       if (abierto) { e.stopPropagation(); setAbierto(false); setQ(''); }
     }
@@ -139,7 +169,9 @@ export function ClienteCombobox({
           className="absolute z-20 mt-1 w-full bg-white border border-steel-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
         >
           {opciones.length === 0 ? (
-            <p className="px-3 py-3 text-body-sm text-steel-400">Sin clientes que coincidan</p>
+            <p className="px-3 py-3 text-body-sm text-steel-400">
+              {buscandoRemoto ? 'Buscando…' : 'Sin clientes que coincidan'}
+            </p>
           ) : (
             opciones.map((o, i) => (
               <button
@@ -147,7 +179,7 @@ export function ClienteCombobox({
                 type="button"
                 data-idx={i}
                 // mousedown evita que el input pierda foco antes de registrar el clic
-                onMouseDown={(e) => { e.preventDefault(); elegir(o.id); }}
+                onMouseDown={(e) => { e.preventDefault(); elegir(o.id, o.cliente); }}
                 onMouseEnter={() => setActivo(i)}
                 className={cn(
                   'w-full text-left px-3 py-2 text-body-sm border-b border-steel-100 last:border-0',

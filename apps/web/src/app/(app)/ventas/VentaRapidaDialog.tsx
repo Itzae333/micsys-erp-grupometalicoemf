@@ -432,7 +432,17 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
         ) : (
           <div>
             <label className="text-body-sm font-medium text-steel-700 mb-1 block">Cliente (opcional para contado)</label>
-            <ClienteCombobox clientes={clientes} value={clienteId} onChange={setClienteId} placeholder="Público en general" />
+            <ClienteCombobox
+              clientes={clientes}
+              value={clienteId}
+              onChange={(id, cliente) => {
+                // Si vino del servidor y la lista local no lo tenía, se agrega para
+                // que el resto del formulario (precio, crédito) lo encuentre.
+                if (cliente) setClientes((prev) => (prev.some((c) => c.id === cliente.id) ? prev : [...prev, cliente]));
+                setClienteId(id);
+              }}
+              placeholder="Público en general"
+            />
             {clienteSeleccionado?.precio_num && schema && (
               <p className="text-meta text-brand-600 mt-1">
                 Precio asignado: {schema.precios.find((p) => p.numero === clienteSeleccionado.precio_num)?.label ?? `Precio ${clienteSeleccionado.precio_num}`}
