@@ -39,6 +39,10 @@ export async function getClientesCache(
     return clientes;
   } catch {
     if (cached) return JSON.parse(cached.payload) as Cliente[];
+    // Sin conexión y sin lista nueva (v2): se usa la anterior, aunque pueda estar
+    // incompleta, antes que dejar al usuario sin poder elegir cliente.
+    const anterior = await emfDb.clientesCache.get(`${empresaId}:${ubicacionId}:list`);
+    if (anterior) return JSON.parse(anterior.payload) as Cliente[];
     return [];
   }
 }
