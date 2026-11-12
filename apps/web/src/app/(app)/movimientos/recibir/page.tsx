@@ -1,5 +1,6 @@
 'use client';
 
+import { CantidadInput } from '@/components/ui/CantidadInput';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, PackageCheck, ArrowRight, CheckCircle2, AlertCircle, Inbox, ChevronDown, ChevronUp } from 'lucide-react';
@@ -322,14 +323,13 @@ function RecibirContent() {
                           {linea.cantidad_enviada}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
+                          <CantidadInput
                             min={0}
                             step={0.001}
                             value={cant}
                             disabled={rem.estatus !== 'EN_TRANSITO'}
-                            onChange={(e) =>
-                              setCantidades((p) => ({ ...p, [linea.id]: Number(e.target.value) }))
+                            onChange={(n) =>
+                              setCantidades((p) => ({ ...p, [linea.id]: n }))
                             }
                             className={cn(
                               'w-24 border rounded px-2 py-1 text-right text-body-sm focus:outline-none focus:ring-1',

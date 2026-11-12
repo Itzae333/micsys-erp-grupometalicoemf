@@ -75,14 +75,45 @@ export class ArticulosService {
       this.prisma.articulo.count({ where: { ubicacion_id: ubicacionId, proveedor_id: { not: null } } }),
     ]);
 
+    const comprometidos = await this.comprometidoPorArticulo(ubicacionId, data.map((a) => a.id));
+
     return {
-      data: data.map((a) => this.serialize(a)),
+      data: data.map((a) => ({ ...this.serialize(a), comprometido: comprometidos.get(a.id) ?? 0 })),
       total,
       page,
       limit,
       pages: Math.ceil(total / limit),
       algun_proveedor_asignado: conProveedor > 0,
     };
+  }
+
+  // Piezas ya vendidas (nota cobrada/a crédito/incompleta) que todavía no se
+  // cargan: la existencia sólo baja al cargar (ver CargasNotaService), así que
+  // sin esto el mismo stock se podría prometer a dos clientes.
+  async comprometidoPorArticulo(ubicacionId: string, ids: string[]): Promise<Map<string, number>> {
+    const res = new Map<string, number>();
+    if (ids.length === 0) return res;
+    const lineas = await this.prisma.notaVentaLinea.findMany({
+      where: {
+        articulo_id: { in: ids },
+        nota: {
+          ubicacion_id: ubicacionId,
+          estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA'] },
+          OR: [{ estatus_entrega: null }, { estatus_entrega: { not: 'COMPLETA' } }],
+        },
+      },
+      select: {
+        articulo_id: true,
+        cantidad: true,
+        carga_lineas: { where: { carga: { anulada: false } }, select: { cantidad_cargada: true } },
+      },
+    });
+    for (const l of lineas) {
+      const cargado = l.carga_lineas.reduce((s, c) => s + Number(c.cantidad_cargada), 0);
+      const pendiente = Number(l.cantidad) - cargado;
+      if (pendiente > 0) res.set(l.articulo_id, +((res.get(l.articulo_id) ?? 0) + pendiente).toFixed(3));
+    }
+    return res;
   }
 
   async findOne(id: string, ubicacionId: string) {

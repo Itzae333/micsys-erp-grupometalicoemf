@@ -1,5 +1,6 @@
 'use client';
 
+import { CantidadInput } from '@/components/ui/CantidadInput';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Trash2, ArrowRight, Send, Save, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
@@ -334,12 +335,11 @@ export default function NuevaRemisionPage() {
                         <p className="text-meta text-steel-400">{l.articulo.clave}</p>
                       </td>
                       <td className="px-2 py-2.5 text-right">
-                        <input
-                          type="number"
+                        <CantidadInput
                           min={0.001}
                           step={0.001}
                           value={l.cantidad}
-                          onChange={(e) => updateLinea(idx, { cantidad: Number(e.target.value) })}
+                          onChange={(n) => updateLinea(idx, { cantidad: n })}
                           className="w-16 border border-steel-300 rounded px-2 py-1 text-body-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-500"
                         />
                       </td>

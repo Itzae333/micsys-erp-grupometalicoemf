@@ -1,5 +1,6 @@
 'use client';
 
+import { disponibleArticulo, textoDisponibilidad } from '@/lib/utils/disponibilidad';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Printer, XCircle, ExternalLink, ImageIcon, CheckCircle2, Clock, PackageCheck, Send, History, AlertTriangle, Download, Unlock } from 'lucide-react';
@@ -1462,6 +1463,9 @@ export default function NotaDetallePage() {
                           .filter(Boolean).join(' · ') || art.clave}
                       </p>
                       <p className="text-meta text-steel-400">{art.clave}</p>
+                      <p className={`text-meta ${disponibleArticulo(art).disponible <= 0 ? 'text-orange-600 font-medium' : 'text-steel-500'}`}>
+                        {textoDisponibilidad(art)}
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -1502,6 +1506,13 @@ export default function NotaDetallePage() {
               <span className="font-semibold">
                 {formatPrecio(lineaCantidad * lineaPrecio * (1 - lineaDesc / 100))}
               </span>
+            </div>
+          )}
+
+          {artSel && lineaCantidad > disponibleArticulo(artSel).disponible && (
+            <div className="bg-orange-50 border border-orange-200 rounded-md px-3 py-2 text-body-sm text-orange-800">
+              Pides {lineaCantidad} y solo hay {Math.max(disponibleArticulo(artSel).disponible, 0)} disponible
+              (lo demás ya está vendido sin entregar). Puedes continuar si va a llegar mercancía.
             </div>
           )}
 

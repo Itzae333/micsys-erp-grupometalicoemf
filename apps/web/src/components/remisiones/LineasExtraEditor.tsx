@@ -1,5 +1,6 @@
 'use client';
 
+import { CantidadInput } from '@/components/ui/CantidadInput';
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { ArticuloDestinoPicker } from './ArticuloDestinoPicker';
@@ -100,13 +101,12 @@ export function LineasExtraEditor({
                   </select>
                 </td>
                 <td className="py-2 px-2 text-right">
-                  <input
-                    type="number"
+                  <CantidadInput
                     min={0.001}
                     step={0.001}
                     value={l.cantidad}
                     disabled={disabled}
-                    onChange={(e) => actualizar(idx, { cantidad: Number(e.target.value) })}
+                    onChange={(n) => actualizar(idx, { cantidad: n })}
                     className="w-20 border border-steel-300 rounded px-2 py-1 text-right text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </td>

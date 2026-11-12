@@ -92,6 +92,8 @@ export interface Articulo {
   proveedor_id: string | null;
   proveedor: { id: string; nombre: string } | null;
   es_especial?: boolean;
+  // Vendido y aún sin cargar (solo viene en el listado de artículos).
+  comprometido?: number;
   oculto?: boolean;
 
   precio_1: number | null;

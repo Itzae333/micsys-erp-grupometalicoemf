@@ -1,5 +1,6 @@
 'use client';
 
+import { CantidadInput } from '@/components/ui/CantidadInput';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -555,12 +556,11 @@ export default function RemisionDetallePage({ params }: { params: { id: string }
                       </td>
                       <td className="px-4 py-3 text-right">
                         {showRecibir ? (
-                          <input
-                            type="number"
+                          <CantidadInput
                             min={0}
                             step={0.001}
                             value={cantidades[linea.id] ?? linea.cantidad_enviada}
-                            onChange={(e) => setCantidades((p) => ({ ...p, [linea.id]: Number(e.target.value) }))}
+                            onChange={(n) => setCantidades((p) => ({ ...p, [linea.id]: n }))}
                             className="w-20 border border-steel-300 rounded px-2 py-1 text-right text-body-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         ) : (

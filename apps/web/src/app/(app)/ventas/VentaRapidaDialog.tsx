@@ -1,5 +1,6 @@
 'use client';
 
+import { disponibleArticulo, textoDisponibilidad } from '@/lib/utils/disponibilidad';
 import { useEffect, useState, useRef } from 'react';
 import { Search, Trash2, Zap, Eye, Download, MessageCircle } from 'lucide-react';
 import { api, ApiError } from '@/lib/api/client';
@@ -38,6 +39,8 @@ interface LineaCarrito {
   cantidad: number;
   precio_unitario: number;
   descuento: number;
+  // Disponible al agregarla (existencia − comprometido); solo para avisar.
+  disponible?: number;
 }
 
 interface PagoRow {
@@ -159,6 +162,7 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
       cantidad: 1,
       precio_unitario,
       descuento: 0,
+      disponible: disponibleArticulo(art).disponible,
     }]);
     setArtQ('');
     setArtResultados([]);
@@ -476,11 +480,27 @@ export function VentaRapidaDialog({ open, onClose, onCreated, printTicket }: Ven
                   {!esClaveLegacy(art.clave) && (
                     <p className="text-caption text-steel-400 truncate">{art.clave}</p>
                   )}
+                  <p className={`text-caption truncate ${
+                    disponibleArticulo(art).disponible <= 0 ? 'text-orange-600 font-medium' : 'text-steel-500'
+                  }`}>
+                    {textoDisponibilidad(art)}
+                  </p>
                 </button>
               ))}
             </div>
           )}
         </div>
+
+        {lineas.some((l) => l.disponible !== undefined && l.cantidad > l.disponible) && (
+          <div className="bg-orange-50 border border-orange-200 rounded-md px-3 py-2 text-body-sm text-orange-800">
+            {lineas.filter((l) => l.disponible !== undefined && l.cantidad > l.disponible).map((l) => (
+              <p key={l.key}>
+                {l.descripcion || l.clave}: pides {l.cantidad} y solo hay {Math.max(l.disponible ?? 0, 0)} disponible
+                (lo demás ya está vendido sin entregar). Puedes continuar si va a llegar mercancía.
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* IVA — no todos los clientes lo requieren, por eso es opcional por venta */}
         <label className="flex items-center gap-2 text-body-sm text-steel-700 cursor-pointer select-none">
