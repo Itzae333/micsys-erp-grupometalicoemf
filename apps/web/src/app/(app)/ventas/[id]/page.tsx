@@ -1501,6 +1501,21 @@ export default function NotaDetallePage() {
           </div>
 
           {artSel && (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                ['Existencia', disponibleArticulo(artSel).existencia],
+                ['Vendido sin entregar', disponibleArticulo(artSel).comprometido],
+                ['Disponible', disponibleArticulo(artSel).disponible],
+              ].map(([t, v]) => (
+                <div key={t as string} className="bg-steel-50 rounded-lg px-2 py-1.5">
+                  <p className="text-meta text-steel-500">{t}</p>
+                  <p className={`text-body font-semibold ${t === 'Disponible' && (v as number) <= 0 ? 'text-orange-600' : 'text-steel-900'}`}>{v}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {artSel && (
             <div className="bg-steel-50 rounded-lg px-3 py-2 text-body-sm text-steel-700">
               Subtotal estimado:{' '}
               <span className="font-semibold">

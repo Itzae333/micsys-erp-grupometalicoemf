@@ -59,6 +59,44 @@ export default function NuevaRemisionPage() {
 
   const empresaDst = destinos.find((e) => e.id === empresaDstId);
 
+  // Borrador automático: si la persona sale a hacer otra cosa (ej. una venta) y
+  // regresa, recupera lo capturado. Vive en este navegador, por ubicación.
+  const draftKey = ubicacion ? `emf_remision_borrador:${ubicacion.id}` : null;
+  const [draftListo, setDraftListo] = useState(false);
+  const [draftRestaurado, setDraftRestaurado] = useState(false);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const d = JSON.parse(raw) as {
+          empresaDstId?: string; ubDestinoId?: string; concepto?: string; lineas?: LineaCarrito[];
+        };
+        if (d.lineas?.length || d.empresaDstId) {
+          setEmpresaDstId(d.empresaDstId ?? '');
+          setUbDestinoId(d.ubDestinoId ?? '');
+          setConcepto(d.concepto ?? '');
+          setLineas(d.lineas ?? []);
+          setDraftRestaurado(true);
+        }
+      }
+    } catch { /* borrador corrupto: se ignora */ }
+    setDraftListo(true);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || !draftListo) return;
+    if (!lineas.length && !empresaDstId && !concepto) { localStorage.removeItem(draftKey); return; }
+    localStorage.setItem(draftKey, JSON.stringify({ empresaDstId, ubDestinoId, concepto, lineas }));
+  }, [draftKey, draftListo, empresaDstId, ubDestinoId, concepto, lineas]);
+
+  function descartarBorrador() {
+    setEmpresaDstId(''); setUbDestinoId(''); setConcepto(''); setLineas([]);
+    setDraftRestaurado(false);
+    if (draftKey) localStorage.removeItem(draftKey);
+  }
+
   useEffect(() => {
     void api.get<EmpresaDestino[]>('/remisiones/destinos').then(setDestinos);
   }, []);
@@ -138,6 +176,7 @@ export default function NuevaRemisionPage() {
         void printRemisionTicket(actualizada);
       }
 
+      if (draftKey) localStorage.removeItem(draftKey);
       router.push(`/movimientos/remisiones/${rem.id}`);
     } catch (err: any) {
       setError(err?.message ?? 'Error al guardar');
@@ -382,6 +421,15 @@ export default function NuevaRemisionPage() {
                   fecha={new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   lineas={lineas.map((l) => ({ clave: l.articulo.clave, descripcion: descripcionCompleta(l.articulo) || null, cantidad: l.cantidad }))}
                 />
+              </div>
+            )}
+
+            {draftRestaurado && (
+              <div className="mx-4 mb-3 flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-body-sm text-amber-800">
+                <span>Se recuperó tu remisión sin terminar.</span>
+                <button type="button" onClick={descartarBorrador} className="font-medium underline">
+                  Empezar de cero
+                </button>
               </div>
             )}
 

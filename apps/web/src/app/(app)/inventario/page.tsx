@@ -407,7 +407,11 @@ export default function InventarioPage() {
                   <td className="hidden" />
                   {activeDescripciones.map((d) => (
                     <td key={d.numero} className="px-4 py-2.5">
-                      <span className="text-table text-steel-900 truncate block max-w-[200px]">
+                      <span className={cn(
+                        'text-table text-steel-900 block break-words',
+                        // Pocas columnas de descripción = más espacio; el texto baja de línea en vez de cortarse.
+                        activeDescripciones.length <= 1 ? 'max-w-[600px]' : activeDescripciones.length === 2 ? 'max-w-[380px]' : 'max-w-[260px]',
+                      )}>
                         {(art[`descripcion_${d.numero}` as keyof Articulo] as string | null) ?? '—'}
                         {d.numero === activeDescripciones[0]?.numero && art.es_especial && (
                           <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-meta">Especial</span>
