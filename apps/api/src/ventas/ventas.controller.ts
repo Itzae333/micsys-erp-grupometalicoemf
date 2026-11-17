@@ -73,6 +73,7 @@ export class VentasController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'desde', required: false, description: 'ISO date — filtra notas creadas desde esta fecha' })
+  @ApiQuery({ name: 'hasta', required: false, description: 'YYYY-MM-DD — hasta esta fecha (inclusive)' })
   findAll(
     @Headers('x-ubicacion-id') ubicacionId: string,
     @Query('estatus') estatus?: string,
@@ -80,11 +81,13 @@ export class VentasController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
   ) {
     return this.ventas.findAll(ubicacionId, {
       estatus,
       q,
       desde,
+      hasta,
       page: page ? Number(page) : 1,
       limit: limit ? Math.min(Number(limit), 100) : 50,
     });

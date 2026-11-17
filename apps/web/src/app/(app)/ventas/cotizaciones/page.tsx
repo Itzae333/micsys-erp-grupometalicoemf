@@ -1,5 +1,6 @@
 'use client';
 
+import { disponibleArticulo } from '@/lib/utils/disponibilidad';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, ChevronLeft, ChevronRight, FileText, XCircle, ArrowLeft, Trash2 } from 'lucide-react';
@@ -543,6 +544,8 @@ export default function CotizacionesPage() {
                         <tr>
                           <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
                           <th className="text-right px-3 py-2.5 font-medium text-steel-600">Exist.</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-steel-600" title="Vendido y aún sin entregar">Vendido s/entregar</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-steel-600">Disp.</th>
                           <th className="text-right px-4 py-2.5 font-medium text-steel-600">Precio</th>
                         </tr>
                       </thead>
@@ -571,6 +574,12 @@ export default function CotizacionesPage() {
                               </td>
                               <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
                                 {art.existencia_1 ?? 0}
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
+                                {(art.comprometido ?? 0) > 0 ? art.comprometido : '—'}
+                              </td>
+                              <td className={cn('px-3 py-2.5 text-right whitespace-nowrap font-medium', disponibleArticulo(art).disponible <= 0 ? 'text-orange-600' : 'text-steel-900')}>
+                                {disponibleArticulo(art).disponible}
                               </td>
                               <td className="px-4 py-2.5 text-right whitespace-nowrap">
                                 <span className="font-semibold text-steel-900">{formatPrecio(precio)}</span>

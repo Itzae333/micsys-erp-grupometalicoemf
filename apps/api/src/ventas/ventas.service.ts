@@ -82,14 +82,19 @@ export class VentasService {
 
   async findAll(ubicacionId: string, query: {
     estatus?: string; page?: number; limit?: number;
-    q?: string; desde?: string;
+    q?: string; desde?: string; hasta?: string;
   } = {}) {
-    const { estatus, page = 1, limit = 50, q, desde } = query;
+    const { estatus, page = 1, limit = 50, q, desde, hasta } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.NotaVentaWhereInput = { ubicacion_id: ubicacionId };
     if (estatus) where.estatus = estatus as any;
-    if (desde) where.created_at = { gte: inicioDiaMx(desde) };
+    if (desde || hasta) {
+      where.created_at = {
+        ...(desde ? { gte: inicioDiaMx(desde) } : {}),
+        ...(hasta ? { lte: finDiaMx(hasta) } : {}),
+      };
+    }
     if (q) {
       const folioNum = parseInt(q, 10);
       where.OR = [

@@ -1,5 +1,6 @@
 'use client';
 
+import { disponibleArticulo } from '@/lib/utils/disponibilidad';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, ChevronLeft, ChevronRight, Receipt, Users, FileText, XCircle, Zap, Download, MessageCircle, RefreshCw } from 'lucide-react';
@@ -113,6 +114,10 @@ export default function VentasPage() {
   // página actual (antes q solo filtraba las 20 notas ya cargadas en pantalla).
   const [qServer, setQServer] = useState('');
   const [estatusFiltro, setEstatusFiltro] = useState('');
+  // Rango personalizado: solo aplica si el check está activo (ignora Hoy/Semana/Mes/Año).
+  const [usarRango, setUsarRango] = useState(false);
+  const [rangoDesde, setRangoDesde] = useState('');
+  const [rangoHasta, setRangoHasta] = useState('');
   const [fechaFiltro, setFechaFiltro] = useState<'' | 'hoy' | 'semana' | 'mes' | 'año'>('hoy');
 
   // Dialog nueva nota
@@ -347,8 +352,13 @@ export default function VentasPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (estatusFiltro) params.set('estatus', estatusFiltro);
-      const desde = getFechaDesde(fechaFiltro);
-      if (desde) params.set('desde', desde);
+      if (usarRango) {
+        if (rangoDesde) params.set('desde', rangoDesde);
+        if (rangoHasta) params.set('hasta', rangoHasta);
+      } else {
+        const desde = getFechaDesde(fechaFiltro);
+        if (desde) params.set('desde', desde);
+      }
       if (qServer) params.set('q', qServer);
       const res = await api.get<NotasVentaPage>(`/ventas?${params}`);
       setNotas(res.data);
@@ -359,7 +369,7 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, estatusFiltro, fechaFiltro, qServer]);
+  }, [page, estatusFiltro, fechaFiltro, qServer, usarRango, rangoDesde, rangoHasta]);
 
   useEffect(() => { loadNotas(); }, [loadNotas]);
 
@@ -1488,6 +1498,8 @@ export default function VentasPage() {
                       <tr>
                         <th className="text-left px-4 py-2.5 font-medium text-steel-600">Artículo</th>
                         <th className="text-right px-3 py-2.5 font-medium text-steel-600">Exist.</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-steel-600" title="Vendido y aún sin entregar">Vendido s/entregar</th>
+                        <th className="text-right px-3 py-2.5 font-medium text-steel-600">Disp.</th>
                         <th className="text-right px-4 py-2.5 font-medium text-steel-600">Precio</th>
                       </tr>
                     </thead>
@@ -1516,6 +1528,12 @@ export default function VentasPage() {
                             </td>
                             <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
                               {art.existencia_1 ?? 0}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-steel-600 whitespace-nowrap">
+                              {(art.comprometido ?? 0) > 0 ? art.comprometido : '—'}
+                            </td>
+                            <td className={cn('px-3 py-2.5 text-right whitespace-nowrap font-medium', disponibleArticulo(art).disponible <= 0 ? 'text-orange-600' : 'text-steel-900')}>
+                              {disponibleArticulo(art).disponible}
                             </td>
                             <td className="px-4 py-2.5 text-right whitespace-nowrap">
                               <span className="font-semibold text-steel-900">{formatPrecio(precio)}</span>
@@ -1798,12 +1816,40 @@ export default function VentasPage() {
                     onClick={() => { setFechaFiltro(value); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
                     className={cn(
                       'px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors',
-                      fechaFiltro === value ? 'bg-brand-600 text-white' : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
+                      !usarRango && fechaFiltro === value ? 'bg-brand-600 text-white' : 'bg-white border border-steel-200 text-steel-600 hover:bg-steel-50',
                     )}
                   >
                     {label}
                   </button>
                 ))}
+                <label className="ml-2 flex items-center gap-1 text-[11px] text-steel-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-steel-300"
+                    checked={usarRango}
+                    onChange={(e) => { setUsarRango(e.target.checked); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                  />
+                  Rango de fechas
+                </label>
+                {usarRango && (
+                  <span className="flex items-center gap-1 text-[11px] text-steel-600">
+                    <input
+                      type="date"
+                      value={rangoDesde}
+                      max={rangoHasta || undefined}
+                      onChange={(e) => { setRangoDesde(e.target.value); setPage(1); }}
+                      className="h-6 rounded-md border border-steel-200 bg-white px-1.5 text-[11px]"
+                    />
+                    al
+                    <input
+                      type="date"
+                      value={rangoHasta}
+                      min={rangoDesde || undefined}
+                      onChange={(e) => { setRangoHasta(e.target.value); setPage(1); }}
+                      className="h-6 rounded-md border border-steel-200 bg-white px-1.5 text-[11px]"
+                    />
+                  </span>
+                )}
               </div>
             </div>
 
