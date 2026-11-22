@@ -1260,4 +1260,139 @@ export class ReportesService {
       })),
     };
   }
+
+  // ── Entregas de ventas por usuario ─────────────────────────
+
+  /**
+   * Reporte 1: por cada entrega (CargaNota) de mercancía de una venta, quién
+   * la entregó, quién vendió (nota.usuario_id) y quién cobró (Pago.usuario_id).
+   */
+  async getReporteEntregasVentas(
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
+  ) {
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
+    const usuarioSel = { select: { id: true, nombre: true, apellidos: true } } as const;
+    const nombreDe = (u: { nombre: string; apellidos: string } | null | undefined) =>
+      u ? `${u.nombre} ${u.apellidos}`.trim() : null;
+
+    const cargas = await this.prisma.cargaNota.findMany({
+      where: { ubicacion_id: ubicacionId, anulada: false, created_at: { gte: desde, lte: hasta } },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true, created_at: true, estatus: true,
+        usuario: usuarioSel,
+        nota: {
+          select: {
+            folio: true,
+            total: true,
+            cliente: { select: { nombre: true, apellidos: true } },
+            usuario: usuarioSel,
+            pagos: { where: { usuario_id: { not: null } }, select: { usuario: usuarioSel } },
+          },
+        },
+      },
+    });
+
+    const porUsuario = new Map<string, { usuario_id: string; usuario: string; total: number }>();
+    for (const c of cargas) {
+      const fila = porUsuario.get(c.usuario.id)
+        ?? { usuario_id: c.usuario.id, usuario: nombreDe(c.usuario)!, total: 0 };
+      fila.total += 1;
+      porUsuario.set(c.usuario.id, fila);
+    }
+
+    return {
+      rango: { desde: ymdEnMexico(desde), hasta: ymdEnMexico(hasta) },
+      total: cargas.length,
+      por_usuario: [...porUsuario.values()].sort((a, b) => b.total - a.total),
+      detalle: cargas.map((c) => {
+        const cobradores = new Map(c.nota.pagos.map((p) => [p.usuario!.id, nombreDe(p.usuario)!]));
+        return {
+          id: c.id,
+          fecha: c.created_at,
+          folio_nota: c.nota.folio,
+          total_nota: dec(c.nota.total),
+          cliente: c.nota.cliente
+            ? `${c.nota.cliente.nombre} ${c.nota.cliente.apellidos ?? ''}`.trim()
+            : 'Público general',
+          estatus: c.estatus,
+          entregado_por: nombreDe(c.usuario),
+          vendido_por: nombreDe(c.nota.usuario),
+          cobrado_por: cobradores.size ? [...cobradores.values()].join(', ') : null,
+        };
+      }),
+    };
+  }
+
+  // ── Remisiones: quién envió y quién recibió ────────────────
+
+  /**
+   * Reporte 2: remisiones de la ubicación (como origen o destino) con el
+   * usuario que envió y el que recibió la mercancía.
+   */
+  async getReporteRemisionesUsuarios(
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
+  ) {
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
+    const rango = { gte: desde, lte: hasta };
+    const usuarioSel = { select: { id: true, nombre: true, apellidos: true } } as const;
+    const nombreDe = (u: { nombre: string; apellidos: string } | null | undefined) =>
+      u ? `${u.nombre} ${u.apellidos}`.trim() : null;
+
+    const remisiones = await this.prisma.remision.findMany({
+      where: {
+        estatus: { not: 'BORRADOR' },
+        OR: [
+          { ub_origen_id: ubicacionId, fecha_envio: rango },
+          { ub_destino_id: ubicacionId, fecha_recepcion: rango },
+        ],
+      },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true, folio: true, estatus: true, fecha_envio: true, fecha_recepcion: true,
+        ub_origen_id: true,
+        ub_origen: { select: { nombre: true } },
+        ub_destino: { select: { nombre: true } },
+        enviado_por: usuarioSel,
+        recibido_por: usuarioSel,
+      },
+    });
+
+    const contar = (usuarios: { id: string; nombre: string }[]) => {
+      const m = new Map<string, { usuario_id: string; usuario: string; total: number }>();
+      for (const u of usuarios) {
+        const f = m.get(u.id) ?? { usuario_id: u.id, usuario: u.nombre, total: 0 };
+        f.total += 1;
+        m.set(u.id, f);
+      }
+      return [...m.values()].sort((a, b) => b.total - a.total);
+    };
+
+    return {
+      rango: { desde: ymdEnMexico(desde), hasta: ymdEnMexico(hasta) },
+      total: remisiones.length,
+      enviadas_por_usuario: contar(
+        remisiones.filter((r) => r.enviado_por).map((r) => ({ id: r.enviado_por!.id, nombre: nombreDe(r.enviado_por)! })),
+      ),
+      recibidas_por_usuario: contar(
+        remisiones.filter((r) => r.recibido_por).map((r) => ({ id: r.recibido_por!.id, nombre: nombreDe(r.recibido_por)! })),
+      ),
+      detalle: remisiones.map((r) => ({
+        id: r.id,
+        folio: r.folio,
+        estatus: r.estatus,
+        tipo: r.ub_origen_id === ubicacionId ? 'SALIDA' : 'ENTRADA',
+        origen: r.ub_origen.nombre,
+        destino: r.ub_destino.nombre,
+        fecha_envio: r.fecha_envio,
+        fecha_recepcion: r.fecha_recepcion,
+        enviado_por: nombreDe(r.enviado_por),
+        recibido_por: nombreDe(r.recibido_por),
+      })),
+    };
+  }
 }

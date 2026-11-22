@@ -144,6 +144,32 @@ export class ReportesController {
     return this.reportes.getCorteCaja(ubicacionId, { desde, hasta });
   }
 
+  @Get('entregas-ventas')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @ApiOperation({ summary: 'Entregas de mercancía de ventas: quién entregó, quién vendió y quién cobró' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  getEntregasVentas(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.reportes.getReporteEntregasVentas(ubicacionId, { desde, hasta });
+  }
+
+  @Get('remisiones-usuarios')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @ApiOperation({ summary: 'Remisiones: quién envió y quién recibió la mercancía' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  getRemisionesUsuarios(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.reportes.getReporteRemisionesUsuarios(ubicacionId, { desde, hasta });
+  }
+
   @Get('auditoria')
   @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Log de auditoría — solo ADMIN/SUPER_USUARIO' })

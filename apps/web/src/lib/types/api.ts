@@ -1023,3 +1023,28 @@ export interface ReporteConsumoMateriaPrima {
   por_empleado: FilaConsumoMateriaPrima[];
   por_articulo: FilaConsumoMateriaPrima[];
 }
+
+export interface ConteoPorUsuario { usuario_id: string; usuario: string; total: number }
+
+export interface ReporteEntregasVentas {
+  rango: { desde: string; hasta: string };
+  total: number;
+  por_usuario: ConteoPorUsuario[];
+  detalle: {
+    id: string; fecha: string; folio_nota: number; total_nota: number; cliente: string;
+    estatus: 'COMPLETA' | 'INCOMPLETA';
+    entregado_por: string | null; vendido_por: string | null; cobrado_por: string | null;
+  }[];
+}
+
+export interface ReporteRemisionesUsuarios {
+  rango: { desde: string; hasta: string };
+  total: number;
+  enviadas_por_usuario: ConteoPorUsuario[];
+  recibidas_por_usuario: ConteoPorUsuario[];
+  detalle: {
+    id: string; folio: string; estatus: string; tipo: 'SALIDA' | 'ENTRADA';
+    origen: string; destino: string; fecha_envio: string | null; fecha_recepcion: string | null;
+    enviado_por: string | null; recibido_por: string | null;
+  }[];
+}
