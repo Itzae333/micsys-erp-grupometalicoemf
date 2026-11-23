@@ -82,13 +82,21 @@ export class VentasService {
 
   async findAll(ubicacionId: string, query: {
     estatus?: string; page?: number; limit?: number;
-    q?: string; desde?: string; hasta?: string;
+    q?: string; desde?: string; hasta?: string; entregaPendiente?: boolean;
   } = {}) {
-    const { estatus, page = 1, limit = 50, q, desde, hasta } = query;
+    const { estatus, page = 1, limit = 50, q, desde, hasta, entregaPendiente } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.NotaVentaWhereInput = { ubicacion_id: ubicacionId };
     if (estatus) where.estatus = estatus as any;
+    // Cobradas cuya mercancía no se ha entregado completa (mismos estatus donde
+    // se permite registrar una carga). Va en AND para no chocar con el OR de `q`.
+    if (entregaPendiente) {
+      where.AND = [
+        { estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA'] } },
+        { OR: [{ estatus_entrega: null }, { estatus_entrega: { not: 'COMPLETA' } }] },
+      ];
+    }
     if (desde || hasta) {
       where.created_at = {
         ...(desde ? { gte: inicioDiaMx(desde) } : {}),

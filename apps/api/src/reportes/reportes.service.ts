@@ -1326,6 +1326,99 @@ export class ReportesService {
     };
   }
 
+  // ── Ventas cobradas sin entregar ───────────────────────────
+
+  /**
+   * Reporte 3: líneas de notas ya cobradas (PAGADA/CREDITO/INCOMPLETA) cuya
+   * mercancía no se ha entregado completa. El inventario baja al registrar la
+   * carga, no al cobrar, así que estas líneas son existencia que el sistema
+   * todavía cuenta como disponible aunque ya se vendió.
+   */
+  async getReporteVentasSinEntrega(
+    ubicacionId: string,
+    opts: { desde?: string; hasta?: string },
+  ) {
+    const desde = opts.desde ? parseFechaMexico(opts.desde) : startOfMonth(new Date());
+    const hasta = opts.hasta ? endOfDay(parseFechaMexico(opts.hasta)) : endOfDay(new Date());
+    const usuarioSel = { select: { nombre: true, apellidos: true } } as const;
+    const nombreDe = (u: { nombre: string; apellidos: string } | null | undefined) =>
+      u ? `${u.nombre} ${u.apellidos}`.trim() : null;
+
+    const notas = await this.prisma.notaVenta.findMany({
+      where: {
+        ubicacion_id: ubicacionId,
+        estatus: { in: ['PAGADA', 'CREDITO', 'INCOMPLETA'] },
+        created_at: { gte: desde, lte: hasta },
+      },
+      orderBy: { created_at: 'asc' },
+      select: {
+        id: true, folio: true, estatus: true, created_at: true,
+        cliente: { select: { nombre: true, apellidos: true } },
+        usuario: usuarioSel,
+        lineas: {
+          select: {
+            id: true, clave: true, cantidad: true,
+            articulo: {
+              select: { descripcion_1: true, descripcion_2: true, descripcion_3: true, descripcion_4: true },
+            },
+            carga_lineas: {
+              where: { carga: { anulada: false } },
+              select: { cantidad_cargada: true },
+            },
+          },
+        },
+      },
+    });
+
+    const hoyMs = Date.now();
+    const porArticulo = new Map<string, { articulo: string; lineas: number; pendiente: number }>();
+    const detalle: {
+      folio: number; estatus: string; fecha: Date; dias: number; cliente: string;
+      vendido_por: string | null; articulo: string; cantidad: number; entregado: number; pendiente: number;
+    }[] = [];
+
+    for (const n of notas) {
+      for (const l of n.lineas) {
+        const entregado = l.carga_lineas.reduce((s, c) => s + dec(c.cantidad_cargada), 0);
+        const pendiente = +(dec(l.cantidad) - entregado).toFixed(3);
+        if (pendiente <= 0) continue;
+
+        const articulo = [
+          l.articulo?.descripcion_1, l.articulo?.descripcion_2,
+          l.articulo?.descripcion_3, l.articulo?.descripcion_4,
+        ].filter(Boolean).join(' · ') || l.clave;
+
+        const agg = porArticulo.get(articulo) ?? { articulo, lineas: 0, pendiente: 0 };
+        agg.lineas += 1;
+        agg.pendiente = +(agg.pendiente + pendiente).toFixed(3);
+        porArticulo.set(articulo, agg);
+
+        detalle.push({
+          folio: n.folio,
+          estatus: n.estatus,
+          fecha: n.created_at,
+          dias: Math.floor((hoyMs - n.created_at.getTime()) / 86_400_000),
+          cliente: n.cliente
+            ? `${n.cliente.nombre} ${n.cliente.apellidos ?? ''}`.trim()
+            : 'Público general',
+          vendido_por: nombreDe(n.usuario),
+          articulo,
+          cantidad: dec(l.cantidad),
+          entregado,
+          pendiente,
+        });
+      }
+    }
+
+    return {
+      rango: { desde: ymdEnMexico(desde), hasta: ymdEnMexico(hasta) },
+      total_lineas: detalle.length,
+      total_notas: new Set(detalle.map((d) => d.folio)).size,
+      por_articulo: [...porArticulo.values()].sort((a, b) => b.pendiente - a.pendiente),
+      detalle,
+    };
+  }
+
   // ── Remisiones: quién envió y quién recibió ────────────────
 
   /**

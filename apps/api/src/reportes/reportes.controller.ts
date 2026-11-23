@@ -157,6 +157,19 @@ export class ReportesController {
     return this.reportes.getReporteEntregasVentas(ubicacionId, { desde, hasta });
   }
 
+  @Get('ventas-sin-entrega')
+  @Roles('SUPER_USUARIO', 'ADMIN')
+  @ApiOperation({ summary: 'Ventas cobradas cuya mercancía aún no se entrega (no ha bajado del inventario)' })
+  @ApiQuery({ name: 'desde', required: false })
+  @ApiQuery({ name: 'hasta', required: false })
+  getVentasSinEntrega(
+    @Headers('x-ubicacion-id') ubicacionId: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.reportes.getReporteVentasSinEntrega(ubicacionId, { desde, hasta });
+  }
+
   @Get('remisiones-usuarios')
   @Roles('SUPER_USUARIO', 'ADMIN')
   @ApiOperation({ summary: 'Remisiones: quién envió y quién recibió la mercancía' })

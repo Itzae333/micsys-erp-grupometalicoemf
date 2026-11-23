@@ -114,6 +114,7 @@ export default function VentasPage() {
   // página actual (antes q solo filtraba las 20 notas ya cargadas en pantalla).
   const [qServer, setQServer] = useState('');
   const [estatusFiltro, setEstatusFiltro] = useState('');
+  const [entregaPendiente, setEntregaPendiente] = useState(false);
   // Rango personalizado: solo aplica si el check está activo (ignora Hoy/Semana/Mes/Año).
   const [usarRango, setUsarRango] = useState(false);
   const [rangoDesde, setRangoDesde] = useState('');
@@ -352,6 +353,7 @@ export default function VentasPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (estatusFiltro) params.set('estatus', estatusFiltro);
+      if (entregaPendiente) params.set('entrega_pendiente', '1');
       if (usarRango) {
         if (rangoDesde) params.set('desde', rangoDesde);
         if (rangoHasta) params.set('hasta', rangoHasta);
@@ -369,7 +371,7 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, estatusFiltro, fechaFiltro, qServer, usarRango, rangoDesde, rangoHasta]);
+  }, [page, estatusFiltro, entregaPendiente, fechaFiltro, qServer, usarRango, rangoDesde, rangoHasta]);
 
   useEffect(() => { loadNotas(); }, [loadNotas]);
 
@@ -1801,6 +1803,17 @@ export default function VentasPage() {
                     {est === '' ? 'Todas' : ESTATUS_CONFIG[est]?.label}
                   </button>
                 ))}
+                {/* Cobradas con mercancía aún sin entregar — se combina con el estatus de pago */}
+                <button
+                  onClick={() => { setEntregaPendiente((v) => !v); setPage(1); setSelectedNotaIdx(-1); setDetalleNota(null); }}
+                  className={cn(
+                    'ml-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors',
+                    entregaPendiente ? 'bg-amber-600 text-white' : 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-50',
+                  )}
+                  title="Solo notas cobradas cuya mercancía no se ha entregado completa"
+                >
+                  Entrega pendiente
+                </button>
               </div>
               <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-[10px] font-medium text-steel-400 uppercase tracking-[1px] mr-0.5">Período</span>

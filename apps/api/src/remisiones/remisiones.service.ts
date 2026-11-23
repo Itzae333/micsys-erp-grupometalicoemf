@@ -183,6 +183,14 @@ export class RemisionesService {
       throw new BadRequestException('Solo se pueden enviar remisiones en BORRADOR');
     }
 
+    // El concepto del movimiento debe leerse por nombre, no por el ID interno
+    // de la ubicación (antes quedaba "Remisión REM-… → emf-matriz-id").
+    const ubDestino = await this.prisma.ubicacion.findUnique({
+      where: { id: rem.ub_destino_id },
+      select: { nombre: true },
+    });
+    const nombreDestino = ubDestino?.nombre ?? rem.ub_destino_id;
+
     await this.prisma.$transaction(async (tx) => {
       for (const linea of rem.lineas) {
         const art = await tx.articulo.findFirst({
@@ -202,7 +210,7 @@ export class RemisionesService {
             cantidad:        linea.cantidad_enviada,
             cantidad_antes:  cantAntes,
             cantidad_despues: cantDespues,
-            concepto:        `Remisión ${rem.folio} → ${rem.ub_destino_id}`,
+            concepto:        `Remisión ${rem.folio} → ${nombreDestino}`,
             referencia_id:   rem.id,
             usuario_id:      usuarioId,
           },

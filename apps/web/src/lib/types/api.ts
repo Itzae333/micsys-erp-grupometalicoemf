@@ -1037,6 +1037,17 @@ export interface ReporteEntregasVentas {
   }[];
 }
 
+export interface ReporteVentasSinEntrega {
+  rango: { desde: string; hasta: string };
+  total_lineas: number;
+  total_notas: number;
+  por_articulo: { articulo: string; lineas: number; pendiente: number }[];
+  detalle: {
+    folio: number; estatus: string; fecha: string; dias: number; cliente: string;
+    vendido_por: string | null; articulo: string; cantidad: number; entregado: number; pendiente: number;
+  }[];
+}
+
 export interface ReporteRemisionesUsuarios {
   rango: { desde: string; hasta: string };
   total: number;

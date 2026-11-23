@@ -14,7 +14,7 @@ import { generateReporteVentasProveedorPDF } from '@/lib/utils/reporte-proveedor
 import type {
   ReporteVentasData, ReporteInventarioData, ReporteCreditoData,
   ReporteComprasData, ReporteProduccionData, ReporteAsistenciaData,
-  ReporteVentasProveedorData, ReporteConsumoMateriaPrima, FilaConsumoMateriaPrima, ReporteEntregasVentas, ReporteRemisionesUsuarios, ConteoPorUsuario,
+  ReporteVentasProveedorData, ReporteConsumoMateriaPrima, FilaConsumoMateriaPrima, ReporteEntregasVentas, ReporteRemisionesUsuarios, ReporteVentasSinEntrega, ConteoPorUsuario,
   EstatusNota, EstatusOrdenCompra, EstatusProduccion, EstatusAsistencia,
 } from '@/lib/types/api';
 
@@ -166,6 +166,7 @@ const TABS = [
   { id: 'ventas_proveedor', label: 'Ventas x Proveedor', icon: <Building2 className="h-4 w-4" /> },
   { id: 'materia_prima', label: 'Materia prima', icon: <PackageOpen className="h-4 w-4" /> },
   { id: 'entregas_ventas', label: 'Entregas de ventas', icon: <ClipboardCheck className="h-4 w-4" /> },
+  { id: 'ventas_sin_entrega', label: 'Ventas sin entregar', icon: <AlertTriangle className="h-4 w-4" /> },
   { id: 'remisiones_usuarios', label: 'Remisiones: envió/recibió', icon: <Truck className="h-4 w-4" /> },
 ] as const;
 type TabId = typeof TABS[number]['id'];
@@ -1647,6 +1648,108 @@ function TabEntregasVentas({ desde, hasta }: { desde: string; hasta: string }) {
   );
 }
 
+function TabVentasSinEntrega({ desde, hasta }: { desde: string; hasta: string }) {
+  const [data, setData] = useState<ReporteVentasSinEntrega | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await api.get<ReporteVentasSinEntrega>(`/reportes/ventas-sin-entrega?desde=${desde}&hasta=${hasta}`));
+    } catch { setData(null); }
+    finally { setLoading(false); }
+  }, [desde, hasta]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (loading) return <div className="p-8 text-center text-steel-400">Cargando…</div>;
+  if (!data) return <div className="p-8 text-center text-steel-400">Sin datos</div>;
+
+  const encabezados = ['Fecha', 'Días', 'Nota', 'Cliente', 'Vendió', 'Artículo', 'Vendido', 'Entregado', 'Pendiente'];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatMini label="Notas con pendiente" value={String(data.total_notas)} accent />
+        <StatMini label="Líneas sin entregar" value={String(data.total_lineas)} />
+      </div>
+      <p className="text-body-sm text-steel-500">
+        Mercancía ya cobrada que todavía no se registra como entregada. El inventario baja hasta que se registra la entrega,
+        por eso estas cantidades siguen contando como disponibles en el sistema.
+      </p>
+
+      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
+          <SectionTitle>Pendiente por artículo</SectionTitle>
+          <Button size="sm" variant="ghost" onClick={() => exportCSV('ventas_sin_entrega_por_articulo',
+            ['Artículo', 'Líneas', 'Pendiente'],
+            data.por_articulo.map((a) => [a.articulo, a.lineas, a.pendiente]))}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />CSV
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-body-sm">
+            <thead><tr className="border-b border-steel-100">
+              <th className="px-4 py-2 text-left font-medium text-steel-500">Artículo</th>
+              <th className="px-4 py-2 text-right font-medium text-steel-500">Líneas</th>
+              <th className="px-4 py-2 text-right font-medium text-steel-500">Pendiente</th>
+            </tr></thead>
+            <tbody className="divide-y divide-steel-100">
+              {data.por_articulo.map((a) => (
+                <tr key={a.articulo}>
+                  <td className="px-4 py-2 font-medium text-steel-900">{a.articulo}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{a.lineas}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtNum(a.pendiente)}</td>
+                </tr>
+              ))}
+              {data.por_articulo.length === 0 && (
+                <tr><td colSpan={3} className="p-6 text-center text-steel-400">Todo lo cobrado está entregado</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white border border-steel-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
+          <SectionTitle>Detalle por nota</SectionTitle>
+          <Button size="sm" variant="ghost" onClick={() => exportCSV('ventas_sin_entrega', encabezados,
+            data.detalle.map((d) => [
+              fmtFechaHora(d.fecha), d.dias, d.folio, d.cliente, d.vendido_por ?? '—',
+              d.articulo, d.cantidad, d.entregado, d.pendiente,
+            ]))}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />CSV
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-body-sm">
+            <thead><tr className="border-b border-steel-100">
+              {encabezados.map((h) => (
+                <th key={h} className="px-4 py-2 text-left font-medium text-steel-500">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-steel-100">
+              {data.detalle.map((d, i) => (
+                <tr key={`${d.folio}-${i}`}>
+                  <td className="px-4 py-2">{fmtFechaHora(d.fecha)}</td>
+                  <td className={`px-4 py-2 tabular-nums ${d.dias >= 2 ? 'text-amber-700 font-medium' : ''}`}>{d.dias}</td>
+                  <td className="px-4 py-2">#{d.folio}{d.estatus === 'CREDITO' ? ' (crédito)' : ''}</td>
+                  <td className="px-4 py-2">{d.cliente}</td>
+                  <td className="px-4 py-2">{d.vendido_por ?? '—'}</td>
+                  <td className="px-4 py-2">{d.articulo}</td>
+                  <td className="px-4 py-2 tabular-nums">{fmtNum(d.cantidad)}</td>
+                  <td className="px-4 py-2 tabular-nums">{fmtNum(d.entregado)}</td>
+                  <td className="px-4 py-2 tabular-nums font-semibold">{fmtNum(d.pendiente)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabRemisionesUsuarios({ desde, hasta }: { desde: string; hasta: string }) {
   const [data, setData] = useState<ReporteRemisionesUsuarios | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1727,7 +1830,7 @@ export default function ReportesPage() {
   const [hasta, setHasta] = useState(hoy);
   const [applied, setApplied] = useState({ desde: iniMes(), hasta: hoy() });
 
-  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja' || tab === 'ventas_proveedor' || tab === 'materia_prima' || tab === 'entregas_ventas' || tab === 'remisiones_usuarios';
+  const needsRange = tab === 'ventas' || tab === 'compras' || tab === 'produccion' || tab === 'asistencia' || tab === 'corte_caja' || tab === 'ventas_proveedor' || tab === 'materia_prima' || tab === 'entregas_ventas' || tab === 'remisiones_usuarios' || tab === 'ventas_sin_entrega';
 
   const handleApply = () => setApplied({ desde, hasta });
 
@@ -1796,7 +1899,8 @@ export default function ReportesPage() {
         {tab === 'corte_caja'  && <TabCorteCaja  desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'materia_prima' && <TabMateriaPrima desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'entregas_ventas' && <TabEntregasVentas desde={applied.desde} hasta={applied.hasta} />}
-        {tab === 'remisiones_usuarios' && <TabRemisionesUsuarios desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'ventas_sin_entrega' && <TabVentasSinEntrega desde={applied.desde} hasta={applied.hasta} />}
+        {tab === 'remisiones_usuarios' &&<TabRemisionesUsuarios desde={applied.desde} hasta={applied.hasta} />}
         {tab === 'ventas_proveedor' && (
           <TabVentasProveedor desde={applied.desde} hasta={applied.hasta} onRangoRapido={handleRangoRapido} />
         )}
