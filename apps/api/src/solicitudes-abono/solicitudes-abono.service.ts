@@ -301,6 +301,11 @@ export class SolicitudesAbonoService {
     if (dto.accion === 'EDITAR' && (!dto.nuevo_monto || !dto.nuevo_metodo)) {
       throw new BadRequestException('Para editar un abono debes indicar el nuevo monto y método');
     }
+    // Mismo criterio que VentasService.validarPagosAdministrativos: un pago
+    // administrativo no puede quedar anónimo.
+    if (dto.accion === 'EDITAR' && dto.nuevo_metodo === 'ADMINISTRATIVO' && !dto.nueva_referencia?.trim()) {
+      throw new BadRequestException('Especifica quién recibió el pago administrativo');
+    }
   }
 
   /** Reglas del alcance v1: nota en estatus editable, abono trazado, sin "hermanos" (multi-método) y sin movimientos posteriores en la cuenta del cliente. */

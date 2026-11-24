@@ -62,6 +62,13 @@ export default function NotaDetallePage() {
   const { usuario } = useAuthStore();
   const { empresa, ubicacion } = useContextoStore();
 
+  // Métodos del diálogo "Cobrar" / "Volver a cobrar". ADMINISTRATIVO es solo de
+  // EMFIMIFAR (igual que en ventas/page.tsx y VentaRapidaDialog). El diálogo de
+  // edición de abonos sigue usando METODOS, sin administrativo.
+  const metodosCobro = empresa?.id === EMPRESA_EMFIMIFAR_ID
+    ? [...METODOS, 'ADMINISTRATIVO'] as const
+    : METODOS;
+
   const [nota, setNota] = useState<NotaVenta | null>(null);
   const [loading, setLoading] = useState(true);
   const [schema, setSchema] = useState<ConfigColumnasSchema | null>(null);
@@ -649,7 +656,7 @@ export default function NotaDetallePage() {
     setAccionAbono(accion);
     setAbonoMotivo('');
     setAbonoNuevoMonto(String(pago.monto));
-    setAbonoNuevoMetodo(pago.metodo === 'ADMINISTRATIVO' ? 'EFECTIVO' : pago.metodo);
+    setAbonoNuevoMetodo(pago.metodo);
     setAbonoNuevaReferencia(pago.referencia ?? '');
     setSolicitudAbonoError(null);
     setDlgSolicitudAbono(true);
@@ -661,7 +668,7 @@ export default function NotaDetallePage() {
     setAccionAbono(accion);
     setAbonoMotivo('');
     setAbonoNuevoMonto(String(pago.monto));
-    setAbonoNuevoMetodo(pago.metodo === 'ADMINISTRATIVO' ? 'EFECTIVO' : pago.metodo);
+    setAbonoNuevoMetodo(pago.metodo);
     setAbonoNuevaReferencia(pago.referencia ?? '');
     setSolicitudAbonoError(null);
     setDlgSolicitudAbono(true);
@@ -1565,7 +1572,7 @@ export default function NotaDetallePage() {
                       value={pago.metodo}
                       onChange={(e) => { const n = [...pagos]; n[i] = { ...n[i], metodo: e.target.value }; setPagos(n); }}
                     >
-                      {METODOS.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
+                      {metodosCobro.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
                     </select>
                   </div>
                   <div className="w-32">
@@ -1581,7 +1588,7 @@ export default function NotaDetallePage() {
                     <div className="flex-1">
                       {i === 0 && <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Ref.</label>}
                       <Input
-                        placeholder="Referencia…"
+                        placeholder={pago.metodo === 'ADMINISTRATIVO' ? '¿Quién lo recibió?' : 'Referencia…'}
                         value={pago.referencia}
                         onChange={(e) => { const n = [...pagos]; n[i] = { ...n[i], referencia: e.target.value }; setPagos(n); }}
                       />
@@ -1935,12 +1942,14 @@ export default function NotaDetallePage() {
               <div>
                 <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Nuevo método</label>
                 <Select value={abonoNuevoMetodo} onChange={(e) => setAbonoNuevoMetodo(e.target.value)}>
-                  {METODOS.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
+                  {metodosCobro.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
                 </Select>
               </div>
               {abonoNuevoMetodo !== 'EFECTIVO' && (
                 <div>
-                  <label className="block text-body-sm font-medium text-steel-900 mb-1.5">Referencia</label>
+                  <label className="block text-body-sm font-medium text-steel-900 mb-1.5">
+                    {abonoNuevoMetodo === 'ADMINISTRATIVO' ? '¿Quién lo recibió?' : 'Referencia'}
+                  </label>
                   <Input value={abonoNuevaReferencia} onChange={(e) => setAbonoNuevaReferencia(e.target.value)} />
                 </div>
               )}
